@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "AuraMusic",
+    "slug": "auramusic",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.auramusic.app"
+    },
+    "android": {
+      "package": "com.auramusic.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#000000"
+      }
+    }
+  }
+}
