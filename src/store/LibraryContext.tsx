@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Song } from '../types';
+import { InnerTube } from '../api/innertube';
 
 interface LibraryContextType {
   likedSongs: Song[];
@@ -36,12 +37,32 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const updated = [song, ...likedSongs.filter(s => s.id !== song.id)];
     setLikedSongs(updated);
     await AsyncStorage.setItem('likedSongs', JSON.stringify(updated));
+    
+    // Sync with YouTube Music if authenticated
+    const cookies = await AsyncStorage.getItem('ytm_cookies');
+    if (cookies) {
+      try {
+        await InnerTube.likeSong(song.id, true);
+      } catch (error) {
+        console.error('Failed to sync like to YTM:', error);
+      }
+    }
   };
 
   const removeLikedSong = async (songId: string) => {
     const updated = likedSongs.filter(s => s.id !== songId);
     setLikedSongs(updated);
     await AsyncStorage.setItem('likedSongs', JSON.stringify(updated));
+    
+    // Sync with YouTube Music if authenticated
+    const cookies = await AsyncStorage.getItem('ytm_cookies');
+    if (cookies) {
+      try {
+        await InnerTube.likeSong(songId, false);
+      } catch (error) {
+        console.error('Failed to sync unlike to YTM:', error);
+      }
+    }
   };
 
   const isLiked = (songId: string) => likedSongs.some(s => s.id === songId);

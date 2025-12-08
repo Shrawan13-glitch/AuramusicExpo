@@ -8,6 +8,7 @@ export default function ArtistScreen({ route, navigation }: any) {
   const { artistId } = route.params;
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [subscribed, setSubscribed] = useState(false);
   const { playSong } = usePlayer();
   const scrollY = useRef(new Animated.Value(0)).current;
   
@@ -101,6 +102,17 @@ export default function ArtistScreen({ route, navigation }: any) {
             <Text style={styles.buttonText}>Radio</Text>
           </TouchableOpacity>
         </View>
+
+        <TouchableOpacity 
+          style={styles.subscribeButton}
+          onPress={async () => {
+            const success = await InnerTube.subscribeArtist(artistId, !subscribed);
+            if (success) setSubscribed(!subscribed);
+          }}
+        >
+          <Ionicons name={subscribed ? "checkmark-circle" : "add-circle-outline"} size={20} color="#fff" />
+          <Text style={styles.buttonText}>{subscribed ? 'Subscribed' : 'Subscribe'}</Text>
+        </TouchableOpacity>
       </View>
 
       {songsSection && (
@@ -234,6 +246,7 @@ const styles = StyleSheet.create({
   buttonRow: { flexDirection: 'row', gap: 12 },
   shuffleButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1db954', padding: 12, borderRadius: 24, gap: 8 },
   radioButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#333', padding: 12, borderRadius: 24, gap: 8 },
+  subscribeButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#333', padding: 12, borderRadius: 24, gap: 8, marginTop: 12 },
   buttonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   section: { marginTop: 24, paddingHorizontal: 16 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },

@@ -60,7 +60,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => clearInterval(interval);
   }, [player.playing, state.queue.length]);
 
-  const playSong = async (song: Song, generateRadio = true) => {
+  const playSong = async (song: Song, queue?: Song[], generateRadio = true) => {
     try {
       setState(prev => ({ ...prev, currentSong: song, isPlaying: true }));
       library.addToRecentlyPlayed(song);
@@ -74,12 +74,19 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       player.replace(streamUrl);
       player.play();
       
-      if (generateRadio) {
-        const { songs, continuation } = await InnerTube.next(song.id);
-        const queue = songs.filter(s => s.id !== song.id);
-        setRadioContinuation(continuation);
+      if (queue) {
+        // Use provided queue (for playlists/albums)
+        setRadioContinuation(null);
         setOriginalQueue(queue);
         const finalQueue = shuffle ? shuffleArray([...queue]) : queue;
+        setState(prev => ({ ...prev, queue: finalQueue }));
+      } else if (generateRadio) {
+        // Generate radio queue
+        const { songs, continuation } = await InnerTube.next(song.id);
+        const radioQueue = songs.filter(s => s.id !== song.id);
+        setRadioContinuation(continuation);
+        setOriginalQueue(radioQueue);
+        const finalQueue = shuffle ? shuffleArray([...radioQueue]) : radioQueue;
         setState(prev => ({ ...prev, queue: finalQueue }));
         console.log(`Queue generated: ${queue.length} songs, continuation: ${!!continuation}`);
       }

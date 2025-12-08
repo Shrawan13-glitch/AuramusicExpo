@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, TextInput, FlatList, TouchableOpacity, Image, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, TextInput, FlatList, TouchableOpacity, Image, Text, StyleSheet, ActivityIndicator, Modal } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { InnerTube } from '../api/innertube';
 import { usePlayer } from '../store/PlayerContext';
+import { useAuth } from '../store/AuthContext';
 import { Song } from '../types';
 
 interface SearchResults {
@@ -19,8 +21,10 @@ export default function SearchScreen({ navigation: tabNavigation }: any) {
   const [results, setResults] = useState<SearchResults>({ songs: [], albums: [], artists: [], playlists: [] });
   const [loading, setLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
+  const [showAccountModal, setShowAccountModal] = useState(false);
   const debounceTimer = useRef<NodeJS.Timeout>();
   const { playSong } = usePlayer();
+  const { isAuthenticated, accountInfo, logout } = useAuth();
 
   useEffect(() => {
     if (query.length < 2) {
@@ -112,7 +116,25 @@ export default function SearchScreen({ navigation: tabNavigation }: any) {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.headerRow}>
+        <Text style={styles.header}>Search</Text>
+        {isAuthenticated && accountInfo ? (
+          <TouchableOpacity onPress={() => setShowAccountModal(true)} style={styles.accountButton}>
+            {accountInfo.thumbnail ? (
+              <Image source={{ uri: accountInfo.thumbnail }} style={styles.avatar} />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <Text style={styles.avatarText}>{accountInfo.name?.[0]?.toUpperCase()}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity onPress={() => navigation?.navigate('Login')}>
+            <Ionicons name="person-circle-outline" size={32} color="#666" />
+          </TouchableOpacity>
+        )}
+      </View>
       <View style={styles.searchBar}>
         <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
         <TextInput
@@ -184,12 +206,57 @@ export default function SearchScreen({ navigation: tabNavigation }: any) {
           }
         />
       )}
-    </View>
+
+      <Modal visible={showAccountModal} transparent animationType="fade" onRequestClose={() => setShowAccountModal(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowAccountModal(false)}>
+          <View style={styles.modalContent}>
+            {isAuthenticated && accountInfo && (
+              <View style={styles.accountHeader}>
+                {accountInfo.thumbnail ? (
+                  <Image source={{ uri: accountInfo.thumbnail }} style={styles.modalAvatar} />
+                ) : (
+                  <View style={[styles.avatarPlaceholder, styles.modalAvatar]}>
+                    <Text style={styles.modalAvatarText}>{accountInfo.name?.[0]?.toUpperCase()}</Text>
+                  </View>
+                )}
+                <Text style={styles.accountName}>{accountInfo.name}</Text>
+                <Text style={styles.accountEmail}>{accountInfo.email}</Text>
+              </View>
+            )}
+
+            {!isAuthenticated && (
+              <TouchableOpacity style={styles.menuItem} onPress={() => { setShowAccountModal(false); navigation?.navigate('Login'); }}>
+                <Ionicons name="log-in-outline" size={24} color="#1db954" />
+                <Text style={[styles.menuText, { color: '#1db954' }]}>Sign in</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowAccountModal(false); navigation?.navigate('Settings'); }}>
+              <Ionicons name="settings-outline" size={24} color="#fff" />
+              <Text style={styles.menuText}>Settings</Text>
+            </TouchableOpacity>
+
+            {isAuthenticated && (
+              <TouchableOpacity style={styles.menuItem} onPress={() => { setShowAccountModal(false); logout(); }}>
+                <Ionicons name="log-out-outline" size={24} color="#ff4444" />
+                <Text style={[styles.menuText, { color: '#ff4444' }]}>Sign out</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 8 },
+  header: { fontSize: 28, fontWeight: 'bold', color: '#fff' },
+  accountButton: { padding: 4 },
+  avatar: { width: 36, height: 36, borderRadius: 18 },
+  avatarPlaceholder: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1db954', alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 16, fontWeight: 'bold', color: '#fff' },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -230,4 +297,13 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 14, color: '#aaa', marginTop: 4 },
   loader: { marginTop: 50 },
   emptyText: { color: '#666', textAlign: 'center', marginTop: 50, fontSize: 16 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-start', alignItems: 'flex-end', paddingTop: 50, paddingRight: 16 },
+  modalContent: { backgroundColor: '#1a1a1a', borderRadius: 12, minWidth: 280, overflow: 'hidden' },
+  accountHeader: { alignItems: 'center', padding: 24, borderBottomWidth: 1, borderBottomColor: '#333' },
+  modalAvatar: { width: 64, height: 64, borderRadius: 32, marginBottom: 12 },
+  modalAvatarText: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
+  accountName: { fontSize: 18, fontWeight: '600', color: '#fff', marginBottom: 4 },
+  accountEmail: { fontSize: 14, color: '#aaa' },
+  menuItem: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 16 },
+  menuText: { fontSize: 16, color: '#fff' },
 });

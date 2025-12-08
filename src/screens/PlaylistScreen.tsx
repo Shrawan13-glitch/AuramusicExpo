@@ -5,7 +5,7 @@ import { InnerTube } from '../api/innertube';
 import { usePlayer } from '../store/PlayerContext';
 
 export default function PlaylistScreen({ route, navigation }: any) {
-  const { playlistId } = route.params;
+  const { playlistId, videoId } = route.params;
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -17,22 +17,26 @@ export default function PlaylistScreen({ route, navigation }: any) {
 
   const loadPlaylist = async () => {
     setLoading(true);
-    const result = await InnerTube.getPlaylist(playlistId);
+    const result = await InnerTube.getPlaylist(playlistId, videoId);
     setData(result);
     setLoading(false);
     
-    // Auto-load all songs if continuation exists
-    if (result?.continuation) {
-      loadAllSongs(result.continuation, result.songs);
+    // Auto-load more songs if continuation exists
+    if (result?.continuation && result?.isMix) {
+      loadAllSongs(result.continuation, result.songs, true);
+    } else if (result?.continuation && !result?.isMix) {
+      loadAllSongs(result.continuation, result.songs, false);
     }
   };
 
-  const loadAllSongs = async (continuation: string, currentSongs: any[]) => {
+  const loadAllSongs = async (continuation: string, currentSongs: any[], isMix: boolean) => {
     let nextContinuation = continuation;
     let allSongs = [...currentSongs];
 
-    while (nextContinuation) {
-      const result = await InnerTube.getPlaylistContinuation(nextContinuation);
+    while (nextContinuation && allSongs.length < 100) {
+      const result = isMix
+        ? await InnerTube.next('', nextContinuation)
+        : await InnerTube.getPlaylistContinuation(nextContinuation);
       allSongs = [...allSongs, ...result.songs];
       nextContinuation = result.continuation;
       
@@ -83,7 +87,8 @@ export default function PlaylistScreen({ route, navigation }: any) {
                 style={styles.playButton}
                 onPress={() => {
                   if (data.songs.length > 0) {
-                    playSong(data.songs[0]);
+                    const queue = data.songs.slice(1);
+                    playSong(data.songs[0], queue, false);
                   }
                 }}
               >
@@ -96,7 +101,8 @@ export default function PlaylistScreen({ route, navigation }: any) {
                 onPress={() => {
                   if (data.songs.length > 0) {
                     const shuffled = [...data.songs].sort(() => Math.random() - 0.5);
-                    playSong(shuffled[0]);
+                    const queue = shuffled.slice(1);
+                    playSong(shuffled[0], queue, false);
                   }
                 }}
               >
@@ -105,10 +111,13 @@ export default function PlaylistScreen({ route, navigation }: any) {
             </View>
           </View>
         }
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
           <TouchableOpacity
             style={styles.songItem}
-            onPress={() => playSong(item)}
+            onPress={() => {
+              const queue = data.songs.slice(index + 1);
+              playSong(item, queue, false);
+            }}
           >
             <Image source={{ uri: item.thumbnailUrl }} style={styles.thumbnail} />
             <View style={styles.songInfo}>

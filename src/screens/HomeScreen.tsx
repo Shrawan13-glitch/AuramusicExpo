@@ -1,21 +1,26 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, RefreshControl, ActivityIndicator, Dimensions } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, RefreshControl, ActivityIndicator, Dimensions, Modal } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { InnerTube } from '../api/innertube';
 import { usePlayer } from '../store/PlayerContext';
+import { useAuth } from '../store/AuthContext';
 import { Song } from '../types';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const ITEM_WIDTH = (SCREEN_WIDTH - 48) / 2;
 const ITEM_HEIGHT = 64;
 
-export default function HomeScreen() {
+export default function HomeScreen({ navigation }: any) {
   const [quickPicks, setQuickPicks] = useState<Song[]>([]);
   const [sections, setSections] = useState<any[]>([]);
   const [continuation, setContinuation] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [showAccountModal, setShowAccountModal] = useState(false);
   const { playSong, currentSong } = usePlayer();
+  const { isAuthenticated, accountInfo, logout } = useAuth();
 
   useEffect(() => {
     loadHome();
@@ -68,13 +73,30 @@ export default function HomeScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
+      <SafeAreaView style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#fff" />
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.headerRow}>
+        <Text style={styles.header}>Home</Text>
+        <TouchableOpacity onPress={() => setShowAccountModal(true)} style={styles.accountButton}>
+          {isAuthenticated && accountInfo ? (
+            accountInfo.thumbnail ? (
+              <Image source={{ uri: accountInfo.thumbnail }} style={styles.avatar} />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <Text style={styles.avatarText}>{accountInfo.name?.[0]?.toUpperCase()}</Text>
+              </View>
+            )
+          ) : (
+            <Ionicons name="person-circle-outline" size={32} color="#666" />
+          )}
+        </TouchableOpacity>
+      </View>
     <ScrollView
       style={styles.container}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
@@ -119,16 +141,35 @@ export default function HomeScreen() {
         <View key={index} style={styles.section}>
           <Text style={styles.sectionTitle}>{section.title}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sectionContent}>
-            {section.items.map((song: Song) => {
-              const isPlaying = currentSong?.id === song.id;
+            {section.items.map((item: any) => {
+              const isPlaying = item.type === 'song' && currentSong?.id === item.id;
+              const displayTitle = item.type === 'artist' ? item.name : item.title;
+              const displaySubtitle = item.type === 'song' 
+                ? item.artists?.map((a: any) => a.name).join(', ') 
+                : item.subtitle || '';
+              
               return (
-                <TouchableOpacity key={song.id} style={styles.card} onPress={() => playSong(song)}>
-                  <Image source={{ uri: song.thumbnailUrl }} style={styles.cardImage} />
+                <TouchableOpacity 
+                  key={item.id} 
+                  style={styles.card} 
+                  onPress={() => {
+                    if (item.type === 'song') {
+                      playSong(item);
+                    } else if (item.type === 'artist') {
+                      navigation.getParent()?.navigate('Artist', { artistId: item.id });
+                    } else if (item.type === 'album') {
+                      navigation.getParent()?.navigate('Album', { albumId: item.id });
+                    } else if (item.type === 'playlist') {
+                      navigation.getParent()?.navigate('Playlist', { playlistId: item.id, videoId: item.videoId });
+                    }
+                  }}
+                >
+                  <Image source={{ uri: item.thumbnailUrl }} style={[styles.cardImage, item.type === 'artist' && styles.roundImage]} />
                   <Text style={[styles.cardTitle, isPlaying && styles.activeText]} numberOfLines={2}>
-                    {song.title}
+                    {displayTitle}
                   </Text>
                   <Text style={styles.cardArtist} numberOfLines={1}>
-                    {song.artists.map(a => a.name).join(', ')}
+                    {displaySubtitle}
                   </Text>
                 </TouchableOpacity>
               );
@@ -137,11 +178,6 @@ export default function HomeScreen() {
         </View>
       ))}
 
-      {continuation && !loadingMore && (
-        <TouchableOpacity style={styles.loadMoreButton} onPress={loadMore}>
-          <Text style={styles.loadMoreText}>Load More</Text>
-        </TouchableOpacity>
-      )}
       {loadingMore && (
         <View style={styles.footer}>
           <ActivityIndicator size="small" color="#fff" />
@@ -149,11 +185,57 @@ export default function HomeScreen() {
       )}
       <View style={{ height: 100 }} />
     </ScrollView>
+
+    <Modal visible={showAccountModal} transparent animationType="fade" onRequestClose={() => setShowAccountModal(false)}>
+      <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowAccountModal(false)}>
+        <View style={styles.modalContent}>
+          {isAuthenticated && accountInfo && (
+            <View style={styles.accountHeader}>
+              {accountInfo.thumbnail ? (
+                <Image source={{ uri: accountInfo.thumbnail }} style={styles.modalAvatar} />
+              ) : (
+                <View style={[styles.avatarPlaceholder, styles.modalAvatar]}>
+                  <Text style={styles.modalAvatarText}>{accountInfo.name?.[0]?.toUpperCase()}</Text>
+                </View>
+              )}
+              <Text style={styles.accountName}>{accountInfo.name}</Text>
+              <Text style={styles.accountEmail}>{accountInfo.email}</Text>
+            </View>
+          )}
+
+          {!isAuthenticated && (
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowAccountModal(false); navigation.getParent()?.navigate('Login'); }}>
+              <Ionicons name="log-in-outline" size={24} color="#1db954" />
+              <Text style={[styles.menuText, { color: '#1db954' }]}>Sign in</Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity style={styles.menuItem} onPress={() => { setShowAccountModal(false); navigation.getParent()?.navigate('Settings'); }}>
+            <Ionicons name="settings-outline" size={24} color="#fff" />
+            <Text style={styles.menuText}>Settings</Text>
+          </TouchableOpacity>
+
+          {isAuthenticated && (
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowAccountModal(false); logout(); }}>
+              <Ionicons name="log-out-outline" size={24} color="#ff4444" />
+              <Text style={[styles.menuText, { color: '#ff4444' }]}>Sign out</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </TouchableOpacity>
+    </Modal>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
+  header: { fontSize: 28, fontWeight: 'bold', color: '#fff' },
+  accountButton: { padding: 4 },
+  avatar: { width: 36, height: 36, borderRadius: 18 },
+  avatarPlaceholder: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1db954', alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 16, fontWeight: 'bold', color: '#fff' },
   centerContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
   quickPicksSection: { marginBottom: 16 },
   quickPicksGrid: { paddingLeft: 16 },
@@ -168,10 +250,18 @@ const styles = StyleSheet.create({
   sectionContent: { paddingLeft: 16, paddingRight: 8 },
   card: { width: 160, marginRight: 12 },
   cardImage: { width: 160, height: 160, borderRadius: 8 },
+  roundImage: { borderRadius: 80 },
   cardTitle: { fontSize: 14, color: '#fff', fontWeight: '500', marginTop: 8, lineHeight: 18 },
   cardArtist: { fontSize: 12, color: '#aaa', marginTop: 4 },
   activeText: { color: '#1db954' },
   footer: { padding: 20, alignItems: 'center' },
-  loadMoreButton: { padding: 16, margin: 16, backgroundColor: '#1db954', borderRadius: 8, alignItems: 'center' },
-  loadMoreText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-start', alignItems: 'flex-end', paddingTop: 50, paddingRight: 16 },
+  modalContent: { backgroundColor: '#1a1a1a', borderRadius: 12, minWidth: 280, overflow: 'hidden' },
+  accountHeader: { alignItems: 'center', padding: 24, borderBottomWidth: 1, borderBottomColor: '#333' },
+  modalAvatar: { width: 64, height: 64, borderRadius: 32, marginBottom: 12 },
+  modalAvatarText: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
+  accountName: { fontSize: 18, fontWeight: '600', color: '#fff', marginBottom: 4 },
+  accountEmail: { fontSize: 14, color: '#aaa' },
+  menuItem: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 16 },
+  menuText: { fontSize: 16, color: '#fff' },
 });

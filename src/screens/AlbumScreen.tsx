@@ -69,7 +69,8 @@ export default function AlbumScreen({ route, navigation }: any) {
                 style={styles.playButton}
                 onPress={() => {
                   if (data.songs.length > 0) {
-                    playSong(data.songs[0]);
+                    const queue = data.songs.slice(1);
+                    playSong(data.songs[0], queue, false);
                   }
                 }}
               >
@@ -81,7 +82,8 @@ export default function AlbumScreen({ route, navigation }: any) {
                 onPress={() => {
                   if (data.songs.length > 0) {
                     const shuffled = [...data.songs].sort(() => Math.random() - 0.5);
-                    playSong(shuffled[0]);
+                    const queue = shuffled.slice(1);
+                    playSong(shuffled[0], queue, false);
                   }
                 }}
               >
@@ -94,7 +96,10 @@ export default function AlbumScreen({ route, navigation }: any) {
         renderItem={({ item, index }) => (
           <TouchableOpacity
             style={styles.songItem}
-            onPress={() => playSong(item)}
+            onPress={() => {
+              const queue = data.songs.slice(index + 1);
+              playSong(item, queue, false);
+            }}
           >
             <Text style={styles.trackNumber}>{index + 1}</Text>
             <View style={styles.songInfo}>
