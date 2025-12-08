@@ -41,6 +41,6 @@ npm run ios
 - Expo
 - TypeScript
 - React Navigation
-- Expo AV (Audio/Video)
+- expo-audio
 - Axios (HTTP client)
 - InnerTube API (YouTube Music)
