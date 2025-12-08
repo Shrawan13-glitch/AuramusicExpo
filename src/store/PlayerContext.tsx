@@ -3,6 +3,7 @@ import { useAudioPlayer } from 'expo-audio';
 import { Song, PlayerState } from '../types';
 import { InnerTube } from '../api/innertube';
 import { useLibrary } from './LibraryContext';
+import { setAudioModeAsync } from 'expo-audio';
 
 interface PlayerContextType extends PlayerState {
   shuffle: boolean;
@@ -36,6 +37,23 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [radioContinuation, setRadioContinuation] = useState<string | null>(null);
 
   const player = useAudioPlayer('');
+
+  useEffect(() => {
+    setupAudio();
+  }, []);
+
+  const setupAudio = async () => {
+    try {
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        staysActiveInBackground: true,
+        shouldPlayInBackground: true,
+      });
+      console.log('Background audio enabled');
+    } catch (error) {
+      console.error('Failed to setup audio mode:', error);
+    }
+  };
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -88,7 +106,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setOriginalQueue(radioQueue);
         const finalQueue = shuffle ? shuffleArray([...radioQueue]) : radioQueue;
         setState(prev => ({ ...prev, queue: finalQueue }));
-        console.log(`Queue generated: ${queue.length} songs, continuation: ${!!continuation}`);
+        console.log(`Queue generated: ${radioQueue.length} songs, continuation: ${!!continuation}`);
       }
     } catch (error) {
       console.error('Error playing song:', error);
