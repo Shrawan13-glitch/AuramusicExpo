@@ -43,7 +43,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsAuthenticated(false);
       }
     } catch (error) {
-      console.error('Failed to load auth:', error);
       setIsAuthenticated(false);
     }
   };

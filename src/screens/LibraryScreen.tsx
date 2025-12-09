@@ -28,10 +28,8 @@ export default function LibraryScreen({ navigation }: any) {
     try {
       const { InnerTube } = require('../api/innertube');
       const result = await InnerTube.getLibrary('FEmusic_liked_videos');
-      console.log('YTM Library loaded:', result.items?.length, 'items');
       setYtmLibrary(result.items || []);
     } catch (error) {
-      console.error('Failed to load YTM library:', error);
     }
     setLoadingYtm(false);
   };
@@ -41,10 +39,8 @@ export default function LibraryScreen({ navigation }: any) {
     try {
       const { InnerTube } = require('../api/innertube');
       const result = await InnerTube.getLibrary('FEmusic_library_corpus_artists');
-      console.log('Subscribed artists loaded:', result.items?.length, 'artists');
       setSubscribedArtists(result.items || []);
     } catch (error) {
-      console.error('Failed to load subscribed artists:', error);
     }
     setLoadingArtists(false);
   };

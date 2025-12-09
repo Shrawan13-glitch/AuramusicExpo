@@ -47,9 +47,7 @@ export default function SearchScreen({ navigation: tabNavigation }: any) {
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
 
     debounceTimer.current = setTimeout(async () => {
-      console.log('Fetching suggestions for:', query);
       const sugg = await InnerTube.searchSuggestions(query);
-      console.log('Got suggestions:', sugg);
       setSuggestions(sugg);
     }, 300);
 
@@ -66,19 +64,16 @@ export default function SearchScreen({ navigation: tabNavigation }: any) {
     try {
       if (filter) {
         const { items } = await InnerTube.search(searchQuery, filter);
-        console.log('Filtered search results:', items.length);
         setFilteredItems(items);
         setTopResult(null);
         setSections([]);
       } else {
         const { topResult: top, sections: secs } = await InnerTube.searchSummary(searchQuery);
-        console.log('Summary search results:', { topResult: !!top, sections: secs.length });
         setTopResult(top);
         setSections(secs);
         setFilteredItems([]);
       }
     } catch (error) {
-      console.error('Search error:', error);
     } finally {
       setLoading(false);
     }

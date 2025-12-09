@@ -13,7 +13,6 @@ export interface UpdateInfo {
 
 export const checkForUpdates = async (): Promise<{ hasUpdate: boolean; updateInfo?: UpdateInfo }> => {
   try {
-    console.log('Checking for updates from:', UPDATE_URL);
     const response = await axios.get(UPDATE_URL, {
       headers: {
         'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -30,21 +29,16 @@ export const checkForUpdates = async (): Promise<{ hasUpdate: boolean; updateInf
       data = data.replace(/,\s*(\]|\})/g, '$1');
       data = JSON.parse(data);
     }
-    console.log('Parsed update data:', data);
     const updateInfo: UpdateInfo = data?.update;
     
     if (!updateInfo || !updateInfo.latestVersion) {
-      console.log('No update info found');
       return { hasUpdate: false };
     }
     
-    console.log(`Current: ${CURRENT_VERSION}, Latest: ${updateInfo.latestVersion}`);
     const hasUpdate = compareVersions(updateInfo.latestVersion, CURRENT_VERSION) > 0;
-    console.log('Has update:', hasUpdate);
     
     return { hasUpdate, updateInfo: hasUpdate ? updateInfo : undefined };
   } catch (error) {
-    console.error('Update check failed:', error);
     return { hasUpdate: false };
   }
 };

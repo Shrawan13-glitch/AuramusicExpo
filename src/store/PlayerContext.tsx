@@ -54,9 +54,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         staysActiveInBackground: true,
         shouldPlayInBackground: true,
       });
-      console.log('Background audio enabled');
+
     } catch (error) {
-      console.error('Failed to setup audio mode:', error);
     }
   };
 
@@ -68,8 +67,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const duration = status.duration * 1000;
     
     setState(prev => {
-      // Only update if changed significantly
-      if (Math.abs(prev.position - position) < 500 && prev.duration === duration) {
+      // Only update if changed significantly (1 second)
+      if (Math.abs(prev.position - position) < 1000 && prev.duration === duration) {
         return prev;
       }
       return {
@@ -83,18 +82,14 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Detect song end and trigger next
     if (duration > 0 && position >= duration - 100 && !hasTriggeredNext.current && skipNextRef.current) {
       hasTriggeredNext.current = true;
-      console.log('Song ended, playing next');
       skipNextRef.current();
     }
   }, [status?.currentTime, status?.duration, intendedPlaying]);
 
   const playSong = async (song: Song, queue?: Song[], generateRadio = true) => {
     try {
-      library.addToRecentlyPlayed(song);
-
       const streamUrl = await InnerTube.getStreamUrl(song.id);
       if (!streamUrl) {
-        console.error('No stream URL found');
         return;
       }
 
@@ -103,6 +98,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setState(prev => ({ ...prev, currentSong: song, isPlaying: true }));
       player.replace(streamUrl);
       player.play();
+      
+      // Add to recently played after state update
+      setTimeout(() => library.addToRecentlyPlayed(song), 0);
       
       if (queue) {
         // Use provided queue (for playlists/albums)
@@ -118,10 +116,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setOriginalQueue(radioQueue);
         const finalQueue = shuffle ? shuffleArray([...radioQueue]) : radioQueue;
         setState(prev => ({ ...prev, queue: finalQueue }));
-        console.log(`Queue generated: ${radioQueue.length} songs, continuation: ${!!continuation}`);
+
       }
     } catch (error) {
-      console.error('Error playing song:', error);
     }
   };
 
@@ -150,44 +147,47 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setState(prev => ({ ...prev, queue: [song, ...prev.queue] }));
   };
 
-  const skipNext = async () => {
-    if (repeat === 'one' && state.currentSong) {
-      await playSong(state.currentSong, undefined, false);
-      return;
-    }
+  const skipNext = useCallback(async () => {
+    setState(currentState => {
+      const { currentSong, queue } = currentState;
+      
+      if (repeat === 'one' && currentSong) {
+        playSong(currentSong, undefined, false);
+        return currentState;
+      }
 
-    if (state.queue.length <= 5 && radioContinuation) {
-      try {
-        const { songs, continuation } = await InnerTube.next(state.currentSong?.id || '', radioContinuation);
-        setRadioContinuation(continuation);
-        setOriginalQueue(prev => [...prev, ...songs]);
-        const newSongs = shuffle ? shuffleArray([...songs]) : songs;
-        setState(prev => ({ ...prev, queue: [...prev.queue, ...newSongs] }));
-      } catch (error) {
-        console.error('Failed to load more songs:', error);
+      if (queue.length <= 5 && radioContinuation && currentSong) {
+        InnerTube.next(currentSong.id, radioContinuation).then(({ songs, continuation }) => {
+          setRadioContinuation(continuation);
+          setOriginalQueue(prev => [...prev, ...songs]);
+          const newSongs = shuffle ? shuffleArray([...songs]) : songs;
+          setState(prev => ({ ...prev, queue: [...prev.queue, ...newSongs] }));
+        }).catch(() => {});
       }
-    }
 
-    if (state.queue.length > 0) {
-      const nextSong = state.queue[0];
-      if (state.currentSong) {
-        setPreviousSongs(prev => [...prev, state.currentSong!]);
+      if (queue.length > 0) {
+        const nextSong = queue[0];
+        if (currentSong) {
+          setPreviousSongs(prev => [...prev, currentSong]);
+        }
+        playSong(nextSong, undefined, false);
+        return { ...currentState, queue: queue.slice(1) };
+      } else if (repeat === 'all' && originalQueue.length > 0) {
+        const newQueue = shuffle ? shuffleArray([...originalQueue]) : [...originalQueue];
+        if (currentSong) {
+          setPreviousSongs(prev => [...prev, currentSong]);
+        }
+        playSong(newQueue[0], undefined, false);
+        return { ...currentState, queue: newQueue };
       }
-      setState(prev => ({ ...prev, queue: prev.queue.slice(1) }));
-      await playSong(nextSong, undefined, false);
-    } else if (repeat === 'all' && originalQueue.length > 0) {
-      const newQueue = shuffle ? shuffleArray([...originalQueue]) : [...originalQueue];
-      setState(prev => ({ ...prev, queue: newQueue }));
-      if (state.currentSong) {
-        setPreviousSongs(prev => [...prev, state.currentSong!]);
-      }
-      await playSong(newQueue[0], undefined, false);
-    }
-  };
+      
+      return currentState;
+    });
+  }, [repeat, radioContinuation, shuffle, originalQueue]);
 
   useEffect(() => {
     skipNextRef.current = skipNext;
-  });
+  }, [skipNext]);
 
   const skipPrevious = async () => {
     if (state.position > 3000) {

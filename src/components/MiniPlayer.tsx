@@ -29,7 +29,7 @@ export default function MiniPlayer() {
           <View style={styles.info}>
             <Text style={styles.title} numberOfLines={1}>{currentSong.title}</Text>
             <Text style={styles.artist} numberOfLines={1}>
-              {currentSong.artists.map(a => a.name).join(', ')}
+              {currentSong.artists?.map(a => a.name).join(', ') || 'Unknown Artist'}
             </Text>
           </View>
           <View style={styles.controls}>

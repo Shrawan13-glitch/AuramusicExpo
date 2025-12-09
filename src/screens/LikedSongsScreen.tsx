@@ -26,7 +26,6 @@ export default function LikedSongsScreen({ navigation }: any) {
       const result = await InnerTube.getLibrary('FEmusic_liked_videos');
       setYtmLibrary(result.items || []);
     } catch (error) {
-      console.error('Failed to load YTM library:', error);
     }
     setLoading(false);
   };

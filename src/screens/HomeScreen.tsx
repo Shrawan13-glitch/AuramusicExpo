@@ -32,9 +32,7 @@ export default function HomeScreen({ navigation }: any) {
       setQuickPicks(data.quickPicks);
       setSections(data.sections);
       setContinuation(data.continuation);
-      console.log(`Initial load: ${data.sections.length} sections, continuation: ${!!data.continuation}`);
     } catch (error) {
-      console.error('Error loading home:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -44,15 +42,12 @@ export default function HomeScreen({ navigation }: any) {
   const loadMore = async () => {
     if (!continuation || loadingMore) return;
     
-    console.log('Loading more sections...');
     setLoadingMore(true);
     try {
       const data = await InnerTube.getHomeContinuation(continuation);
-      console.log(`Loaded ${data.sections.length} more sections`);
       setSections(prev => [...prev, ...data.sections]);
       setContinuation(data.continuation);
     } catch (error) {
-      console.error('Error loading more:', error);
     } finally {
       setLoadingMore(false);
     }

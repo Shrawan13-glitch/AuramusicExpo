@@ -45,14 +45,12 @@ export default function LoginScreen({ navigation }: any) {
               accountInfo
             );
           } catch (error) {
-            console.error('Failed to fetch account info:', error);
           }
           
           navigation.navigate('Main', { screen: 'Library' });
         }, 500);
       }
     } catch (error) {
-      console.error('Error handling message:', error);
     }
   };
 

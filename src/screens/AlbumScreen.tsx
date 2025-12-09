@@ -17,7 +17,6 @@ export default function AlbumScreen({ route, navigation }: any) {
   const loadAlbum = async () => {
     setLoading(true);
     const result = await InnerTube.getAlbum(albumId);
-    console.log('Album data:', JSON.stringify(result, null, 2));
     setData(result);
     setLoading(false);
   };

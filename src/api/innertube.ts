@@ -160,10 +160,8 @@ export const InnerTube = {
         })
         ?.filter((text: string | null) => text) || [];
 
-      console.log(`Suggestions for "${query}": ${suggestions.length} results`);
       return suggestions;
     } catch (error) {
-      console.error('Search suggestions error:', error);
       return [];
     }
   },
@@ -197,8 +195,6 @@ export const InnerTube = {
       }
 
       if (!playlistPanelRenderer) {
-        console.log('No playlistPanelRenderer found');
-        console.log('Response structure:', JSON.stringify(response.data, null, 2).substring(0, 500));
         return { songs: [], continuation: null };
       }
 
@@ -226,10 +222,8 @@ export const InnerTube = {
 
       const nextContinuation = playlistPanelRenderer.continuations?.[0]?.nextRadioContinuationData?.continuation;
 
-      console.log(`Next API: ${songs.length} songs, continuation: ${!!nextContinuation}`);
       return { songs, continuation: nextContinuation };
     } catch (error) {
-      console.error('Next endpoint error:', error);
       return { songs: [], continuation: null };
     }
   },
@@ -255,7 +249,6 @@ export const InnerTube = {
                                  ?.tabRenderer?.content?.sectionListRenderer?.continuations?.[0]?.nextContinuationData?.continuation;
 
       if (!contents) {
-        console.log('No contents in continuation response');
         return { sections: [], continuation: null };
       }
 
@@ -313,10 +306,8 @@ export const InnerTube = {
         }
       });
 
-      console.log(`Continuation: ${sections.length} sections, next: ${!!nextContinuation}`);
       return { sections, continuation: nextContinuation };
     } catch (error) {
-      console.error('Home continuation error:', error);
       return { sections: [], continuation: null };
     }
   },
@@ -336,7 +327,6 @@ export const InnerTube = {
       const contents = response.data?.contents?.tabbedSearchResultsRenderer?.tabs?.[0]
         ?.tabRenderer?.content?.sectionListRenderer?.contents;
 
-      console.log('Search summary contents:', contents?.length || 0);
       let topResult = null;
       const sections: any[] = [];
 
@@ -345,7 +335,6 @@ export const InnerTube = {
         if (section.musicCardShelfRenderer) {
           const card = section.musicCardShelfRenderer;
           const title = card.header?.musicCardShelfHeaderBasicRenderer?.title?.runs?.[0]?.text || 'Top result';
-          console.log('Parsing musicCardShelfRenderer, contents:', card.contents?.length || 0);
           const items: any[] = [];
 
           // Parse card content
@@ -369,7 +358,6 @@ export const InnerTube = {
             }
           });
 
-          console.log('Card items parsed:', items.length);
           if (items.length > 0) {
             topResult = items[0];
             sections.push({ title, items });
@@ -379,7 +367,6 @@ export const InnerTube = {
         else if (section.musicShelfRenderer) {
           const shelf = section.musicShelfRenderer;
           const title = shelf.title?.runs?.[0]?.text || 'Results';
-          console.log('Parsing musicShelfRenderer, title:', title, 'contents:', shelf.contents?.length || 0);
 
           const items: any[] = [];
           shelf.contents?.forEach((item: any) => {
@@ -413,20 +400,16 @@ export const InnerTube = {
             }
           });
 
-          console.log('Shelf items parsed:', items.length);
           if (items.length > 0) {
             sections.push({ title, items });
           }
         }
       });
 
-      console.log(`Search summary final: ${sections.length} sections, top result: ${!!topResult}`);
       if (sections.length === 0 && contents) {
-        console.log('Contents structure:', JSON.stringify(contents.map((c: any) => Object.keys(c)), null, 2));
       }
       return { topResult, sections };
     } catch (error) {
-      console.error('Search summary error:', error);
       return { topResult: null, sections: [] };
     }
   },
@@ -486,10 +469,8 @@ export const InnerTube = {
 
       const continuation = shelf?.continuations?.[0]?.nextContinuationData?.continuation;
 
-      console.log(`Search filtered: ${items.length} items, continuation: ${!!continuation}`);
       return { items, continuation };
     } catch (error) {
-      console.error('Search error:', error);
       return { songs: [], albums: [], artists: [], playlists: [] };
     }
   },
@@ -510,7 +491,6 @@ export const InnerTube = {
         ?.tabRenderer?.content?.sectionListRenderer?.contents;
 
       if (!contents) {
-        console.log('No contents found');
         return { quickPicks: [], sections: [], continuation: null };
       }
 
@@ -577,10 +557,8 @@ export const InnerTube = {
         ?.tabRenderer?.content?.sectionListRenderer?.continuations?.[0]
         ?.nextContinuationData?.continuation;
 
-      console.log(`Home loaded: ${quickPicks.length} quick picks, ${sections.length} sections`);
       return { quickPicks, sections, continuation };
     } catch (error) {
-      console.error('Home error:', error);
       return { quickPicks: [], sections: [], continuation: null };
     }
   },
@@ -688,11 +666,8 @@ export const InnerTube = {
         }
       });
 
-      console.log(`Artist loaded: ${sections.length} sections`);
-      sections.forEach(s => console.log(`  ${s.title}: ${s.items.length} ${s.items[0]?.type}s`));
       return { artist, sections };
     } catch (error) {
-      console.error('Artist error:', error);
       return null;
     }
   },
@@ -708,23 +683,11 @@ export const InnerTube = {
         }
       );
 
-      const header = response.data?.header?.musicDetailHeaderRenderer;
-      
       // Extract playlistId from canonical URL
       const playlistId = response.data?.microformat?.microformatDataRenderer?.urlCanonical?.split('=').pop();
       if (!playlistId) {
-        console.error('No playlistId found in album response');
         return null;
       }
-
-      const album = {
-        id: browseId,
-        title: header?.title?.runs?.[0]?.text,
-        thumbnail: parseThumbnail(header?.thumbnail?.croppedSquareThumbnailRenderer?.thumbnail?.thumbnails),
-        artist: header?.subtitle?.runs?.[2]?.text,
-        year: header?.subtitle?.runs?.[4]?.text,
-        type: header?.subtitle?.runs?.[0]?.text, // Album, EP, Single
-      };
 
       // Now load songs using VL{playlistId}
       const songsResponse = await axios.post(
@@ -773,10 +736,21 @@ export const InnerTube = {
         nextContinuation = contResponse.data?.continuationContents?.musicPlaylistShelfContinuation?.continuations?.[0]?.nextContinuationData?.continuation;
       }
 
-      console.log(`Album loaded: ${songs.length} songs`);
+      // Get album info from first song's response
+      const firstTab = songsResponse.data?.contents?.twoColumnBrowseResultsRenderer?.tabs?.[0];
+      const headerRenderer = firstTab?.tabRenderer?.content?.sectionListRenderer?.contents?.[0]?.musicResponsiveHeaderRenderer;
+      
+      const album = {
+        id: browseId,
+        title: headerRenderer?.title?.runs?.[0]?.text || songs[0]?.title || 'Unknown Album',
+        thumbnail: parseThumbnail(headerRenderer?.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails) || songs[0]?.thumbnailUrl,
+        artist: headerRenderer?.straplineTextOne?.runs?.[0]?.text || songs[0]?.artists?.[0]?.name || 'Unknown Artist',
+        year: headerRenderer?.subtitle?.runs?.find((r: any) => /^\d{4}$/.test(r.text))?.text,
+        type: 'Album',
+      };
+
       return { album, songs };
     } catch (error) {
-      console.error('Album error:', error);
       return null;
     }
   },
@@ -842,10 +816,8 @@ export const InnerTube = {
         continuation = shelf.continuations?.[0]?.nextContinuationData?.continuation;
       });
 
-      console.log(`Playlist loaded: ${songs.length} songs, continuation: ${!!continuation}`);
       return { playlist, songs, continuation };
     } catch (error) {
-      console.error('Playlist error:', error);
       return null;
     }
   },
@@ -870,10 +842,8 @@ export const InnerTube = {
 
       const nextContinuation = response.data?.continuationContents?.musicPlaylistShelfContinuation?.continuations?.[0]?.nextContinuationData?.continuation;
 
-      console.log(`Playlist continuation: ${songs.length} more songs, continuation: ${!!nextContinuation}`);
       return { songs, continuation: nextContinuation };
     } catch (error) {
-      console.error('Playlist continuation error:', error);
       return { songs: [], continuation: null };
     }
   },
@@ -924,10 +894,8 @@ export const InnerTube = {
         });
       }
 
-      console.log(`Artist items loaded: ${items.length} items`);
       return { title, items };
     } catch (error) {
-      console.error('Artist items error:', error);
       return null;
     }
   },
@@ -984,7 +952,6 @@ export const InnerTube = {
 
       return { newReleases, moodAndGenres };
     } catch (error) {
-      console.error('Explore error:', error);
       return { newReleases: [], moodAndGenres: [] };
     }
   },
@@ -1013,7 +980,6 @@ export const InnerTube = {
         return id && title ? { id, title, subtitle, thumbnailUrl: thumbnail, type: 'album' } : null;
       }).filter(Boolean);
     } catch (error) {
-      console.error('New releases error:', error);
       return [];
     }
   },
@@ -1052,7 +1018,6 @@ export const InnerTube = {
 
       return genres;
     } catch (error) {
-      console.error('Mood and genres error:', error);
       return [];
     }
   },
@@ -1092,7 +1057,6 @@ export const InnerTube = {
 
       return { title, items };
     } catch (error) {
-      console.error('Browse error:', error);
       return { title: '', items: [] };
     }
   },
@@ -1118,7 +1082,6 @@ export const InnerTube = {
         thumbnail: parseThumbnail(accountHeader.accountPhoto?.thumbnails),
       };
     } catch (error) {
-      console.error('Account info error:', error);
       return null;
     }
   },
@@ -1184,10 +1147,8 @@ export const InnerTube = {
         });
       }
 
-      console.log(`Library loaded: ${items.length} items from ${browseId}`);
       return { items };
     } catch (error) {
-      console.error('Library error:', error);
       return { items: [] };
     }
   },
@@ -1212,10 +1173,8 @@ export const InnerTube = {
         },
         { headers }
       );
-      console.log(`${like ? 'Liked' : 'Unliked'} song ${videoId} on YouTube Music`);
       return response.status === 200;
     } catch (error) {
-      console.error('Like song error:', error);
       return false;
     }
   },
@@ -1232,10 +1191,8 @@ export const InnerTube = {
         },
         { headers }
       );
-      console.log(`${subscribe ? 'Subscribed to' : 'Unsubscribed from'} artist ${channelId}`);
       return response.status === 200;
     } catch (error) {
-      console.error('Subscribe artist error:', error);
       return false;
     }
   },
@@ -1259,15 +1216,76 @@ export const InnerTube = {
         );
         
         if (audioFormat?.url) {
-          console.log(`Stream URL found with ${client.clientName}`);
           return audioFormat.url;
         }
       } catch (error) {
-        console.error(`Failed with ${client.clientName}:`, error);
       }
     }
 
-    console.error('No stream URL found with any client');
     return null;
+  },
+
+  async getLyrics(videoId: string): Promise<{ lines: Array<{ text: string; startTime?: number }> } | null> {
+    try {
+      // Get song info first
+      const nextResponse = await axios.post(
+        `${BASE_URL}/next?key=${API_KEY}`,
+        {
+          context: createContext(),
+          videoId,
+        }
+      );
+
+      const tabs = nextResponse.data?.contents?.singleColumnMusicWatchNextResultsRenderer?.tabbedRenderer?.watchNextTabbedResultsRenderer?.tabs;
+      const queueTab = tabs?.[0];
+      const videoRenderer = queueTab?.tabRenderer?.content?.musicQueueRenderer?.content?.playlistPanelRenderer?.contents?.[0]?.playlistPanelVideoRenderer;
+      
+      const title = videoRenderer?.title?.runs?.[0]?.text;
+      const artistRuns = videoRenderer?.longBylineText?.runs || [];
+      const artist = artistRuns.filter((r: any) => r.navigationEndpoint?.browseEndpoint?.browseId?.startsWith('UC'))
+        .map((r: any) => r.text).join(', ');
+
+      if (!title || !artist) return null;
+
+      // Search LRCLIB
+      const response = await axios.get('https://lrclib.net/api/search', {
+        params: {
+          track_name: title,
+          artist_name: artist,
+        },
+      });
+
+      if (!response.data || response.data.length === 0) return null;
+
+      const result = response.data[0];
+      const syncedLyrics = result.syncedLyrics;
+
+      if (!syncedLyrics) {
+        // Fallback to plain lyrics
+        const plainLyrics = result.plainLyrics;
+        if (!plainLyrics) return null;
+        const lines = plainLyrics.split('\n').map((text: string) => ({ text }));
+        return { lines };
+      }
+
+      // Parse synced lyrics (LRC format)
+      const lines = syncedLyrics.split('\n')
+        .map((line: string) => {
+          const match = line.match(/\[(\d+):(\d+\.\d+)\](.*)/);
+          if (!match) return null;
+          const minutes = parseInt(match[1]);
+          const seconds = parseFloat(match[2]);
+          const text = match[3].trim();
+          return {
+            text,
+            startTime: (minutes * 60 + seconds) * 1000,
+          };
+        })
+        .filter((line: any) => line && line.text);
+
+      return lines.length > 0 ? { lines } : null;
+    } catch (error) {
+      return null;
+    }
   },
 };

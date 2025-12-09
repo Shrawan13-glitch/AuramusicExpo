@@ -29,7 +29,6 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (liked) setLikedSongs(JSON.parse(liked));
       if (recent) setRecentlyPlayed(JSON.parse(recent));
     } catch (e) {
-      console.error('Failed to load library', e);
     }
   };
 
@@ -44,7 +43,6 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
       try {
         await InnerTube.likeSong(song.id, true);
       } catch (error) {
-        console.error('Failed to sync like to YTM:', error);
       }
     }
   };
@@ -60,7 +58,6 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
       try {
         await InnerTube.likeSong(songId, false);
       } catch (error) {
-        console.error('Failed to sync unlike to YTM:', error);
       }
     }
   };
