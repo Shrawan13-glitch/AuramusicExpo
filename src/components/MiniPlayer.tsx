@@ -46,7 +46,7 @@ export default function MiniPlayer() {
         </TouchableOpacity>
       </View>
 
-      <Modal visible={showPlayer} animationType="slide" onRequestClose={() => setShowPlayer(false)}>
+      <Modal visible={showPlayer} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setShowPlayer(false)}>
         <PlayerScreen 
           onClose={() => setShowPlayer(false)} 
           onOpenQueue={() => { setShowPlayer(false); setShowQueue(true); }}

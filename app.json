@@ -4,8 +4,11 @@
     "slug": "auramusic",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.auramusic.app"
@@ -13,7 +16,13 @@
     "android": {
       "package": "com.auramusic.app",
       "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#000000"
+      }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "21413e6b-1071-4b35-b0a8-12d778ee8b85"
       }
     }
   }

@@ -321,102 +321,173 @@ export const InnerTube = {
     }
   },
 
-  async search(query: string): Promise<{ songs: Song[]; albums: any[]; artists: any[]; playlists: any[] }> {
+  async searchSummary(query: string): Promise<{ topResult: any | null; sections: any[] }> {
     try {
+      const headers = await getHeaders(true);
       const response = await axios.post(
         `${BASE_URL}/search?key=${API_KEY}`,
         {
           context: createContext(),
           query,
-        }
+        },
+        { headers }
       );
 
       const contents = response.data?.contents?.tabbedSearchResultsRenderer?.tabs?.[0]
         ?.tabRenderer?.content?.sectionListRenderer?.contents;
 
-      const songs: Song[] = [];
-      const albums: any[] = [];
-      const artists: any[] = [];
-      const playlists: any[] = [];
-      
+      console.log('Search summary contents:', contents?.length || 0);
+      let topResult = null;
+      const sections: any[] = [];
+
       contents?.forEach((section: any) => {
-        const items = section.musicShelfRenderer?.contents || [];
-        items.forEach((item: any) => {
-          const renderer = item.musicResponsiveListItemRenderer;
-          if (!renderer) return;
+        // Top result (musicCardShelfRenderer)
+        if (section.musicCardShelfRenderer) {
+          const card = section.musicCardShelfRenderer;
+          const title = card.header?.musicCardShelfHeaderBasicRenderer?.title?.runs?.[0]?.text || 'Top result';
+          console.log('Parsing musicCardShelfRenderer, contents:', card.contents?.length || 0);
+          const items: any[] = [];
 
-          const flexColumns = renderer.flexColumns || [];
-          const navigationEndpoint = renderer.navigationEndpoint;
-          const thumbnail = parseThumbnail(renderer.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails);
-          const overlay = renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer;
+          // Parse card content
+          card.contents?.forEach((item: any) => {
+            const renderer = item.musicResponsiveListItemRenderer;
+            if (!renderer) return;
 
-          // Songs have playNavigationEndpoint in overlay
-          if (overlay?.playNavigationEndpoint?.watchEndpoint) {
-            const videoId = overlay.playNavigationEndpoint.watchEndpoint.videoId;
-            const title = flexColumns[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
-            const artistRuns = flexColumns[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
-            const artists = parseArtists(artistRuns);
-            
-            if (videoId && title) {
-              songs.push({
-                id: videoId,
-                title,
-                artists,
-                duration: -1,
-                thumbnailUrl: thumbnail,
-                type: 'song',
-              });
+            const browseId = renderer.navigationEndpoint?.browseEndpoint?.browseId;
+            const videoId = renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.videoId;
+            const itemTitle = renderer.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
+            const thumbnail = parseThumbnail(renderer.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails);
+
+            if (videoId && itemTitle) {
+              const artists = parseArtists(renderer.flexColumns?.[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || []);
+              items.push({ id: videoId, title: itemTitle, artists, thumbnailUrl: thumbnail, duration: -1, type: 'song' });
+            } else if (browseId?.startsWith('UC') && itemTitle) {
+              items.push({ id: browseId, name: itemTitle, thumbnailUrl: thumbnail, type: 'artist' });
+            } else if (browseId && itemTitle) {
+              const isAlbum = browseId.startsWith('MPRE');
+              items.push({ id: browseId, title: itemTitle, thumbnailUrl: thumbnail, type: isAlbum ? 'album' : 'playlist' });
             }
-            return;
+          });
+
+          console.log('Card items parsed:', items.length);
+          if (items.length > 0) {
+            topResult = items[0];
+            sections.push({ title, items });
           }
+        }
+        // Regular sections (musicShelfRenderer)
+        else if (section.musicShelfRenderer) {
+          const shelf = section.musicShelfRenderer;
+          const title = shelf.title?.runs?.[0]?.text || 'Results';
+          console.log('Parsing musicShelfRenderer, title:', title, 'contents:', shelf.contents?.length || 0);
 
-          // Determine type by navigation endpoint
-          if (navigationEndpoint?.browseEndpoint) {
-            const browseId = navigationEndpoint.browseEndpoint.browseId;
-            const title = flexColumns[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
-            
-            if (browseId?.startsWith('UC')) {
-              // Artist
-              artists.push({
-                id: browseId,
-                name: title,
-                thumbnailUrl: thumbnail,
-                type: 'artist',
-              });
-            } else if (browseId?.startsWith('VL') || browseId?.startsWith('PL') || browseId?.startsWith('RDCLAK')) {
-              // Playlist
-              const subtitle = flexColumns[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
-              const playlistId = browseId.startsWith('VL') ? browseId.substring(2) : browseId;
-              playlists.push({
-                id: playlistId,
-                title,
-                thumbnailUrl: thumbnail,
-                description: subtitle,
-                type: 'playlist',
-              });
-            } else {
-              // Album
-              const artistRuns = flexColumns[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
-              albums.push({
-                id: browseId,
-                title,
-                thumbnailUrl: thumbnail,
-                artists: parseArtists(artistRuns),
-                type: 'album',
-              });
+          const items: any[] = [];
+          shelf.contents?.forEach((item: any) => {
+            const renderer = item.musicResponsiveListItemRenderer;
+            if (!renderer) return;
+
+            const flexColumns = renderer.flexColumns || [];
+            const navigationEndpoint = renderer.navigationEndpoint;
+            const thumbnail = parseThumbnail(renderer.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails);
+            const overlay = renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer;
+
+            if (overlay?.playNavigationEndpoint?.watchEndpoint) {
+              const videoId = overlay.playNavigationEndpoint.watchEndpoint.videoId;
+              const itemTitle = flexColumns[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
+              const artists = parseArtists(flexColumns[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || []);
+              if (videoId && itemTitle) {
+                items.push({ id: videoId, title: itemTitle, artists, thumbnailUrl: thumbnail, duration: -1, type: 'song' });
+              }
+            } else if (navigationEndpoint?.browseEndpoint) {
+              const browseId = navigationEndpoint.browseEndpoint.browseId;
+              const itemTitle = flexColumns[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
+              
+              if (browseId?.startsWith('UC')) {
+                items.push({ id: browseId, name: itemTitle, thumbnailUrl: thumbnail, type: 'artist' });
+              } else if (browseId?.startsWith('VL') || browseId?.startsWith('PL') || browseId?.startsWith('RDCLAK')) {
+                const playlistId = browseId.startsWith('VL') ? browseId.substring(2) : browseId;
+                items.push({ id: playlistId, title: itemTitle, thumbnailUrl: thumbnail, type: 'playlist' });
+              } else if (browseId) {
+                items.push({ id: browseId, title: itemTitle, thumbnailUrl: thumbnail, type: 'album' });
+              }
             }
-          } else if (navigationEndpoint?.watchEndpoint) {
-            // Song
-            const song = parseSongFromRenderer(renderer);
-            if (song) {
-              songs.push({ ...song, type: 'song' });
-            }
+          });
+
+          console.log('Shelf items parsed:', items.length);
+          if (items.length > 0) {
+            sections.push({ title, items });
           }
-        });
+        }
       });
 
-      console.log(`Search results: ${songs.length} songs, ${albums.length} albums, ${artists.length} artists, ${playlists.length} playlists`);
-      return { songs, albums, artists, playlists };
+      console.log(`Search summary final: ${sections.length} sections, top result: ${!!topResult}`);
+      if (sections.length === 0 && contents) {
+        console.log('Contents structure:', JSON.stringify(contents.map((c: any) => Object.keys(c)), null, 2));
+      }
+      return { topResult, sections };
+    } catch (error) {
+      console.error('Search summary error:', error);
+      return { topResult: null, sections: [] };
+    }
+  },
+
+  async search(query: string, filter?: string): Promise<{ items: any[]; continuation: string | null }> {
+    try {
+      const payload: any = {
+        context: createContext(),
+        query,
+      };
+
+      if (filter) {
+        payload.params = filter;
+      }
+
+      const headers = await getHeaders(true);
+      const response = await axios.post(
+        `${BASE_URL}/search?key=${API_KEY}`,
+        payload,
+        { headers }
+      );
+
+      const shelf = response.data?.contents?.tabbedSearchResultsRenderer?.tabs?.[0]
+        ?.tabRenderer?.content?.sectionListRenderer?.contents?.find((c: any) => c.musicShelfRenderer)?.musicShelfRenderer;
+
+      const items: any[] = [];
+      shelf?.contents?.forEach((item: any) => {
+        const renderer = item.musicResponsiveListItemRenderer;
+        if (!renderer) return;
+
+        const flexColumns = renderer.flexColumns || [];
+        const navigationEndpoint = renderer.navigationEndpoint;
+        const thumbnail = parseThumbnail(renderer.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails);
+        const overlay = renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer;
+
+        if (overlay?.playNavigationEndpoint?.watchEndpoint) {
+          const videoId = overlay.playNavigationEndpoint.watchEndpoint.videoId;
+          const title = flexColumns[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
+          const artists = parseArtists(flexColumns[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || []);
+          if (videoId && title) {
+            items.push({ id: videoId, title, artists, thumbnailUrl: thumbnail, duration: -1, type: 'song' });
+          }
+        } else if (navigationEndpoint?.browseEndpoint) {
+          const browseId = navigationEndpoint.browseEndpoint.browseId;
+          const title = flexColumns[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
+          
+          if (browseId?.startsWith('UC')) {
+            items.push({ id: browseId, name: title, thumbnailUrl: thumbnail, type: 'artist' });
+          } else if (browseId?.startsWith('VL') || browseId?.startsWith('PL') || browseId?.startsWith('RDCLAK')) {
+            const playlistId = browseId.startsWith('VL') ? browseId.substring(2) : browseId;
+            items.push({ id: playlistId, title, thumbnailUrl: thumbnail, type: 'playlist' });
+          } else {
+            items.push({ id: browseId, title, thumbnailUrl: thumbnail, type: 'album' });
+          }
+        }
+      });
+
+      const continuation = shelf?.continuations?.[0]?.nextContinuationData?.continuation;
+
+      console.log(`Search filtered: ${items.length} items, continuation: ${!!continuation}`);
+      return { items, continuation };
     } catch (error) {
       console.error('Search error:', error);
       return { songs: [], albums: [], artists: [], playlists: [] };
@@ -1072,18 +1143,39 @@ export const InnerTube = {
         contents.gridRenderer.items?.forEach((item: any) => {
           const renderer = item.musicTwoRowItemRenderer;
           if (!renderer) return;
-          const id = renderer.navigationEndpoint?.browseEndpoint?.browseId?.replace('VL', '') || renderer.navigationEndpoint?.watchEndpoint?.videoId;
+          const browseId = renderer.navigationEndpoint?.browseEndpoint?.browseId;
+          const videoId = renderer.navigationEndpoint?.watchEndpoint?.videoId;
           const title = renderer.title?.runs?.[0]?.text;
+          const name = title;
           const thumbnail = parseThumbnail(renderer.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail?.thumbnails);
-          if (id && title) {
-            const isPlaylist = renderer.navigationEndpoint?.browseEndpoint?.browseId;
-            items.push({ id, title, thumbnailUrl: thumbnail, type: isPlaylist ? 'playlist' : 'song' });
+          
+          if (browseId?.startsWith('UC') && name) {
+            // Artist
+            items.push({ id: browseId, name, thumbnailUrl: thumbnail, type: 'artist' });
+          } else if (browseId && title) {
+            // Playlist/Album
+            const id = browseId.replace('VL', '');
+            items.push({ id, title, thumbnailUrl: thumbnail, type: 'playlist' });
+          } else if (videoId && title) {
+            // Song
+            items.push({ id: videoId, title, thumbnailUrl: thumbnail, type: 'song' });
           }
         });
       } else if (contents?.musicShelfRenderer) {
         contents.musicShelfRenderer.contents?.forEach((item: any) => {
-          const song = parseSongFromRenderer(item.musicResponsiveListItemRenderer);
-          if (song) items.push({ ...song, type: 'song' });
+          const renderer = item.musicResponsiveListItemRenderer;
+          if (!renderer) return;
+          
+          // Check if it's an artist
+          const browseId = renderer.navigationEndpoint?.browseEndpoint?.browseId;
+          if (browseId?.startsWith('UC')) {
+            const name = renderer.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
+            const thumbnail = parseThumbnail(renderer.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails);
+            if (name) items.push({ id: browseId, name, thumbnailUrl: thumbnail, type: 'artist' });
+          } else {
+            const song = parseSongFromRenderer(renderer);
+            if (song) items.push({ ...song, type: 'song' });
+          }
         });
       } else if (contents?.musicPlaylistShelfRenderer) {
         contents.musicPlaylistShelfRenderer.contents?.forEach((item: any) => {

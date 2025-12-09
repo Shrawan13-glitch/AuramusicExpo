@@ -7,18 +7,22 @@ import { usePlayer } from '../store/PlayerContext';
 import { useAuth } from '../store/AuthContext';
 import { Song } from '../types';
 
-interface SearchResults {
-  songs: Song[];
-  albums: any[];
-  artists: any[];
-  playlists: any[];
-}
+const FILTERS = [
+  { label: 'All', value: null },
+  { label: 'Songs', value: 'EgWKAQIIAWoKEAoQAxAEEAkQBQ%3D%3D' },
+  { label: 'Albums', value: 'EgWKAQIYAWoKEAoQAxAEEAkQBQ%3D%3D' },
+  { label: 'Artists', value: 'EgWKAQIgAWoKEAoQAxAEEAkQBQ%3D%3D' },
+  { label: 'Playlists', value: 'EgWKAQIoAWoKEAoQAxAEEAkQBQ%3D%3D' },
+];
 
 export default function SearchScreen({ navigation: tabNavigation }: any) {
   const navigation = tabNavigation.getParent();
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [results, setResults] = useState<SearchResults>({ songs: [], albums: [], artists: [], playlists: [] });
+  const [topResult, setTopResult] = useState<any>(null);
+  const [sections, setSections] = useState<any[]>([]);
+  const [filteredItems, setFilteredItems] = useState<any[]>([]);
+  const [selectedFilter, setSelectedFilter] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [showAccountModal, setShowAccountModal] = useState(false);
@@ -30,7 +34,9 @@ export default function SearchScreen({ navigation: tabNavigation }: any) {
     if (query.length < 2) {
       setSuggestions([]);
       if (query.length === 0) {
-        setResults({ songs: [], albums: [], artists: [], playlists: [] });
+        setTopResult(null);
+        setSections([]);
+        setFilteredItems([]);
         setShowSuggestions(true);
       }
       return;
@@ -52,13 +58,25 @@ export default function SearchScreen({ navigation: tabNavigation }: any) {
     };
   }, [query, showSuggestions]);
 
-  const executeSearch = async (searchQuery: string) => {
+  const executeSearch = async (searchQuery: string, filter: string | null = null) => {
     setQuery(searchQuery);
     setShowSuggestions(false);
     setLoading(true);
+    setSelectedFilter(filter);
     try {
-      const searchResults = await InnerTube.search(searchQuery);
-      setResults(searchResults);
+      if (filter) {
+        const { items } = await InnerTube.search(searchQuery, filter);
+        console.log('Filtered search results:', items.length);
+        setFilteredItems(items);
+        setTopResult(null);
+        setSections([]);
+      } else {
+        const { topResult: top, sections: secs } = await InnerTube.searchSummary(searchQuery);
+        console.log('Summary search results:', { topResult: !!top, sections: secs.length });
+        setTopResult(top);
+        setSections(secs);
+        setFilteredItems([]);
+      }
     } catch (error) {
       console.error('Search error:', error);
     } finally {
@@ -145,7 +163,12 @@ export default function SearchScreen({ navigation: tabNavigation }: any) {
           onChangeText={(text) => {
             setQuery(text);
             if (!showSuggestions) setShowSuggestions(true);
-            if (text.length === 0) setResults({ songs: [], albums: [], artists: [], playlists: [] });
+            if (text.length === 0) {
+              setTopResult(null);
+              setSections([]);
+              setFilteredItems([]);
+              setSelectedFilter(null);
+            }
           }}
           onSubmitEditing={() => executeSearch(query)}
           autoCapitalize="none"
@@ -155,8 +178,11 @@ export default function SearchScreen({ navigation: tabNavigation }: any) {
         {query.length > 0 && (
           <TouchableOpacity onPress={() => { 
             setQuery(''); 
-            setSuggestions([]); 
-            setResults({ songs: [], albums: [], artists: [], playlists: [] }); 
+            setSuggestions([]);
+            setTopResult(null);
+            setSections([]);
+            setFilteredItems([]);
+            setSelectedFilter(null);
             setShowSuggestions(true);
           }}>
             <Ionicons name="close-circle" size={20} color="#666" />
@@ -190,21 +216,62 @@ export default function SearchScreen({ navigation: tabNavigation }: any) {
       ) : loading ? (
         <ActivityIndicator size="large" color="#fff" style={styles.loader} />
       ) : (
-        <FlatList
-          data={[
-            ...(results.songs || []),
-            ...(results.artists || []),
-            ...(results.albums || []),
-            ...(results.playlists || []),
-          ]}
-          renderItem={renderItem}
-          keyExtractor={(item, index) => `${item.type}-${item.id}-${index}`}
-          ListEmptyComponent={
-            query.length >= 2 && !showSuggestions ? (
-              <Text style={styles.emptyText}>No results found</Text>
-            ) : null
-          }
-        />
+        <View style={{ flex: 1 }}>
+          {query.length >= 2 && (
+            <View style={styles.filterChips}>
+              {FILTERS.map((filter) => (
+                <TouchableOpacity
+                  key={filter.label}
+                  style={[
+                    styles.chip,
+                    selectedFilter === filter.value && styles.chipSelected,
+                  ]}
+                  onPress={() => executeSearch(query, filter.value)}
+                >
+                  <Text style={[
+                    styles.chipText,
+                    selectedFilter === filter.value && styles.chipTextSelected,
+                  ]}>
+                    {filter.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          {selectedFilter ? (
+            <FlatList
+              data={filteredItems}
+              renderItem={renderItem}
+              keyExtractor={(item, index) => `${item.type}-${item.id}-${index}`}
+              ListEmptyComponent={
+                query.length >= 2 && !loading && filteredItems.length === 0 ? (
+                  <Text style={styles.emptyText}>No results found</Text>
+                ) : null
+              }
+            />
+          ) : (
+            <FlatList
+              data={sections}
+              keyExtractor={(section, index) => `section-${index}`}
+              renderItem={({ item: section }) => (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>{section.title}</Text>
+                  {section.items.map((item: any, idx: number) => (
+                    <View key={`${item.id}-${idx}`}>
+                      {renderItem({ item })}
+                    </View>
+                  ))}
+                </View>
+              )}
+              ListEmptyComponent={
+                query.length >= 2 && !loading && sections.length === 0 ? (
+                  <Text style={styles.emptyText}>No results found</Text>
+                ) : null
+              }
+            />
+          )}
+
+        </View>
       )}
 
       <Modal visible={showAccountModal} transparent animationType="fade" onRequestClose={() => setShowAccountModal(false)}>
@@ -297,6 +364,13 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 14, color: '#aaa', marginTop: 4 },
   loader: { marginTop: 50 },
   emptyText: { color: '#666', textAlign: 'center', marginTop: 50, fontSize: 16 },
+  filterChips: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 8, gap: 8 },
+  chip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#333' },
+  chipSelected: { backgroundColor: '#1db954', borderColor: '#1db954' },
+  chipText: { color: '#aaa', fontSize: 14, fontWeight: '500' },
+  chipTextSelected: { color: '#000', fontWeight: '600' },
+  section: { marginTop: 16, paddingHorizontal: 16 },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff', marginBottom: 8 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-start', alignItems: 'flex-end', paddingTop: 50, paddingRight: 16 },
   modalContent: { backgroundColor: '#1a1a1a', borderRadius: 12, minWidth: 280, overflow: 'hidden' },
   accountHeader: { alignItems: 'center', padding: 24, borderBottomWidth: 1, borderBottomColor: '#333' },

@@ -1,5 +1,7 @@
 import React, { useRef, useState } from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, Dimensions, PanResponder, FlatList } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Slider from '@react-native-community/slider';
 import { Ionicons } from '@expo/vector-icons';
 import { usePlayer } from '../store/PlayerContext';
 import { useLibrary } from '../store/LibraryContext';
@@ -17,29 +19,12 @@ const formatTime = (ms: number) => {
 export default function PlayerScreen({ onClose, onOpenQueue, navigation }: { onClose: () => void; onOpenQueue: () => void; navigation?: any }) {
   const { currentSong, isPlaying, pause, resume, skipNext, skipPrevious, position, duration, seek, shuffle, repeat, toggleShuffle, toggleRepeat } = usePlayer();
   const { isLiked, addLikedSong, removeLikedSong } = useLibrary();
-  const progressBarWidth = SCREEN_WIDTH - 64;
-  
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (evt) => {
-        const locationX = evt.nativeEvent.locationX;
-        const newPosition = Math.max(0, Math.min((locationX / progressBarWidth) * duration, duration));
-        seek(newPosition);
-      },
-      onPanResponderMove: (evt) => {
-        const locationX = evt.nativeEvent.locationX;
-        const newPosition = Math.max(0, Math.min((locationX / progressBarWidth) * duration, duration));
-        seek(newPosition);
-      },
-    })
-  ).current;
 
   if (!currentSong) return null;
 
   return (
-    <View style={styles.container}>
+    <View style={styles.fullScreen}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={onClose}>
           <Ionicons name="chevron-down" size={32} color="#fff" />
@@ -56,26 +41,38 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: { onC
 
       <View style={styles.infoContainer}>
         <Text style={styles.title} numberOfLines={2}>{currentSong.title}</Text>
-        <TouchableOpacity 
-          onPress={() => {
-            if (currentSong.artists[0]?.id && navigation) {
-              onClose();
-              navigation.navigate('Artist', { artistId: currentSong.artists[0].id });
-            }
-          }}
-        >
-          <Text style={styles.artist} numberOfLines={1}>
-            {currentSong.artists.map(a => a.name).join(', ')}
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.artistsContainer}>
+          {currentSong.artists.map((artist, index) => (
+            <React.Fragment key={artist.id || index}>
+              <TouchableOpacity 
+                onPress={() => {
+                  if (artist.id && navigation) {
+                    onClose();
+                    navigation.navigate('Artist', { artistId: artist.id });
+                  }
+                }}
+              >
+                <Text style={styles.artist}>{artist.name}</Text>
+              </TouchableOpacity>
+              {index < currentSong.artists.length - 1 && (
+                <Text style={styles.artist}>, </Text>
+              )}
+            </React.Fragment>
+          ))}
+        </View>
       </View>
 
       <View style={styles.progressContainer}>
-        <View style={styles.progressBarContainer} {...panResponder.panHandlers}>
-          <View style={styles.progressBarBg}>
-            <View style={[styles.progressBarFill, { width: `${duration > 0 ? (position / duration) * 100 : 0}%` }]} />
-          </View>
-        </View>
+        <Slider
+          style={styles.slider}
+          minimumValue={0}
+          maximumValue={duration}
+          value={position}
+          onSlidingComplete={seek}
+          minimumTrackTintColor="#1db954"
+          maximumTrackTintColor="#333"
+          thumbTintColor="#fff"
+        />
         <View style={styles.timeContainer}>
           <Text style={styles.time}>{formatTime(position)}</Text>
           <Text style={styles.time}>{formatTime(duration)}</Text>
@@ -107,11 +104,16 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: { onC
           <Ionicons name="play-skip-forward" size={36} color="#fff" />
         </TouchableOpacity>
       </View>
+      </SafeAreaView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  fullScreen: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
   container: {
     flex: 1,
     backgroundColor: '#000',
@@ -150,6 +152,10 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginBottom: 8,
   },
+  artistsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
   artist: {
     fontSize: 18,
     color: '#aaa',
@@ -158,18 +164,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     paddingBottom: 12,
   },
-  progressBarContainer: {
-    paddingVertical: 10,
-  },
-  progressBarBg: {
-    height: 4,
-    backgroundColor: '#333',
-    borderRadius: 2,
-  },
-  progressBarFill: {
-    height: 4,
-    backgroundColor: '#1db954',
-    borderRadius: 2,
+  slider: {
+    width: '100%',
+    height: 40,
   },
   timeContainer: {
     flexDirection: 'row',

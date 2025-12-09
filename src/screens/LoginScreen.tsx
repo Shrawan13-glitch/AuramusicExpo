@@ -74,8 +74,7 @@ export default function LoginScreen({ navigation }: any) {
       <WebView
         ref={webViewRef}
         source={{ uri: 'https://accounts.google.com/ServiceLogin?continue=https%3A%2F%2Fmusic.youtube.com' }}
-        onLoadStart={() => setLoading(true)}
-        onLoadEnd={() => setLoading(false)}
+        onLoad={() => setLoading(false)}
         onNavigationStateChange={(navState) => extractCookies(navState.url)}
         onMessage={handleMessage}
         javaScriptEnabled={true}

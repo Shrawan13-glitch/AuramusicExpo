@@ -12,11 +12,14 @@ export default function LibraryScreen({ navigation }: any) {
   const { isAuthenticated, accountInfo, logout } = useAuth();
   const [ytmLibrary, setYtmLibrary] = useState<any[]>([]);
   const [loadingYtm, setLoadingYtm] = useState(false);
+  const [subscribedArtists, setSubscribedArtists] = useState<any[]>([]);
+  const [loadingArtists, setLoadingArtists] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
       loadYtmLibrary();
+      loadSubscribedArtists();
     }
   }, [isAuthenticated]);
 
@@ -31,6 +34,19 @@ export default function LibraryScreen({ navigation }: any) {
       console.error('Failed to load YTM library:', error);
     }
     setLoadingYtm(false);
+  };
+
+  const loadSubscribedArtists = async () => {
+    setLoadingArtists(true);
+    try {
+      const { InnerTube } = require('../api/innertube');
+      const result = await InnerTube.getLibrary('FEmusic_library_corpus_artists');
+      console.log('Subscribed artists loaded:', result.items?.length, 'artists');
+      setSubscribedArtists(result.items || []);
+    } catch (error) {
+      console.error('Failed to load subscribed artists:', error);
+    }
+    setLoadingArtists(false);
   };
 
   const folders = [
@@ -69,6 +85,24 @@ export default function LibraryScreen({ navigation }: any) {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 140, paddingTop: 8 }}>
+        {isAuthenticated && subscribedArtists.length > 0 && (
+          <View style={styles.artistsSection}>
+            <Text style={styles.sectionTitle}>Subscribed Artists</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.artistsScroll}>
+              {subscribedArtists.map((artist, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.artistItem}
+                  onPress={() => navigation.navigate('Artist', { artistId: artist.id })}
+                >
+                  <Image source={{ uri: artist.thumbnailUrl }} style={styles.artistImage} />
+                  <Text style={styles.artistName} numberOfLines={1}>{artist.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         {folders.map((folder, index) => (
           <TouchableOpacity
             key={index}
@@ -160,6 +194,12 @@ const styles = StyleSheet.create({
   folderInfo: { flex: 1, marginLeft: 16 },
   folderTitle: { fontSize: 16, fontWeight: '600', color: '#fff' },
   folderCount: { fontSize: 14, color: '#aaa', marginTop: 4 },
+  artistsSection: { marginBottom: 24, paddingHorizontal: 16 },
+  sectionTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff', marginBottom: 12 },
+  artistsScroll: { paddingRight: 16 },
+  artistItem: { width: 120, marginRight: 12, alignItems: 'center' },
+  artistImage: { width: 120, height: 120, borderRadius: 60, marginBottom: 8 },
+  artistName: { fontSize: 14, color: '#fff', textAlign: 'center', width: '100%' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-start', alignItems: 'flex-end', paddingTop: 50, paddingRight: 16 },
   modalContent: { backgroundColor: '#1a1a1a', borderRadius: 12, minWidth: 280, overflow: 'hidden' },
   accountHeader: { alignItems: 'center', padding: 24, borderBottomWidth: 1, borderBottomColor: '#333' },

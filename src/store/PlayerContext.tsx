@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useAudioPlayer } from 'expo-audio';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { Song, PlayerState } from '../types';
 import { InnerTube } from '../api/innertube';
 import { useLibrary } from './LibraryContext';
@@ -35,8 +35,13 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [repeat, setRepeat] = useState<'off' | 'all' | 'one'>('off');
   const [originalQueue, setOriginalQueue] = useState<Song[]>([]);
   const [radioContinuation, setRadioContinuation] = useState<string | null>(null);
+  const [previousSongs, setPreviousSongs] = useState<Song[]>([]);
+  const [intendedPlaying, setIntendedPlaying] = useState(false);
 
   const player = useAudioPlayer('');
+  const status = useAudioPlayerStatus(player);
+  const hasTriggeredNext = useRef(false);
+  const skipNextRef = useRef<() => Promise<void>>();
 
   useEffect(() => {
     setupAudio();
@@ -55,32 +60,36 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  // Update state from player status
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (player.playing) {
-        const position = player.currentTime * 1000;
-        const duration = player.duration * 1000;
-        
-        setState(prev => ({
-          ...prev,
-          position,
-          duration,
-          isPlaying: player.playing,
-        }));
-
-        // Auto-play next song when current ends
-        if (duration > 0 && position >= duration - 500) {
-          skipNext();
-        }
+    if (!status) return;
+    
+    const position = status.currentTime * 1000;
+    const duration = status.duration * 1000;
+    
+    setState(prev => {
+      // Only update if changed significantly
+      if (Math.abs(prev.position - position) < 500 && prev.duration === duration) {
+        return prev;
       }
-    }, 1000);
+      return {
+        ...prev,
+        position,
+        duration,
+        isPlaying: intendedPlaying,
+      };
+    });
 
-    return () => clearInterval(interval);
-  }, [player.playing, state.queue.length]);
+    // Detect song end and trigger next
+    if (duration > 0 && position >= duration - 100 && !hasTriggeredNext.current && skipNextRef.current) {
+      hasTriggeredNext.current = true;
+      console.log('Song ended, playing next');
+      skipNextRef.current();
+    }
+  }, [status?.currentTime, status?.duration, intendedPlaying]);
 
   const playSong = async (song: Song, queue?: Song[], generateRadio = true) => {
     try {
-      setState(prev => ({ ...prev, currentSong: song, isPlaying: true }));
       library.addToRecentlyPlayed(song);
 
       const streamUrl = await InnerTube.getStreamUrl(song.id);
@@ -89,6 +98,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         return;
       }
 
+      hasTriggeredNext.current = false;
+      setIntendedPlaying(true);
+      setState(prev => ({ ...prev, currentSong: song, isPlaying: true }));
       player.replace(streamUrl);
       player.play();
       
@@ -114,16 +126,19 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const pause = () => {
+    setIntendedPlaying(false);
     player.pause();
     setState(prev => ({ ...prev, isPlaying: false }));
   };
 
   const resume = () => {
+    setIntendedPlaying(true);
     player.play();
     setState(prev => ({ ...prev, isPlaying: true }));
   };
 
   const seek = (position: number) => {
+    setIntendedPlaying(true);
     player.seekTo(position / 1000);
   };
 
@@ -137,32 +152,58 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const skipNext = async () => {
     if (repeat === 'one' && state.currentSong) {
-      await playSong(state.currentSong, false);
+      await playSong(state.currentSong, undefined, false);
       return;
     }
 
-    if (state.queue.length <= 5 && radioContinuation && state.currentSong) {
-      const { songs, continuation } = await InnerTube.next(state.currentSong.id, radioContinuation);
-      setRadioContinuation(continuation);
-      setOriginalQueue(prev => [...prev, ...songs]);
-      const newSongs = shuffle ? shuffleArray([...songs]) : songs;
-      setState(prev => ({ ...prev, queue: [...prev.queue, ...newSongs] }));
+    if (state.queue.length <= 5 && radioContinuation) {
+      try {
+        const { songs, continuation } = await InnerTube.next(state.currentSong?.id || '', radioContinuation);
+        setRadioContinuation(continuation);
+        setOriginalQueue(prev => [...prev, ...songs]);
+        const newSongs = shuffle ? shuffleArray([...songs]) : songs;
+        setState(prev => ({ ...prev, queue: [...prev.queue, ...newSongs] }));
+      } catch (error) {
+        console.error('Failed to load more songs:', error);
+      }
     }
 
     if (state.queue.length > 0) {
       const nextSong = state.queue[0];
+      if (state.currentSong) {
+        setPreviousSongs(prev => [...prev, state.currentSong!]);
+      }
       setState(prev => ({ ...prev, queue: prev.queue.slice(1) }));
-      await playSong(nextSong, false);
+      await playSong(nextSong, undefined, false);
     } else if (repeat === 'all' && originalQueue.length > 0) {
       const newQueue = shuffle ? shuffleArray([...originalQueue]) : [...originalQueue];
       setState(prev => ({ ...prev, queue: newQueue }));
-      await playSong(newQueue[0], false);
+      if (state.currentSong) {
+        setPreviousSongs(prev => [...prev, state.currentSong!]);
+      }
+      await playSong(newQueue[0], undefined, false);
     }
   };
 
+  useEffect(() => {
+    skipNextRef.current = skipNext;
+  });
+
   const skipPrevious = async () => {
-    if (state.currentSong) {
-      await playSong(state.currentSong);
+    if (state.position > 3000) {
+      // Restart current song if more than 3 seconds in
+      player.seekTo(0);
+    } else if (previousSongs.length > 0) {
+      // Play previous song from history
+      const prevSong = previousSongs[previousSongs.length - 1];
+      setPreviousSongs(prev => prev.slice(0, -1));
+      if (state.currentSong) {
+        setState(prev => ({ ...prev, queue: [state.currentSong!, ...prev.queue] }));
+      }
+      await playSong(prevSong, undefined, false);
+    } else if (state.currentSong) {
+      // Restart current song
+      player.seekTo(0);
     }
   };
 

@@ -106,8 +106,8 @@ export default function ArtistScreen({ route, navigation }: any) {
         <TouchableOpacity 
           style={styles.subscribeButton}
           onPress={async () => {
-            const success = await InnerTube.subscribeArtist(artistId, !subscribed);
-            if (success) setSubscribed(!subscribed);
+            await InnerTube.subscribeArtist(artistId, !subscribed);
+            setSubscribed(!subscribed);
           }}
         >
           <Ionicons name={subscribed ? "checkmark-circle" : "add-circle-outline"} size={20} color="#fff" />
