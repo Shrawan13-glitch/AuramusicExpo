@@ -14,10 +14,10 @@ export default function CachedSongsScreen({ route, navigation }: any) {
       onPress={() => playSong(item)}
     >
       <Image 
-        source={{ uri: item.thumbnailUrl }} 
+        source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : require('../../assets/icon.png')} 
         style={styles.thumbnail}
-        defaultSource={require('../../assets/icon.png')}
         resizeMode="cover"
+        onError={() => {}}
       />
       <View style={styles.songInfo}>
         <Text style={styles.title} numberOfLines={1}>{item.title}</Text>

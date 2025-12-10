@@ -155,10 +155,6 @@ export default function AccountModal({
                 }}
               />
             </View>
-
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>AuraMusic v1.0.0</Text>
-            </View>
           </View>
         </Animated.View>
       </Animated.View>

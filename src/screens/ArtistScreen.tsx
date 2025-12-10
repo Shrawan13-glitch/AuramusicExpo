@@ -58,10 +58,10 @@ export default function ArtistScreen({ route, navigation }: any) {
       }}
     >
       <Image 
-        source={{ uri: item.thumbnailUrl }} 
+        source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : require('../../assets/icon.png')} 
         style={[styles.gridThumbnail, item.type === 'artist' && { borderRadius: 70 }]}
-        defaultSource={require('../../assets/icon.png')}
         resizeMode="cover"
+        onError={() => {}}
       />
       <Text style={styles.gridTitle} numberOfLines={2}>{item.title || item.name}</Text>
       {item.subtitle && (

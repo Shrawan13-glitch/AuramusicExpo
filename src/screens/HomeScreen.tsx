@@ -96,10 +96,10 @@ export default function HomeScreen({ navigation }: any) {
         onLongPress={item.type === 'song' ? () => showOptions(item) : undefined}
       >
         <Image 
-          source={{ uri: item.thumbnailUrl }} 
+          source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : require('../../assets/icon.png')} 
           style={[styles.cardImage, item.type === 'artist' && styles.roundImage]}
-          defaultSource={require('../../assets/icon.png')}
           resizeMode="cover"
+          onError={() => {}}
         />
         <Text style={[styles.cardTitle, isPlaying && styles.activeText]} numberOfLines={2}>
           {displayTitle}
@@ -165,10 +165,10 @@ export default function HomeScreen({ navigation }: any) {
                         onLongPress={() => showOptions(song)}
                       >
                         <Image 
-                          source={{ uri: song.thumbnailUrl }} 
+                          source={song.thumbnailUrl ? { uri: song.thumbnailUrl } : require('../../assets/icon.png')} 
                           style={styles.quickPickThumb}
-                          defaultSource={require('../../assets/icon.png')}
                           resizeMode="cover"
+                          onError={() => {}}
                         />
                         <View style={styles.quickPickInfo}>
                           <Text style={[styles.quickPickTitle, isPlaying && styles.activeText]} numberOfLines={1}>

@@ -104,10 +104,10 @@ export default function LibraryScreen({ navigation }: any) {
       onPress={() => navigation.navigate('Artist', { artistId: item.id })}
     >
       <Image 
-        source={{ uri: item.thumbnailUrl }} 
+        source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : require('../../assets/icon.png')} 
         style={styles.artistImage}
-        defaultSource={require('../../assets/icon.png')}
         resizeMode="cover"
+        onError={() => {}}
       />
       <Text style={styles.artistName} numberOfLines={1}>{item.name}</Text>
     </TouchableOpacity>

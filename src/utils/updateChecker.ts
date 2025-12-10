@@ -1,9 +1,8 @@
 import axios from 'axios';
 import { Linking } from 'react-native';
-import Constants from 'expo-constants';
 
 const UPDATE_URL = 'https://shrawan13-glitch.github.io/AuraMusic-updates/version.json';
-const CURRENT_VERSION = Constants.expoConfig?.version || '1.5.0';
+const CURRENT_VERSION = '1.5.0';
 
 export interface UpdateInfo {
   latestVersion: string;

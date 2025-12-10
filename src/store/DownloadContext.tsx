@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
+import axios from 'axios';
 import { InnerTube } from '../api/innertube';
 
 interface DownloadedSong {
@@ -50,9 +50,11 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const loadDownloadedSongs = async () => {
     try {
-      const stored = await AsyncStorage.getItem('downloadedSongs');
-      if (stored) {
-        setDownloadedSongs(JSON.parse(stored));
+      const filePath = FileSystem.documentDirectory + 'downloads.json';
+      const fileInfo = await FileSystem.getInfoAsync(filePath);
+      if (fileInfo.exists) {
+        const data = await FileSystem.readAsStringAsync(filePath);
+        setDownloadedSongs(JSON.parse(data));
       }
     } catch (error) {
       // Error loading downloaded songs handled silently
@@ -61,7 +63,8 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const saveDownloadedSongs = async (songs: DownloadedSong[]) => {
     try {
-      await AsyncStorage.setItem('downloadedSongs', JSON.stringify(songs));
+      const filePath = FileSystem.documentDirectory + 'downloads.json';
+      await FileSystem.writeAsStringAsync(filePath, JSON.stringify(songs));
       setDownloadedSongs(songs);
     } catch (error) {
       // Error saving downloaded songs handled silently
@@ -70,10 +73,12 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const downloadSong = useCallback(async (song: any) => {
     const songId = song.id;
+    console.log('Starting download for:', song.title, songId);
     
-    if (isDownloaded(songId)) return;
-
-
+    if (isDownloaded(songId)) {
+      console.log('Song already downloaded:', songId);
+      return;
+    }
 
     setDownloadProgress(prev => ({
       ...prev,
@@ -81,98 +86,102 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }));
 
     try {
-      const startTime = Date.now();
+      console.log('Getting stream URL for:', songId);
+      const urlStartTime = Date.now();
       
-      // Get quality setting - default to low for faster downloads
-      const quality = await AsyncStorage.getItem('downloadQuality') || 'low';
+      // Force low quality for fastest downloads
+      const quality = 'low';
+      console.log('Using quality:', quality);
       
       // Get actual stream URL with quality preference
       const streamUrl = await InnerTube.getStreamUrl(songId, quality);
       if (!streamUrl) {
+        console.error('No stream URL found for:', songId);
         throw new Error('No stream URL found');
       }
+      const urlTime = Date.now() - urlStartTime;
+      console.log(`Got stream URL in ${urlTime}ms:`, streamUrl.substring(0, 50) + '...');
       
-      const urlTime = Date.now();
+      // Test URL speed with a small range request
+      const testStart = Date.now();
+      try {
+        const testResponse = await fetch(streamUrl, {
+          method: 'HEAD',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 11; SM-G991B) AppleWebKit/537.36',
+          },
+        });
+        const testTime = Date.now() - testStart;
+        console.log(`URL test response in ${testTime}ms, status:`, testResponse.status);
+        console.log('Content-Length:', testResponse.headers.get('content-length'));
+      } catch (error) {
+        console.log('URL test failed:', error.message);
+      }
 
-      const downloadDir = `${FileSystem.documentDirectory}downloads/`;
-      await FileSystem.makeDirectoryAsync(downloadDir, { intermediates: true });
-      
       const fileName = `${song.title.replace(/[^a-zA-Z0-9]/g, '_')}_${songId}.mp3`;
-      const localPath = `${downloadDir}${fileName}`;
-
+      const filePath = FileSystem.documentDirectory + fileName;
+      console.log('Creating file:', fileName);
+      console.log('File path:', filePath);
+      
+      console.log('=== METROLIST-STYLE DOWNLOAD ===');
       const downloadStartTime = Date.now();
       
-      let bytesLogged = 0;
+      // Add range parameter like Metrolist does
+      const rangedUrl = `${streamUrl}&range=0-10000000`;
+      console.log('Using ranged URL for download');
       
-      // Download actual audio file with optimized settings
-      const downloadResumable = FileSystem.createDownloadResumable(
-        streamUrl,
-        localPath,
+      const downloadResult = await FileSystem.downloadAsync(
+        rangedUrl,
+        filePath,
         {
           headers: {
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 11; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
+            'User-Agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip',
             'Accept': '*/*',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache',
-            'Range': 'bytes=0-'
-          }
-        },
-        (() => {
-          let lastUpdate = 0;
-          return (downloadProgress) => {
-            const progress = downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite;
-            const now = Date.now();
-            
-            // Track download speed (logging removed)
-            if (now - bytesLogged > 5000) {
-              bytesLogged = now;
-            }
-            
-            // Throttle UI updates to every 2 seconds to reduce overhead
-            if (now - lastUpdate > 2000 || progress >= 1) {
-              lastUpdate = now;
-              setDownloadProgress(prev => ({
-                ...prev,
-                [songId]: { songId, progress, status: 'downloading' }
-              }));
-            }
-          };
-        })()
+            'Accept-Encoding': 'identity',
+          },
+        }
       );
-
-      const result = await downloadResumable.downloadAsync();
-      const totalTime = Date.now() - startTime;
       
-      if (result) {
-        const fileInfo = await FileSystem.getInfoAsync(result.uri);
-        const downloadedSong: DownloadedSong = {
-          id: songId,
-          title: song.title,
-          artists: song.artists || [{ name: 'Unknown Artist' }],
-          thumbnailUrl: song.thumbnailUrl,
-          localPath: result.uri,
-          downloadedAt: Date.now(),
-          size: fileInfo.size || 0,
-        };
-
-        const updatedSongs = [...downloadedSongs, downloadedSong];
-        await saveDownloadedSongs(updatedSongs);
-
-        setDownloadProgress(prev => ({
-          ...prev,
-          [songId]: { songId, progress: 1, status: 'completed' }
-        }));
-
-        setTimeout(() => {
-          setDownloadProgress(prev => {
-            const { [songId]: removed, ...rest } = prev;
-            return rest;
-          });
-        }, 2000);
+      const totalTime = Date.now() - downloadStartTime;
+      console.log(`Download completed in ${totalTime}ms, status: ${downloadResult.status}`);
+      
+      if (downloadResult.status !== 200 && downloadResult.status !== 206) {
+        console.error('Download failed with status:', downloadResult.status);
+        throw new Error(`Download failed: ${downloadResult.status}`);
       }
+      
+      const fileInfo = await FileSystem.getInfoAsync(filePath);
+      const speed = fileInfo.size > 0 ? (fileInfo.size / 1024 / (totalTime / 1000)).toFixed(1) : 'unknown';
+      console.log(`🎉 SUCCESS: ${fileInfo.size} bytes in ${totalTime}ms (${speed} KB/s)`);
+      
+      const downloadedSong: DownloadedSong = {
+        id: songId,
+        title: song.title,
+        artists: song.artists || [{ name: 'Unknown Artist' }],
+        thumbnailUrl: song.thumbnailUrl,
+        localPath: filePath,
+        downloadedAt: Date.now(),
+        size: fileInfo.size || 0,
+      };
+      
+      setDownloadProgress(prev => ({
+        ...prev,
+        [songId]: { songId, progress: 1, status: 'completed' }
+      }));
+
+      const updatedSongs = [...downloadedSongs, downloadedSong];
+      await saveDownloadedSongs(updatedSongs);
+      console.log('Download completed successfully for:', song.title);
+
+      setTimeout(() => {
+        setDownloadProgress(prev => {
+          const { [songId]: removed, ...rest } = prev;
+          return rest;
+        });
+      }, 1000);
+      
     } catch (error) {
-      // Download failed handled silently
+      console.error('Download failed for:', song.title, error);
       setDownloadProgress(prev => ({
         ...prev,
         [songId]: { songId, progress: 0, status: 'failed' }
@@ -192,7 +201,6 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         await saveDownloadedSongs(updatedSongs);
       } catch (error) {
         // Error deleting song handled silently
-        // Still remove from list even if file deletion fails
         const updatedSongs = downloadedSongs.filter(s => s.id !== songId);
         await saveDownloadedSongs(updatedSongs);
       }
@@ -214,7 +222,10 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const clearAllDownloads = useCallback(async () => {
     try {
       for (const song of downloadedSongs) {
-        await FileSystem.deleteAsync(song.localPath);
+        const fileInfo = await FileSystem.getInfoAsync(song.localPath);
+        if (fileInfo.exists) {
+          await FileSystem.deleteAsync(song.localPath);
+        }
       }
       await saveDownloadedSongs([]);
     } catch (error) {

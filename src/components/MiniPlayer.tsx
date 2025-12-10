@@ -31,14 +31,12 @@ const MiniPlayer = React.memo(() => {
         </View>
         <PanGestureHandler onHandlerStateChange={onGestureEvent}>
           <TouchableOpacity style={styles.container} onPress={() => setShowPlayer(true)} activeOpacity={0.95}>
-          {currentSong.thumbnailUrl && (
-            <Image 
-              source={{ uri: currentSong.thumbnailUrl }} 
-              style={styles.thumbnail}
-              defaultSource={require('../../assets/icon.png')}
-              resizeMode="cover"
-            />
-          )}
+          <Image 
+            source={currentSong.thumbnailUrl ? { uri: currentSong.thumbnailUrl } : require('../../assets/icon.png')} 
+            style={styles.thumbnail}
+            resizeMode="cover"
+            onError={() => {}}
+          />
           <View style={styles.info}>
             <Text style={styles.title} numberOfLines={1}>{currentSong.title}</Text>
             <Text style={styles.artist} numberOfLines={1}>

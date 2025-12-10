@@ -66,13 +66,13 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
     switch (backgroundStyle) {
       case 'blur':
         return (
-          <ImageBackground source={{ uri: currentSong.thumbnailUrl }} {...backgroundProps} blurRadius={50}>
+          <ImageBackground source={currentSong.thumbnailUrl ? { uri: currentSong.thumbnailUrl } : require('../../assets/icon.png')} {...backgroundProps} blurRadius={50}>
             <View style={[StyleSheet.absoluteFillObject, styles.darkOverlay]} />
           </ImageBackground>
         );
       case 'image':
         return (
-          <ImageBackground source={{ uri: currentSong.thumbnailUrl }} {...backgroundProps} blurRadius={20}>
+          <ImageBackground source={currentSong.thumbnailUrl ? { uri: currentSong.thumbnailUrl } : require('../../assets/icon.png')} {...backgroundProps} blurRadius={20}>
             <View style={[StyleSheet.absoluteFillObject, styles.mediumOverlay]} />
           </ImageBackground>
         );
@@ -111,7 +111,7 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
 
         <View style={styles.artworkContainer}>
           <View style={styles.artworkShadow}>
-            <Image source={{ uri: currentSong.thumbnailUrl }} style={styles.artwork} />
+            <Image source={currentSong.thumbnailUrl ? { uri: currentSong.thumbnailUrl } : require('../../assets/icon.png')} style={styles.artwork} onError={() => {}} />
           </View>
         </View>
 

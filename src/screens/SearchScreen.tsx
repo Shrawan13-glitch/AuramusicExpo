@@ -128,10 +128,10 @@ export default function SearchScreen({ navigation: tabNavigation }: any) {
         onLongPress={item.type === 'song' ? () => showOptions(item) : undefined}
       >
         <Image 
-          source={{ uri: item.thumbnailUrl }} 
+          source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : require('../../assets/icon.png')} 
           style={thumbnailStyle}
-          defaultSource={require('../../assets/icon.png')}
           resizeMode="cover"
+          onError={() => {}}
         />
         <View style={styles.itemInfo}>
           <Text style={styles.title} numberOfLines={1}>{title}</Text>
