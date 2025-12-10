@@ -25,6 +25,8 @@ import AboutScreen from '../screens/AboutScreen';
 import DownloadSettingsScreen from '../screens/DownloadSettingsScreen';
 import DownloadedSongsScreen from '../screens/DownloadedSongsScreen';
 import QualitySettingsScreen from '../screens/QualitySettingsScreen';
+import PrivacySettingsScreen from '../screens/PrivacySettingsScreen';
+import NotificationSettingsScreen from '../screens/NotificationSettingsScreen';
 import MiniPlayer from '../components/MiniPlayer';
 
 const Tab = createBottomTabNavigator();
@@ -268,6 +270,7 @@ export default function AppNavigator() {
           </View>
         )}
       </Stack.Screen>
+
       <Stack.Screen name="DownloadedSongs">
         {(props) => (
           <View style={styles.container}>
@@ -285,6 +288,30 @@ export default function AppNavigator() {
           <View style={styles.container}>
             <View style={{ flex: 1 }}>
               <QualitySettingsScreen {...props} />
+            </View>
+            <View style={styles.miniPlayerBottom}>
+              <MiniPlayer />
+            </View>
+          </View>
+        )}
+      </Stack.Screen>
+      <Stack.Screen name="PrivacySettings">
+        {(props) => (
+          <View style={styles.container}>
+            <View style={{ flex: 1 }}>
+              <PrivacySettingsScreen {...props} />
+            </View>
+            <View style={styles.miniPlayerBottom}>
+              <MiniPlayer />
+            </View>
+          </View>
+        )}
+      </Stack.Screen>
+      <Stack.Screen name="NotificationSettings">
+        {(props) => (
+          <View style={styles.container}>
+            <View style={{ flex: 1 }}>
+              <NotificationSettingsScreen {...props} />
             </View>
             <View style={styles.miniPlayerBottom}>
               <MiniPlayer />

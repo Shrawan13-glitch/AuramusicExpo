@@ -1354,7 +1354,7 @@ export const InnerTube = {
           return selectedFormat.url;
         }
       } catch (error) {
-        console.error(`Stream error with ${client.clientName}:`, error.message);
+        // Stream error handled silently
       }
     }
 

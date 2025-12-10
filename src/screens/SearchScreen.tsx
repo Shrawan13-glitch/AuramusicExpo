@@ -54,7 +54,7 @@ export default function SearchScreen({ navigation: tabNavigation }: any) {
         const sugg = await InnerTube.searchSuggestions(query);
         setSuggestions(sugg.slice(0, 8)); // Limit suggestions for performance
       } catch (error) {
-        console.error('Search suggestions error:', error);
+        // Search suggestions error handled silently
       }
     }, 400); // Increased debounce for better performance
 
@@ -81,7 +81,7 @@ export default function SearchScreen({ navigation: tabNavigation }: any) {
         setFilteredItems([]);
       }
     } catch (error) {
-      console.error('Search error:', error);
+      // Search error handled silently
     } finally {
       setLoading(false);
     }

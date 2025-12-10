@@ -16,7 +16,7 @@ export default function QualitySettingsScreen({ navigation }: any) {
       const quality = await AsyncStorage.getItem('downloadQuality');
       if (quality) setSelectedQuality(quality);
     } catch (error) {
-      console.log('Error loading quality:', error);
+      // Error loading quality handled silently
     }
   };
 
@@ -25,7 +25,7 @@ export default function QualitySettingsScreen({ navigation }: any) {
       await AsyncStorage.setItem('downloadQuality', quality);
       setSelectedQuality(quality);
     } catch (error) {
-      console.log('Error saving quality:', error);
+      // Error saving quality handled silently
     }
   };
 

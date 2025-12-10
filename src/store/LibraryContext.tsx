@@ -37,14 +37,14 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setLikedSongs(updated);
     
     // Non-blocking storage and sync
-    AsyncStorage.setItem('likedSongs', JSON.stringify(updated)).catch(console.error);
+    AsyncStorage.setItem('likedSongs', JSON.stringify(updated)).catch(() => {});
     
     // Sync with YouTube Music if authenticated (non-blocking)
     AsyncStorage.getItem('ytm_cookies').then(cookies => {
       if (cookies) {
-        InnerTube.likeSong(song.id, true).catch(console.error);
+        InnerTube.likeSong(song.id, true).catch(() => {});
       }
-    }).catch(console.error);
+    }).catch(() => {});
   }, [likedSongs]);
 
   const removeLikedSong = useCallback(async (songId: string) => {
@@ -52,14 +52,14 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setLikedSongs(updated);
     
     // Non-blocking storage and sync
-    AsyncStorage.setItem('likedSongs', JSON.stringify(updated)).catch(console.error);
+    AsyncStorage.setItem('likedSongs', JSON.stringify(updated)).catch(() => {});
     
     // Sync with YouTube Music if authenticated (non-blocking)
     AsyncStorage.getItem('ytm_cookies').then(cookies => {
       if (cookies) {
-        InnerTube.likeSong(songId, false).catch(console.error);
+        InnerTube.likeSong(songId, false).catch(() => {});
       }
-    }).catch(console.error);
+    }).catch(() => {});
   }, [likedSongs]);
 
   const isLiked = useCallback((songId: string) => likedSongs.some(s => s.id === songId), [likedSongs]);
@@ -69,7 +69,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setRecentlyPlayed(updated);
     
     // Non-blocking storage
-    AsyncStorage.setItem('recentlyPlayed', JSON.stringify(updated)).catch(console.error);
+    AsyncStorage.setItem('recentlyPlayed', JSON.stringify(updated)).catch(() => {});
   }, [recentlyPlayed]);
 
   const contextValue = useMemo(() => ({

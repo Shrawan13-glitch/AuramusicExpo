@@ -2,7 +2,7 @@
   "expo": {
     "name": "AuraMusic",
     "slug": "auramusic",
-    "version": "1.0.0",
+    "version": "1.5.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -15,11 +15,22 @@
     },
     "android": {
       "package": "com.auramusic.app",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#000000"
       }
     },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#1db954",
+          "defaultChannel": "default"
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "21413e6b-1071-4b35-b0a8-12d778ee8b85"

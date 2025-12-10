@@ -21,7 +21,7 @@ export default function AlbumScreen({ route, navigation }: any) {
       const result = await InnerTube.getAlbum(albumId);
       setData(result);
     } catch (error) {
-      console.error('Error loading album:', error);
+      // Error loading album handled silently
     } finally {
       setLoading(false);
     }

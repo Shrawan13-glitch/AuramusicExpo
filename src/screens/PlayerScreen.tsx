@@ -8,6 +8,8 @@ import { usePlayer } from '../store/PlayerContext';
 import { useLibrary } from '../store/LibraryContext';
 import { useDownload } from '../store/DownloadContext';
 import DownloadButton from '../components/DownloadButton';
+import SongOptionsModal from '../components/SongOptionsModal';
+import { useSongOptions } from '../hooks/useSongOptions';
 import LyricsScreen from './LyricsScreen';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -23,6 +25,7 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
   const { currentSong, isPlaying, pause, resume, skipNext, skipPrevious, position, duration, seek, shuffle, repeat, toggleShuffle, toggleRepeat } = usePlayer();
   const { isLiked, addLikedSong, removeLikedSong } = useLibrary();
   const { isDownloaded } = useDownload();
+  const { modalVisible, selectedSong, showOptions, hideOptions } = useSongOptions();
   const [showLyrics, setShowLyrics] = useState(false);
   const [backgroundStyle, setBackgroundStyle] = useState('blur');
 
@@ -35,7 +38,7 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
       const style = await AsyncStorage.getItem('playerBackgroundStyle');
       if (style) setBackgroundStyle(style);
     } catch (error) {
-      console.log('Error loading background style:', error);
+      // Error loading background style handled silently
     }
   };
 
@@ -96,6 +99,9 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
             <View style={styles.headerRight}>
               <TouchableOpacity onPress={() => setShowLyrics(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={{ marginRight: 16 }}>
                 <Ionicons name="document-text-outline" size={24} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => showOptions(currentSong)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={{ marginRight: 16 }}>
+                <Ionicons name="ellipsis-vertical" size={24} color="#fff" />
               </TouchableOpacity>
               <TouchableOpacity onPress={onOpenQueue} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                 <Ionicons name="list" size={24} color="#fff" />
@@ -182,6 +188,14 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
       <Modal visible={showLyrics} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setShowLyrics(false)}>
         <LyricsScreen onClose={() => setShowLyrics(false)} />
       </Modal>
+
+      <SongOptionsModal
+        visible={modalVisible}
+        onClose={hideOptions}
+        song={selectedSong}
+        showDeleteOption={false}
+        navigation={navigation}
+      />
     </View>
   );
 }

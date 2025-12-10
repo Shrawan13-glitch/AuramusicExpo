@@ -55,7 +55,7 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setDownloadedSongs(JSON.parse(stored));
       }
     } catch (error) {
-      console.error('Error loading downloaded songs:', error);
+      // Error loading downloaded songs handled silently
     }
   };
 
@@ -64,7 +64,7 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       await AsyncStorage.setItem('downloadedSongs', JSON.stringify(songs));
       setDownloadedSongs(songs);
     } catch (error) {
-      console.error('Error saving downloaded songs:', error);
+      // Error saving downloaded songs handled silently
     }
   };
 
@@ -82,11 +82,9 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     try {
       const startTime = Date.now();
-      console.log('🔄 Getting stream URL for:', song.title);
       
       // Get quality setting - default to low for faster downloads
       const quality = await AsyncStorage.getItem('downloadQuality') || 'low';
-      console.log('📊 Quality setting:', quality);
       
       // Get actual stream URL with quality preference
       const streamUrl = await InnerTube.getStreamUrl(songId, quality);
@@ -95,8 +93,6 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
       
       const urlTime = Date.now();
-      console.log('✅ Stream URL obtained in', urlTime - startTime, 'ms');
-      console.log('🔗 Stream URL length:', streamUrl.length, 'chars');
 
       const downloadDir = `${FileSystem.documentDirectory}downloads/`;
       await FileSystem.makeDirectoryAsync(downloadDir, { intermediates: true });
@@ -105,7 +101,6 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const localPath = `${downloadDir}${fileName}`;
 
       const downloadStartTime = Date.now();
-      console.log('🚀 Starting download to:', localPath);
       
       let bytesLogged = 0;
       
@@ -129,11 +124,8 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             const progress = downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite;
             const now = Date.now();
             
-            // Log download speed every 5 seconds (less frequent now that it's fast)
+            // Track download speed (logging removed)
             if (now - bytesLogged > 5000) {
-              const elapsed = (now - downloadStartTime) / 1000;
-              const speed = downloadProgress.totalBytesWritten / elapsed / 1024; // KB/s
-              console.log(`📈 ${speed.toFixed(0)} KB/s - ${(progress * 100).toFixed(0)}%`);
               bytesLogged = now;
             }
             
@@ -151,8 +143,6 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       const result = await downloadResumable.downloadAsync();
       const totalTime = Date.now() - startTime;
-      console.log('✅ Download completed in', totalTime, 'ms');
-      console.log('📁 File saved to:', result?.uri);
       
       if (result) {
         const fileInfo = await FileSystem.getInfoAsync(result.uri);
@@ -182,7 +172,7 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }, 2000);
       }
     } catch (error) {
-      console.error('Download failed for', song.title, ':', error);
+      // Download failed handled silently
       setDownloadProgress(prev => ({
         ...prev,
         [songId]: { songId, progress: 0, status: 'failed' }
@@ -201,7 +191,7 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const updatedSongs = downloadedSongs.filter(s => s.id !== songId);
         await saveDownloadedSongs(updatedSongs);
       } catch (error) {
-        console.error('Error deleting song:', error);
+        // Error deleting song handled silently
         // Still remove from list even if file deletion fails
         const updatedSongs = downloadedSongs.filter(s => s.id !== songId);
         await saveDownloadedSongs(updatedSongs);
@@ -228,7 +218,7 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
       await saveDownloadedSongs([]);
     } catch (error) {
-      console.error('Error clearing downloads:', error);
+      // Error clearing downloads handled silently
     }
   }, [downloadedSongs]);
 

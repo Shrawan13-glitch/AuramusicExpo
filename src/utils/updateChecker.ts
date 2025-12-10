@@ -1,8 +1,9 @@
 import axios from 'axios';
 import { Linking } from 'react-native';
+import Constants from 'expo-constants';
 
 const UPDATE_URL = 'https://shrawan13-glitch.github.io/AuraMusic-updates/version.json';
-const CURRENT_VERSION = '1.0.0';
+const CURRENT_VERSION = Constants.expoConfig?.version || '1.5.0';
 
 export interface UpdateInfo {
   latestVersion: string;
@@ -12,35 +13,43 @@ export interface UpdateInfo {
 }
 
 export const checkForUpdates = async (): Promise<{ hasUpdate: boolean; updateInfo?: UpdateInfo }> => {
-  try {
-    const response = await axios.get(UPDATE_URL, {
-      headers: {
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0',
-      },
-      params: {
-        _t: Date.now(), // Cache buster
-      },
-    });
-    let data = response.data;
-    if (typeof data === 'string') {
-      // Remove trailing commas before parsing
-      data = data.replace(/,\s*(\]|\})/g, '$1');
-      data = JSON.parse(data);
+  // Retry mechanism with timeout
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const response = await axios.get(UPDATE_URL, {
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+        params: {
+          _t: Date.now(),
+        },
+        timeout: 8000, // 8 second timeout
+      });
+      let data = response.data;
+      if (typeof data === 'string') {
+        data = data.replace(/,\s*(\]|\})/g, '$1');
+        data = JSON.parse(data);
+      }
+      const updateInfo: UpdateInfo = data?.update;
+      
+      if (!updateInfo || !updateInfo.latestVersion) {
+        return { hasUpdate: false };
+      }
+      
+      const hasUpdate = compareVersions(updateInfo.latestVersion, CURRENT_VERSION) > 0;
+      return { hasUpdate, updateInfo: hasUpdate ? updateInfo : undefined };
+      
+    } catch (error) {
+      if (attempt === 3) {
+        return { hasUpdate: false };
+      }
+      // Exponential backoff: wait 1s, 2s, 4s
+      await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt - 1) * 1000));
     }
-    const updateInfo: UpdateInfo = data?.update;
-    
-    if (!updateInfo || !updateInfo.latestVersion) {
-      return { hasUpdate: false };
-    }
-    
-    const hasUpdate = compareVersions(updateInfo.latestVersion, CURRENT_VERSION) > 0;
-    
-    return { hasUpdate, updateInfo: hasUpdate ? updateInfo : undefined };
-  } catch (error) {
-    return { hasUpdate: false };
   }
+  return { hasUpdate: false };
 };
 
 const compareVersions = (v1: string, v2: string): number => {

@@ -4,10 +4,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../store/AuthContext';
 import { checkForUpdates, getCurrentVersion } from '../utils/updateChecker';
+import Toast from '../components/Toast';
 
 export default function SettingsScreen({ navigation }: any) {
   const { isAuthenticated, accountInfo, logout } = useAuth();
   const [checking, setChecking] = useState(false);
+  const [showToast, setShowToast] = useState(false);
 
   const handleCheckUpdates = async () => {
     setChecking(true);
@@ -16,7 +18,7 @@ export default function SettingsScreen({ navigation }: any) {
     if (hasUpdate && updateInfo) {
       navigation.navigate('Update', { updateInfo });
     } else {
-      alert('You are on the latest version');
+      setShowToast(true);
     }
   };
 
@@ -83,7 +85,7 @@ export default function SettingsScreen({ navigation }: any) {
           <SettingCard
             icon="notifications-outline"
             title="Notifications"
-            subtitle="Alerts & sounds"
+            subtitle="Push notifications"
             onPress={() => navigation.navigate('NotificationSettings')}
             iconColor="#ff6b6b"
           />
@@ -112,6 +114,13 @@ export default function SettingsScreen({ navigation }: any) {
           <Text style={styles.updateButtonText}>Check for Updates</Text>
         </TouchableOpacity>
       </ScrollView>
+      
+      <Toast
+        visible={showToast}
+        message="You are on the latest version"
+        type="success"
+        onHide={() => setShowToast(false)}
+      />
     </SafeAreaView>
   );
 }

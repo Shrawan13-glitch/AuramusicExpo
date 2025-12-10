@@ -18,7 +18,7 @@ export default function DownloadSettingsScreen({ navigation }: any) {
       const quality = await AsyncStorage.getItem('downloadQuality');
       if (quality) setDownloadQuality(quality);
     } catch (error) {
-      console.log('Error loading settings:', error);
+      // Error loading settings handled silently
     }
   };
 

@@ -34,7 +34,7 @@ export default function SongOptionsModal({ visible, onClose, song, showDeleteOpt
         url: youtubeUrl,
       });
     } catch (error) {
-      console.error('Share error:', error);
+      // Share error handled silently
     }
     onClose();
   };

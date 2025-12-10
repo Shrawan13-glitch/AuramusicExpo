@@ -36,7 +36,7 @@ export default function LibraryScreen({ navigation }: any) {
       if (cached) setCachedSongs(JSON.parse(cached));
       if (downloaded) setDownloadedCount(JSON.parse(downloaded).length || 0);
     } catch (error) {
-      console.error('Error loading cached songs:', error);
+      // Error loading cached songs handled silently
     }
   }, []);
 
@@ -47,7 +47,7 @@ export default function LibraryScreen({ navigation }: any) {
       const result = await InnerTube.getLibrary('FEmusic_liked_videos');
       setYtmLibrary(result.items || []);
     } catch (error) {
-      console.error('Error loading YTM library:', error);
+      // Error loading YTM library handled silently
     } finally {
       setLoadingYtm(false);
     }
@@ -60,7 +60,7 @@ export default function LibraryScreen({ navigation }: any) {
       const result = await InnerTube.getLibrary('FEmusic_library_corpus_artists');
       setSubscribedArtists(result.items || []);
     } catch (error) {
-      console.error('Error loading artists:', error);
+      // Error loading artists handled silently
     } finally {
       setLoadingArtists(false);
     }

@@ -16,7 +16,7 @@ export default function PlayerSettingsScreen({ navigation }: any) {
       const style = await AsyncStorage.getItem('playerBackgroundStyle');
       if (style) setBackgroundStyle(style);
     } catch (error) {
-      console.log('Error loading background style:', error);
+      // Error loading background style handled silently
     }
   };
 
@@ -25,7 +25,7 @@ export default function PlayerSettingsScreen({ navigation }: any) {
       await AsyncStorage.setItem('playerBackgroundStyle', style);
       setBackgroundStyle(style);
     } catch (error) {
-      console.log('Error saving background style:', error);
+      // Error saving background style handled silently
     }
   };
 

@@ -7,6 +7,7 @@ import { usePlayer } from '../store/PlayerContext';
 import { useAuth } from '../store/AuthContext';
 import { Song } from '../types';
 import SongOptionsModal from '../components/SongOptionsModal';
+import AccountModal from '../components/AccountModal';
 import { useSongOptions } from '../hooks/useSongOptions';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -36,7 +37,7 @@ export default function HomeScreen({ navigation }: any) {
       setSections(data.sections);
       setContinuation(data.continuation);
     } catch (error) {
-      console.error('Error loading home:', error);
+      // Error loading home handled silently
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -52,7 +53,7 @@ export default function HomeScreen({ navigation }: any) {
       setSections(prev => [...prev, ...data.sections]);
       setContinuation(data.continuation);
     } catch (error) {
-      console.error('Error loading more:', error);
+      // Error loading more handled silently
     } finally {
       setLoadingMore(false);
     }
@@ -211,44 +212,15 @@ export default function HomeScreen({ navigation }: any) {
       <View style={{ height: 100 }} />
     </ScrollView>
 
-    <Modal visible={showAccountModal} transparent animationType="fade" onRequestClose={() => setShowAccountModal(false)}>
-      <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowAccountModal(false)}>
-        <View style={styles.modalContent}>
-          {isAuthenticated && accountInfo && (
-            <View style={styles.accountHeader}>
-              {accountInfo.thumbnail ? (
-                <Image source={{ uri: accountInfo.thumbnail }} style={styles.modalAvatar} />
-              ) : (
-                <View style={[styles.avatarPlaceholder, styles.modalAvatar]}>
-                  <Text style={styles.modalAvatarText}>{accountInfo.name?.[0]?.toUpperCase()}</Text>
-                </View>
-              )}
-              <Text style={styles.accountName}>{accountInfo.name}</Text>
-              <Text style={styles.accountEmail}>{accountInfo.email}</Text>
-            </View>
-          )}
-
-          {!isAuthenticated && (
-            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowAccountModal(false); navigation.getParent()?.navigate('Login'); }}>
-              <Ionicons name="log-in-outline" size={24} color="#1db954" />
-              <Text style={[styles.menuText, { color: '#1db954' }]}>Sign in</Text>
-            </TouchableOpacity>
-          )}
-
-          <TouchableOpacity style={styles.menuItem} onPress={() => { setShowAccountModal(false); navigation.getParent()?.navigate('Settings'); }}>
-            <Ionicons name="settings-outline" size={24} color="#fff" />
-            <Text style={styles.menuText}>Settings</Text>
-          </TouchableOpacity>
-
-          {isAuthenticated && (
-            <TouchableOpacity style={styles.menuItem} onPress={() => { setShowAccountModal(false); logout(); }}>
-              <Ionicons name="log-out-outline" size={24} color="#ff4444" />
-              <Text style={[styles.menuText, { color: '#ff4444' }]}>Sign out</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </TouchableOpacity>
-    </Modal>
+    <AccountModal
+      visible={showAccountModal}
+      onClose={() => setShowAccountModal(false)}
+      isAuthenticated={isAuthenticated}
+      accountInfo={accountInfo}
+      onSignIn={() => { setShowAccountModal(false); navigation.getParent()?.navigate('Login'); }}
+      onSettings={() => { setShowAccountModal(false); navigation.getParent()?.navigate('Settings'); }}
+      onSignOut={() => { setShowAccountModal(false); logout(); }}
+    />
 
     <SongOptionsModal
       visible={modalVisible}
@@ -288,13 +260,4 @@ const styles = StyleSheet.create({
   cardArtist: { fontSize: 12, color: '#aaa', marginTop: 4 },
   activeText: { color: '#1db954' },
   footer: { padding: 20, alignItems: 'center' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-start', alignItems: 'flex-end', paddingTop: 50, paddingRight: 16 },
-  modalContent: { backgroundColor: '#1a1a1a', borderRadius: 12, minWidth: 280, overflow: 'hidden' },
-  accountHeader: { alignItems: 'center', padding: 24, borderBottomWidth: 1, borderBottomColor: '#333' },
-  modalAvatar: { width: 64, height: 64, borderRadius: 32, marginBottom: 12 },
-  modalAvatarText: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
-  accountName: { fontSize: 18, fontWeight: '600', color: '#fff', marginBottom: 4 },
-  accountEmail: { fontSize: 14, color: '#aaa' },
-  menuItem: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 16 },
-  menuText: { fontSize: 16, color: '#fff' },
 });

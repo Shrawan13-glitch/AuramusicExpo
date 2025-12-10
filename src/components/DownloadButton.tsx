@@ -14,11 +14,10 @@ export default function DownloadButton({ song, size = 20, color = '#fff' }: Down
 
   const handlePress = async () => {
     if (!isDownloaded(song.id)) {
-      console.log('Starting download for:', song.title);
       try {
         await downloadSong(song);
       } catch (error) {
-        console.error('Download error:', error);
+        // Download error handled silently
       }
     }
   };

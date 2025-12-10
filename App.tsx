@@ -8,6 +8,7 @@ import { PlayerProvider } from './src/store/PlayerContext';
 import { LibraryProvider } from './src/store/LibraryContext';
 import { AuthProvider } from './src/store/AuthContext';
 import { DownloadProvider } from './src/store/DownloadContext';
+import { NotificationProvider } from './src/store/NotificationContext';
 import MiniPlayer from './src/components/MiniPlayer';
 import { checkForUpdates } from './src/utils/updateChecker';
 
@@ -30,7 +31,7 @@ export default function App() {
             navigationRef.current?.navigate('Update', { updateInfo });
           }
         } catch (error) {
-          console.error('Update check failed:', error);
+          // Update check failed silently
         }
       });
     };
@@ -42,22 +43,24 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <AuthProvider>
-          <LibraryProvider>
-            <DownloadProvider>
-              <PlayerProvider>
-                <NavigationContainer
-                  ref={navigationRef}
-                  onReady={() => {
-                    console.log('Navigation ready');
-                  }}
-                >
-                  <AppNavigator />
-                </NavigationContainer>
-              </PlayerProvider>
-            </DownloadProvider>
-          </LibraryProvider>
-        </AuthProvider>
+        <NotificationProvider>
+          <AuthProvider>
+            <LibraryProvider>
+              <DownloadProvider>
+                <PlayerProvider>
+                  <NavigationContainer
+                    ref={navigationRef}
+                    onReady={() => {
+                      // Navigation ready
+                    }}
+                  >
+                    <AppNavigator />
+                  </NavigationContainer>
+                </PlayerProvider>
+              </DownloadProvider>
+            </LibraryProvider>
+          </AuthProvider>
+        </NotificationProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

@@ -115,7 +115,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         // Try to get stream URL for online playback
         const streamUrl = await InnerTube.getStreamUrl(song.id);
         if (!streamUrl) {
-          console.error('No stream URL found and song not downloaded');
+          // No stream URL found and song not downloaded
           return;
         }
         audioSource = streamUrl;
@@ -139,9 +139,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const exists = cachedSongs.find((s: any) => s.id === song.id);
         if (!exists) {
           const updatedCache = [song, ...cachedSongs].slice(0, 100); // Keep last 100 songs
-          AsyncStorage.setItem('cached_songs', JSON.stringify(updatedCache)).catch(console.error);
+          AsyncStorage.setItem('cached_songs', JSON.stringify(updatedCache)).catch(() => {});
         }
-      }).catch(console.error);
+      }).catch(() => {});
       
       if (queue) {
         // Use provided queue (for playlists/albums)
@@ -159,7 +159,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setState(prev => ({ ...prev, queue: finalQueue }));
       }
     } catch (error) {
-      console.error('Error playing song:', error);
+      // Error playing song handled silently
     }
   }, [player, library, shuffle, downloadContext]);
 
@@ -206,7 +206,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const newSongs = shuffle ? shuffleArray([...songs]) : songs;
         setState(prev => ({ ...prev, queue: [...prev.queue, ...newSongs] }));
       } catch (error) {
-        console.error('Error loading more songs:', error);
+        // Error loading more songs handled silently
       }
     }
 

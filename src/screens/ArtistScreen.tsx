@@ -36,7 +36,7 @@ export default function ArtistScreen({ route, navigation }: any) {
       const result = await InnerTube.getArtist(artistId);
       setData(result);
     } catch (error) {
-      console.error('Error loading artist:', error);
+      // Error loading artist handled silently
     } finally {
       setLoading(false);
     }
