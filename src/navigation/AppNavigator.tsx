@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import HomeScreen from '../screens/HomeScreen';
 import SearchScreen from '../screens/SearchScreen';
 import LibraryScreen from '../screens/LibraryScreen';
@@ -18,16 +19,29 @@ import RecentlyPlayedScreen from '../screens/RecentlyPlayedScreen';
 import LikedSongsScreen from '../screens/LikedSongsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import UpdateScreen from '../screens/UpdateScreen';
+import CachedSongsScreen from '../screens/CachedSongsScreen';
+import PlayerSettingsScreen from '../screens/PlayerSettingsScreen';
+import AboutScreen from '../screens/AboutScreen';
+import DownloadSettingsScreen from '../screens/DownloadSettingsScreen';
+import DownloadedSongsScreen from '../screens/DownloadedSongsScreen';
+import QualitySettingsScreen from '../screens/QualitySettingsScreen';
 import MiniPlayer from '../components/MiniPlayer';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
-function TabNavigator() {
+const TabNavigator = React.memo(({ onTabBarLayout }: { onTabBarLayout: (height: number) => void }) => {
+  const insets = useSafeAreaInsets();
+  const tabBarHeight = 49 + insets.bottom;
+  
+  React.useEffect(() => {
+    onTabBarLayout(tabBarHeight);
+  }, [tabBarHeight]);
+  
   return (
     <Tab.Navigator
       screenOptions={{
-        tabBarStyle: { backgroundColor: '#121212', borderTopColor: '#282828', position: 'absolute', bottom: 0, left: 0, right: 0 },
+        tabBarStyle: { backgroundColor: '#121212', borderTopColor: '#282828', position: 'absolute', bottom: 0, left: 0, right: 0, paddingBottom: insets.bottom, height: tabBarHeight },
         tabBarActiveTintColor: '#fff',
         tabBarInactiveTintColor: '#666',
         headerStyle: { backgroundColor: '#000' },
@@ -69,23 +83,35 @@ function TabNavigator() {
       />
     </Tab.Navigator>
   );
-}
+});
+
+const MainScreen = React.memo(() => {
+  const [tabBarHeight, setTabBarHeight] = useState(49);
+  const insets = useSafeAreaInsets();
+  
+  const handleTabBarLayout = React.useCallback((height: number) => {
+    setTabBarHeight(height);
+  }, []);
+  
+  // Calculate tab bar height directly to avoid callback loop
+  const calculatedTabBarHeight = 49 + insets.bottom;
+  
+  return (
+    <View style={styles.container}>
+      <View style={{ flex: 1 }}>
+        <TabNavigator onTabBarLayout={handleTabBarLayout} />
+      </View>
+      <View style={[styles.miniPlayerAboveTab, { bottom: calculatedTabBarHeight }]}>
+        <MiniPlayer />
+      </View>
+    </View>
+  );
+});
 
 export default function AppNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false, presentation: 'card' }}>
-      <Stack.Screen name="Main">
-        {() => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <TabNavigator />
-            </View>
-            <View style={styles.miniPlayerAboveTab}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
-      </Stack.Screen>
+      <Stack.Screen name="Main" component={MainScreen} />
       <Stack.Screen name="Artist">
         {(props) => (
           <View style={styles.container}>
@@ -194,6 +220,78 @@ export default function AppNavigator() {
           </View>
         )}
       </Stack.Screen>
+      <Stack.Screen name="CachedSongs">
+        {(props) => (
+          <View style={styles.container}>
+            <View style={{ flex: 1 }}>
+              <CachedSongsScreen {...props} />
+            </View>
+            <View style={styles.miniPlayerBottom}>
+              <MiniPlayer />
+            </View>
+          </View>
+        )}
+      </Stack.Screen>
+      <Stack.Screen name="PlayerSettings">
+        {(props) => (
+          <View style={styles.container}>
+            <View style={{ flex: 1 }}>
+              <PlayerSettingsScreen {...props} />
+            </View>
+            <View style={styles.miniPlayerBottom}>
+              <MiniPlayer />
+            </View>
+          </View>
+        )}
+      </Stack.Screen>
+      <Stack.Screen name="About">
+        {(props) => (
+          <View style={styles.container}>
+            <View style={{ flex: 1 }}>
+              <AboutScreen {...props} />
+            </View>
+            <View style={styles.miniPlayerBottom}>
+              <MiniPlayer />
+            </View>
+          </View>
+        )}
+      </Stack.Screen>
+      <Stack.Screen name="DownloadSettings">
+        {(props) => (
+          <View style={styles.container}>
+            <View style={{ flex: 1 }}>
+              <DownloadSettingsScreen {...props} />
+            </View>
+            <View style={styles.miniPlayerBottom}>
+              <MiniPlayer />
+            </View>
+          </View>
+        )}
+      </Stack.Screen>
+      <Stack.Screen name="DownloadedSongs">
+        {(props) => (
+          <View style={styles.container}>
+            <View style={{ flex: 1 }}>
+              <DownloadedSongsScreen {...props} />
+            </View>
+            <View style={styles.miniPlayerBottom}>
+              <MiniPlayer />
+            </View>
+          </View>
+        )}
+      </Stack.Screen>
+      <Stack.Screen name="QualitySettings">
+        {(props) => (
+          <View style={styles.container}>
+            <View style={{ flex: 1 }}>
+              <QualitySettingsScreen {...props} />
+            </View>
+            <View style={styles.miniPlayerBottom}>
+              <MiniPlayer />
+            </View>
+          </View>
+        )}
+      </Stack.Screen>
       <Stack.Screen name="Update" component={UpdateScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
@@ -202,6 +300,6 @@ export default function AppNavigator() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  miniPlayerAboveTab: { position: 'absolute', bottom: 61, left: 0, right: 0, zIndex: 10 },
+  miniPlayerAboveTab: { position: 'absolute', left: 0, right: 0, zIndex: 10 },
   miniPlayerBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 10 },
 });

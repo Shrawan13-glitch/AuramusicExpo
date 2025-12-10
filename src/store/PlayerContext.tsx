@@ -1,8 +1,10 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Song, PlayerState } from '../types';
 import { InnerTube } from '../api/innertube';
 import { useLibrary } from './LibraryContext';
+import { useDownload } from './DownloadContext';
 import { setAudioModeAsync } from 'expo-audio';
 
 interface PlayerContextType extends PlayerState {
@@ -24,6 +26,7 @@ const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
 
 export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const library = useLibrary();
+  const downloadContext = useDownload();
   const [state, setState] = useState<PlayerState>({
     currentSong: null,
     queue: [],
@@ -42,6 +45,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const status = useAudioPlayerStatus(player);
   const hasTriggeredNext = useRef(false);
   const skipNextRef = useRef<() => Promise<void>>();
+  const lastUpdateRef = useRef<number>(0);
 
   useEffect(() => {
     setupAudio();
@@ -59,16 +63,21 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
-  // Update state from player status
+  // Update state from player status with throttling
   useEffect(() => {
     if (!status) return;
     
-    const position = status.currentTime * 1000;
-    const duration = status.duration * 1000;
+    const position = Math.floor(status.currentTime * 1000);
+    const duration = Math.floor(status.duration * 1000);
+    
+    // Throttle updates to prevent lag - 2 updates per second
+    const now = Date.now();
+    if (now - (lastUpdateRef.current || 0) < 500) return;
+    lastUpdateRef.current = now;
     
     setState(prev => {
-      // Only update if changed significantly (1 second)
-      if (Math.abs(prev.position - position) < 1000 && prev.duration === duration) {
+      // Only update if position changed by 1+ seconds or other properties changed
+      if (Math.abs(prev.position - position) < 1000 && prev.duration === duration && prev.isPlaying === intendedPlaying) {
         return prev;
       }
       return {
@@ -78,29 +87,61 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         isPlaying: intendedPlaying,
       };
     });
+  }, [status?.currentTime, status?.duration, intendedPlaying]);
 
-    // Detect song end and trigger next
-    if (duration > 0 && position >= duration - 100 && !hasTriggeredNext.current && skipNextRef.current) {
+  // Separate effect for song end detection
+  useEffect(() => {
+    if (!status || !skipNextRef.current) return;
+    
+    const position = Math.floor(status.currentTime * 1000);
+    const duration = Math.floor(status.duration * 1000);
+    
+    if (duration > 0 && position >= duration - 100 && !hasTriggeredNext.current) {
       hasTriggeredNext.current = true;
       skipNextRef.current();
     }
-  }, [status?.currentTime, status?.duration, intendedPlaying]);
+  }, [status?.currentTime, status?.duration]);
 
-  const playSong = async (song: Song, queue?: Song[], generateRadio = true) => {
+  const playSong = useCallback(async (song: Song, queue?: Song[], generateRadio = true) => {
     try {
-      const streamUrl = await InnerTube.getStreamUrl(song.id);
-      if (!streamUrl) {
-        return;
+      // Check if song is downloaded first
+      const downloadedSong = downloadContext?.getDownloadedSong(song.id);
+      let audioSource;
+      
+      if (downloadedSong) {
+        // Use local file for downloaded songs
+        audioSource = downloadedSong.localPath;
+      } else {
+        // Try to get stream URL for online playback
+        const streamUrl = await InnerTube.getStreamUrl(song.id);
+        if (!streamUrl) {
+          console.error('No stream URL found and song not downloaded');
+          return;
+        }
+        audioSource = streamUrl;
       }
 
       hasTriggeredNext.current = false;
       setIntendedPlaying(true);
-      setState(prev => ({ ...prev, currentSong: song, isPlaying: true }));
-      player.replace(streamUrl);
+      
+      player.replace(audioSource);
       player.play();
       
-      // Add to recently played after state update
-      setTimeout(() => library.addToRecentlyPlayed(song), 0);
+      // Update state in single batch
+      setState(prev => ({ ...prev, currentSong: song, isPlaying: true }));
+      
+      // Add to recently played and cache (non-blocking)
+      library.addToRecentlyPlayed(song);
+      
+      // Cache the song for offline-like experience
+      AsyncStorage.getItem('cached_songs').then(cached => {
+        const cachedSongs = cached ? JSON.parse(cached) : [];
+        const exists = cachedSongs.find((s: any) => s.id === song.id);
+        if (!exists) {
+          const updatedCache = [song, ...cachedSongs].slice(0, 100); // Keep last 100 songs
+          AsyncStorage.setItem('cached_songs', JSON.stringify(updatedCache)).catch(console.error);
+        }
+      }).catch(console.error);
       
       if (queue) {
         // Use provided queue (for playlists/albums)
@@ -116,80 +157,81 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setOriginalQueue(radioQueue);
         const finalQueue = shuffle ? shuffleArray([...radioQueue]) : radioQueue;
         setState(prev => ({ ...prev, queue: finalQueue }));
-
       }
     } catch (error) {
+      console.error('Error playing song:', error);
     }
-  };
+  }, [player, library, shuffle, downloadContext]);
 
-  const pause = () => {
+  const pause = useCallback(() => {
     setIntendedPlaying(false);
     player.pause();
     setState(prev => ({ ...prev, isPlaying: false }));
-  };
+  }, [player]);
 
-  const resume = () => {
+  const resume = useCallback(() => {
     setIntendedPlaying(true);
     player.play();
     setState(prev => ({ ...prev, isPlaying: true }));
-  };
+  }, [player]);
 
-  const seek = (position: number) => {
+  const seek = useCallback((position: number) => {
     setIntendedPlaying(true);
     player.seekTo(position / 1000);
-  };
+  }, [player]);
 
-  const addToQueue = (song: Song) => {
+  const addToQueue = useCallback((song: Song) => {
     setState(prev => ({ ...prev, queue: [...prev.queue, song] }));
-  };
+  }, []);
 
-  const playNext = (song: Song) => {
+  const playNext = useCallback((song: Song) => {
     setState(prev => ({ ...prev, queue: [song, ...prev.queue] }));
-  };
+  }, []);
 
   const skipNext = useCallback(async () => {
-    setState(currentState => {
-      const { currentSong, queue } = currentState;
-      
-      if (repeat === 'one' && currentSong) {
-        playSong(currentSong, undefined, false);
-        return currentState;
-      }
+    const currentState = state;
+    const { currentSong, queue } = currentState;
+    
+    if (repeat === 'one' && currentSong) {
+      await playSong(currentSong, undefined, false);
+      return;
+    }
 
-      if (queue.length <= 5 && radioContinuation && currentSong) {
-        InnerTube.next(currentSong.id, radioContinuation).then(({ songs, continuation }) => {
-          setRadioContinuation(continuation);
-          setOriginalQueue(prev => [...prev, ...songs]);
-          const newSongs = shuffle ? shuffleArray([...songs]) : songs;
-          setState(prev => ({ ...prev, queue: [...prev.queue, ...newSongs] }));
-        }).catch(() => {});
+    // Load more songs if queue is low
+    if (queue.length <= 5 && radioContinuation && currentSong) {
+      try {
+        const { songs, continuation } = await InnerTube.next(currentSong.id, radioContinuation);
+        setRadioContinuation(continuation);
+        setOriginalQueue(prev => [...prev, ...songs]);
+        const newSongs = shuffle ? shuffleArray([...songs]) : songs;
+        setState(prev => ({ ...prev, queue: [...prev.queue, ...newSongs] }));
+      } catch (error) {
+        console.error('Error loading more songs:', error);
       }
+    }
 
-      if (queue.length > 0) {
-        const nextSong = queue[0];
-        if (currentSong) {
-          setPreviousSongs(prev => [...prev, currentSong]);
-        }
-        playSong(nextSong, undefined, false);
-        return { ...currentState, queue: queue.slice(1) };
-      } else if (repeat === 'all' && originalQueue.length > 0) {
-        const newQueue = shuffle ? shuffleArray([...originalQueue]) : [...originalQueue];
-        if (currentSong) {
-          setPreviousSongs(prev => [...prev, currentSong]);
-        }
-        playSong(newQueue[0], undefined, false);
-        return { ...currentState, queue: newQueue };
+    if (queue.length > 0) {
+      const nextSong = queue[0];
+      if (currentSong) {
+        setPreviousSongs(prev => [...prev, currentSong]);
       }
-      
-      return currentState;
-    });
-  }, [repeat, radioContinuation, shuffle, originalQueue]);
+      setState(prev => ({ ...prev, queue: prev.queue.slice(1) }));
+      await playSong(nextSong, undefined, false);
+    } else if (repeat === 'all' && originalQueue.length > 0) {
+      const newQueue = shuffle ? shuffleArray([...originalQueue]) : [...originalQueue];
+      if (currentSong) {
+        setPreviousSongs(prev => [...prev, currentSong]);
+      }
+      setState(prev => ({ ...prev, queue: newQueue.slice(1) }));
+      await playSong(newQueue[0], undefined, false);
+    }
+  }, [state, repeat, radioContinuation, shuffle, originalQueue, playSong]);
 
   useEffect(() => {
     skipNextRef.current = skipNext;
   }, [skipNext]);
 
-  const skipPrevious = async () => {
+  const skipPrevious = useCallback(async () => {
     if (state.position > 3000) {
       // Restart current song if more than 3 seconds in
       player.seekTo(0);
@@ -205,9 +247,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Restart current song
       player.seekTo(0);
     }
-  };
+  }, [state.position, state.currentSong, previousSongs, player, playSong]);
 
-  const toggleShuffle = () => {
+  const toggleShuffle = useCallback(() => {
     const newShuffle = !shuffle;
     setShuffle(newShuffle);
     if (newShuffle) {
@@ -215,30 +257,30 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } else {
       setState(prev => ({ ...prev, queue: [...originalQueue] }));
     }
-  };
+  }, [shuffle, originalQueue]);
 
-  const toggleRepeat = () => {
+  const toggleRepeat = useCallback(() => {
     setRepeat(prev => prev === 'off' ? 'all' : prev === 'all' ? 'one' : 'off');
-  };
+  }, []);
+
+  const contextValue = useMemo(() => ({
+    ...state,
+    shuffle,
+    repeat,
+    playSong,
+    pause,
+    resume,
+    seek,
+    addToQueue,
+    playNext,
+    skipNext,
+    skipPrevious,
+    toggleShuffle,
+    toggleRepeat,
+  }), [state, shuffle, repeat, playSong, pause, resume, seek, addToQueue, playNext, skipNext, skipPrevious, toggleShuffle, toggleRepeat]);
 
   return (
-    <PlayerContext.Provider
-      value={{
-        ...state,
-        shuffle,
-        repeat,
-        playSong,
-        pause,
-        resume,
-        seek,
-        addToQueue,
-        playNext,
-        skipNext,
-        skipPrevious,
-        toggleShuffle,
-        toggleRepeat,
-      }}
-    >
+    <PlayerContext.Provider value={contextValue}>
       {children}
     </PlayerContext.Provider>
   );

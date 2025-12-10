@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { View, Text, Image, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { InnerTube } from '../api/innertube';
 import { usePlayer } from '../store/PlayerContext';
@@ -14,35 +15,59 @@ export default function AlbumScreen({ route, navigation }: any) {
     loadAlbum();
   }, [albumId]);
 
-  const loadAlbum = async () => {
+  const loadAlbum = useCallback(async () => {
     setLoading(true);
-    const result = await InnerTube.getAlbum(albumId);
-    setData(result);
-    setLoading(false);
-  };
+    try {
+      const result = await InnerTube.getAlbum(albumId);
+      setData(result);
+    } catch (error) {
+      console.error('Error loading album:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [albumId]);
+
+  const renderSongItem = useCallback(({ item, index }) => (
+    <TouchableOpacity
+      style={styles.songItem}
+      onPress={() => {
+        const queue = data.songs.slice(index + 1);
+        playSong(item, queue, false);
+      }}
+    >
+      <Text style={styles.trackNumber}>{index + 1}</Text>
+      <View style={styles.songInfo}>
+        <Text style={styles.songTitle} numberOfLines={1}>{item.title}</Text>
+        <Text style={styles.songArtist} numberOfLines={1}>
+          {item.artists?.map((a: any) => a.name).join(', ')}
+        </Text>
+      </View>
+      <Ionicons name="ellipsis-vertical" size={20} color="#666" />
+    </TouchableOpacity>
+  ), [data?.songs, playSong]);
 
   if (loading) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top']}>
         <ActivityIndicator size="large" color="#fff" style={{ marginTop: 100 }} />
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (!data || !data.album) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top']}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.errorText}>Failed to load album</Text>
         {data && <Text style={styles.errorText}>{JSON.stringify(data, null, 2)}</Text>}
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
         <Ionicons name="arrow-back" size={24} color="#fff" />
       </TouchableOpacity>
@@ -92,26 +117,14 @@ export default function AlbumScreen({ route, navigation }: any) {
             </View>
           </View>
         }
-        renderItem={({ item, index }) => (
-          <TouchableOpacity
-            style={styles.songItem}
-            onPress={() => {
-              const queue = data.songs.slice(index + 1);
-              playSong(item, queue, false);
-            }}
-          >
-            <Text style={styles.trackNumber}>{index + 1}</Text>
-            <View style={styles.songInfo}>
-              <Text style={styles.songTitle} numberOfLines={1}>{item.title}</Text>
-              <Text style={styles.songArtist} numberOfLines={1}>
-                {item.artists?.map((a: any) => a.name).join(', ')}
-              </Text>
-            </View>
-            <Ionicons name="ellipsis-vertical" size={20} color="#666" />
-          </TouchableOpacity>
-        )}
+        renderItem={renderSongItem}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={15}
+        windowSize={10}
+        initialNumToRender={20}
+        getItemLayout={(data, index) => ({ length: 60, offset: 60 * index, index })}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Song } from '../types';
 import { InnerTube } from '../api/innertube';
@@ -32,46 +32,57 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  const addLikedSong = async (song: Song) => {
+  const addLikedSong = useCallback(async (song: Song) => {
     const updated = [song, ...likedSongs.filter(s => s.id !== song.id)];
     setLikedSongs(updated);
-    await AsyncStorage.setItem('likedSongs', JSON.stringify(updated));
     
-    // Sync with YouTube Music if authenticated
-    const cookies = await AsyncStorage.getItem('ytm_cookies');
-    if (cookies) {
-      try {
-        await InnerTube.likeSong(song.id, true);
-      } catch (error) {
+    // Non-blocking storage and sync
+    AsyncStorage.setItem('likedSongs', JSON.stringify(updated)).catch(console.error);
+    
+    // Sync with YouTube Music if authenticated (non-blocking)
+    AsyncStorage.getItem('ytm_cookies').then(cookies => {
+      if (cookies) {
+        InnerTube.likeSong(song.id, true).catch(console.error);
       }
-    }
-  };
+    }).catch(console.error);
+  }, [likedSongs]);
 
-  const removeLikedSong = async (songId: string) => {
+  const removeLikedSong = useCallback(async (songId: string) => {
     const updated = likedSongs.filter(s => s.id !== songId);
     setLikedSongs(updated);
-    await AsyncStorage.setItem('likedSongs', JSON.stringify(updated));
     
-    // Sync with YouTube Music if authenticated
-    const cookies = await AsyncStorage.getItem('ytm_cookies');
-    if (cookies) {
-      try {
-        await InnerTube.likeSong(songId, false);
-      } catch (error) {
+    // Non-blocking storage and sync
+    AsyncStorage.setItem('likedSongs', JSON.stringify(updated)).catch(console.error);
+    
+    // Sync with YouTube Music if authenticated (non-blocking)
+    AsyncStorage.getItem('ytm_cookies').then(cookies => {
+      if (cookies) {
+        InnerTube.likeSong(songId, false).catch(console.error);
       }
-    }
-  };
+    }).catch(console.error);
+  }, [likedSongs]);
 
-  const isLiked = (songId: string) => likedSongs.some(s => s.id === songId);
+  const isLiked = useCallback((songId: string) => likedSongs.some(s => s.id === songId), [likedSongs]);
 
-  const addToRecentlyPlayed = async (song: Song) => {
+  const addToRecentlyPlayed = useCallback(async (song: Song) => {
     const updated = [song, ...recentlyPlayed.filter(s => s.id !== song.id)].slice(0, 50);
     setRecentlyPlayed(updated);
-    await AsyncStorage.setItem('recentlyPlayed', JSON.stringify(updated));
-  };
+    
+    // Non-blocking storage
+    AsyncStorage.setItem('recentlyPlayed', JSON.stringify(updated)).catch(console.error);
+  }, [recentlyPlayed]);
+
+  const contextValue = useMemo(() => ({
+    likedSongs,
+    recentlyPlayed,
+    addLikedSong,
+    removeLikedSong,
+    isLiked,
+    addToRecentlyPlayed
+  }), [likedSongs, recentlyPlayed, addLikedSong, removeLikedSong, isLiked, addToRecentlyPlayed]);
 
   return (
-    <LibraryContext.Provider value={{ likedSongs, recentlyPlayed, addLikedSong, removeLikedSong, isLiked, addToRecentlyPlayed }}>
+    <LibraryContext.Provider value={contextValue}>
       {children}
     </LibraryContext.Provider>
   );

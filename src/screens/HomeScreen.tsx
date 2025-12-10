@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, RefreshControl, ActivityIndicator, Dimensions, Modal } from 'react-native';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet, RefreshControl, ActivityIndicator, Dimensions, Modal, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { InnerTube } from '../api/innertube';
 import { usePlayer } from '../store/PlayerContext';
 import { useAuth } from '../store/AuthContext';
 import { Song } from '../types';
+import SongOptionsModal from '../components/SongOptionsModal';
+import { useSongOptions } from '../hooks/useSongOptions';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const ITEM_WIDTH = (SCREEN_WIDTH - 48) / 2;
@@ -21,25 +23,27 @@ export default function HomeScreen({ navigation }: any) {
   const [showAccountModal, setShowAccountModal] = useState(false);
   const { playSong, currentSong } = usePlayer();
   const { isAuthenticated, accountInfo, logout } = useAuth();
+  const { modalVisible, selectedSong, showOptions, hideOptions } = useSongOptions();
 
   useEffect(() => {
     loadHome();
   }, []);
 
-  const loadHome = async () => {
+  const loadHome = useCallback(async () => {
     try {
       const data = await InnerTube.getHome();
       setQuickPicks(data.quickPicks);
       setSections(data.sections);
       setContinuation(data.continuation);
     } catch (error) {
+      console.error('Error loading home:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
 
-  const loadMore = async () => {
+  const loadMore = useCallback(async () => {
     if (!continuation || loadingMore) return;
     
     setLoadingMore(true);
@@ -48,23 +52,63 @@ export default function HomeScreen({ navigation }: any) {
       setSections(prev => [...prev, ...data.sections]);
       setContinuation(data.continuation);
     } catch (error) {
+      console.error('Error loading more:', error);
     } finally {
       setLoadingMore(false);
     }
-  };
+  }, [continuation, loadingMore]);
 
-  const onRefresh = () => {
+  const onRefresh = useCallback(() => {
     setRefreshing(true);
     loadHome();
-  };
+  }, [loadHome]);
 
-  const handleScroll = (event: any) => {
+  const handleScroll = useCallback((event: any) => {
     const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
     const paddingToBottom = 500;
     if (layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom) {
       loadMore();
     }
-  };
+  }, [loadMore]);
+
+  const renderSectionItem = useCallback(({ item }) => {
+    const isPlaying = item.type === 'song' && currentSong?.id === item.id;
+    const displayTitle = item.type === 'artist' ? item.name : item.title;
+    const displaySubtitle = item.type === 'song' 
+      ? item.artists?.map((a: any) => a.name).join(', ') 
+      : item.subtitle || '';
+    
+    return (
+      <TouchableOpacity 
+        style={styles.card} 
+        onPress={() => {
+          if (item.type === 'song') {
+            playSong(item);
+          } else if (item.type === 'artist') {
+            navigation.getParent()?.navigate('Artist', { artistId: item.id });
+          } else if (item.type === 'album') {
+            navigation.getParent()?.navigate('Album', { albumId: item.id });
+          } else if (item.type === 'playlist') {
+            navigation.getParent()?.navigate('Playlist', { playlistId: item.id, videoId: item.videoId });
+          }
+        }}
+        onLongPress={item.type === 'song' ? () => showOptions(item) : undefined}
+      >
+        <Image 
+          source={{ uri: item.thumbnailUrl }} 
+          style={[styles.cardImage, item.type === 'artist' && styles.roundImage]}
+          defaultSource={require('../../assets/icon.png')}
+          resizeMode="cover"
+        />
+        <Text style={[styles.cardTitle, isPlaying && styles.activeText]} numberOfLines={2}>
+          {displayTitle}
+        </Text>
+        <Text style={styles.cardArtist} numberOfLines={1}>
+          {displaySubtitle}
+        </Text>
+      </TouchableOpacity>
+    );
+  }, [currentSong?.id, playSong, navigation, showOptions]);
 
   if (loading) {
     return (
@@ -97,13 +141,18 @@ export default function HomeScreen({ navigation }: any) {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
       onScroll={handleScroll}
       scrollEventThrottle={400}
+      removeClippedSubviews={true}
+      maxToRenderPerBatch={5}
+      windowSize={5}
+      initialNumToRender={3}
+      getItemLayout={(data, index) => ({ length: 200, offset: 200 * index, index })}
     >
       {quickPicks.length > 0 && (
         <View style={styles.quickPicksSection}>
           <Text style={styles.sectionTitle}>Quick Picks</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={styles.quickPicksGrid}>
-              {Array.from({ length: 4 }).map((_, rowIndex) => (
+              {Array.from({ length: Math.ceil(quickPicks.slice(0, 20).length / 5) }).map((_, rowIndex) => (
                 <View key={rowIndex} style={styles.quickPicksRow}>
                   {quickPicks.slice(rowIndex * 5, (rowIndex + 1) * 5).map((song) => {
                     const isPlaying = currentSong?.id === song.id;
@@ -112,8 +161,14 @@ export default function HomeScreen({ navigation }: any) {
                         key={song.id}
                         style={styles.quickPickItem}
                         onPress={() => playSong(song)}
+                        onLongPress={() => showOptions(song)}
                       >
-                        <Image source={{ uri: song.thumbnailUrl }} style={styles.quickPickThumb} />
+                        <Image 
+                          source={{ uri: song.thumbnailUrl }} 
+                          style={styles.quickPickThumb}
+                          defaultSource={require('../../assets/icon.png')}
+                          resizeMode="cover"
+                        />
                         <View style={styles.quickPickInfo}>
                           <Text style={[styles.quickPickTitle, isPlaying && styles.activeText]} numberOfLines={1}>
                             {song.title}
@@ -135,41 +190,16 @@ export default function HomeScreen({ navigation }: any) {
       {sections.map((section, index) => (
         <View key={index} style={styles.section}>
           <Text style={styles.sectionTitle}>{section.title}</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sectionContent}>
-            {section.items.map((item: any) => {
-              const isPlaying = item.type === 'song' && currentSong?.id === item.id;
-              const displayTitle = item.type === 'artist' ? item.name : item.title;
-              const displaySubtitle = item.type === 'song' 
-                ? item.artists?.map((a: any) => a.name).join(', ') 
-                : item.subtitle || '';
-              
-              return (
-                <TouchableOpacity 
-                  key={item.id} 
-                  style={styles.card} 
-                  onPress={() => {
-                    if (item.type === 'song') {
-                      playSong(item);
-                    } else if (item.type === 'artist') {
-                      navigation.getParent()?.navigate('Artist', { artistId: item.id });
-                    } else if (item.type === 'album') {
-                      navigation.getParent()?.navigate('Album', { albumId: item.id });
-                    } else if (item.type === 'playlist') {
-                      navigation.getParent()?.navigate('Playlist', { playlistId: item.id, videoId: item.videoId });
-                    }
-                  }}
-                >
-                  <Image source={{ uri: item.thumbnailUrl }} style={[styles.cardImage, item.type === 'artist' && styles.roundImage]} />
-                  <Text style={[styles.cardTitle, isPlaying && styles.activeText]} numberOfLines={2}>
-                    {displayTitle}
-                  </Text>
-                  <Text style={styles.cardArtist} numberOfLines={1}>
-                    {displaySubtitle}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+          <FlatList
+            horizontal
+            data={section.items.slice(0, 15)}
+            keyExtractor={(item) => `${item.id}-${item.type}`}
+            showsHorizontalScrollIndicator={false}
+            removeClippedSubviews={true}
+            maxToRenderPerBatch={5}
+            windowSize={5}
+            renderItem={renderSectionItem}
+          />
         </View>
       ))}
 
@@ -219,6 +249,14 @@ export default function HomeScreen({ navigation }: any) {
         </View>
       </TouchableOpacity>
     </Modal>
+
+    <SongOptionsModal
+      visible={modalVisible}
+      onClose={hideOptions}
+      song={selectedSong}
+      showDeleteOption={false}
+      navigation={navigation.getParent()}
+    />
     </SafeAreaView>
   );
 }

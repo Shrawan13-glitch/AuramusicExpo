@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, Dimensions, Modal } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, Image, TouchableOpacity, StyleSheet, Dimensions, Modal, PanResponder, ImageBackground, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Slider from '@react-native-community/slider';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { usePlayer } from '../store/PlayerContext';
 import { useLibrary } from '../store/LibraryContext';
+import { useDownload } from '../store/DownloadContext';
+import DownloadButton from '../components/DownloadButton';
 import LyricsScreen from './LyricsScreen';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -19,32 +22,91 @@ const formatTime = (ms: number) => {
 export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) {
   const { currentSong, isPlaying, pause, resume, skipNext, skipPrevious, position, duration, seek, shuffle, repeat, toggleShuffle, toggleRepeat } = usePlayer();
   const { isLiked, addLikedSong, removeLikedSong } = useLibrary();
+  const { isDownloaded } = useDownload();
   const [showLyrics, setShowLyrics] = useState(false);
+  const [backgroundStyle, setBackgroundStyle] = useState('blur');
+
+  useEffect(() => {
+    loadBackgroundStyle();
+  }, []);
+
+  const loadBackgroundStyle = async () => {
+    try {
+      const style = await AsyncStorage.getItem('playerBackgroundStyle');
+      if (style) setBackgroundStyle(style);
+    } catch (error) {
+      console.log('Error loading background style:', error);
+    }
+  };
 
   if (!currentSong) return null;
 
   const liked = isLiked(currentSong.id);
 
+  const panResponder = PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: (_, gestureState) => {
+      return gestureState.dy > 10;
+    },
+    onPanResponderGrant: () => {},
+    onPanResponderMove: () => {},
+    onPanResponderRelease: (_, gestureState) => {
+      if (gestureState.dy > 100) {
+        onClose();
+      }
+    },
+    onShouldBlockNativeResponder: () => false,
+  });
+
+  const renderBackground = () => {
+    const backgroundProps = { style: StyleSheet.absoluteFillObject };
+    switch (backgroundStyle) {
+      case 'blur':
+        return (
+          <ImageBackground source={{ uri: currentSong.thumbnailUrl }} {...backgroundProps} blurRadius={50}>
+            <View style={[StyleSheet.absoluteFillObject, styles.darkOverlay]} />
+          </ImageBackground>
+        );
+      case 'image':
+        return (
+          <ImageBackground source={{ uri: currentSong.thumbnailUrl }} {...backgroundProps} blurRadius={20}>
+            <View style={[StyleSheet.absoluteFillObject, styles.mediumOverlay]} />
+          </ImageBackground>
+        );
+      default:
+        return <View style={[StyleSheet.absoluteFillObject, styles.gradientBackground]} />;
+    }
+  };
+
+  const getStatusBarStyle = () => {
+    return 'light-content';
+  };
+
   return (
     <View style={styles.fullScreen}>
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Ionicons name="chevron-down" size={28} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Now Playing</Text>
-          <View style={styles.headerRight}>
-            <TouchableOpacity onPress={() => setShowLyrics(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={{ marginRight: 16 }}>
-              <Ionicons name="document-text-outline" size={24} color="#fff" />
+      <StatusBar barStyle={getStatusBarStyle()} backgroundColor="transparent" translucent />
+      {renderBackground()}
+      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+        <View style={styles.container} {...panResponder.panHandlers}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="chevron-down" size={28} color="#fff" />
             </TouchableOpacity>
-            <TouchableOpacity onPress={onOpenQueue} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name="list" size={24} color="#fff" />
-            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Now Playing</Text>
+            <View style={styles.headerRight}>
+              <TouchableOpacity onPress={() => setShowLyrics(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={{ marginRight: 16 }}>
+                <Ionicons name="document-text-outline" size={24} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={onOpenQueue} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Ionicons name="list" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
 
         <View style={styles.artworkContainer}>
-          <Image source={{ uri: currentSong.thumbnailUrl }} style={styles.artwork} />
+          <View style={styles.artworkShadow}>
+            <Image source={{ uri: currentSong.thumbnailUrl }} style={styles.artwork} />
+          </View>
         </View>
 
         <View style={styles.infoContainer}>
@@ -94,6 +156,7 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
             <TouchableOpacity onPress={() => liked ? removeLikedSong(currentSong.id) : addLikedSong(currentSong)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Ionicons name={liked ? 'heart' : 'heart-outline'} size={26} color={liked ? '#1db954' : '#fff'} />
             </TouchableOpacity>
+            <DownloadButton song={currentSong} size={24} />
             <TouchableOpacity onPress={toggleRepeat} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Ionicons name={repeat === 'one' ? 'repeat-outline' : 'repeat'} size={22} color={repeat !== 'off' ? '#1db954' : '#666'} />
             </TouchableOpacity>
@@ -113,8 +176,9 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
             </TouchableOpacity>
           </View>
         </View>
+        </View>
       </SafeAreaView>
-
+        
       <Modal visible={showLyrics} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setShowLyrics(false)}>
         <LyricsScreen onClose={() => setShowLyrics(false)} />
       </Modal>
@@ -125,11 +189,22 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
 const styles = StyleSheet.create({
   fullScreen: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: 'transparent',
+  },
+  fullScreenWithBars: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  safeArea: {
+    flex: 1,
+    backgroundColor: 'transparent',
   },
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: 'transparent',
   },
   header: {
     flexDirection: 'row',
@@ -153,28 +228,46 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 20,
   },
+  artworkShadow: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.5,
+    shadowRadius: 30,
+    elevation: 20,
+  },
   artwork: {
     width: SCREEN_WIDTH - 80,
     height: SCREEN_WIDTH - 80,
-    borderRadius: 8,
+    borderRadius: 16,
   },
   infoContainer: {
     paddingHorizontal: 32,
     paddingVertical: 16,
   },
   title: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
     marginBottom: 6,
+    textAlign: 'center',
   },
   artistsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    justifyContent: 'center',
   },
   artist: {
     fontSize: 16,
-    color: '#aaa',
+    color: '#ccc',
+  },
+  gradientBackground: {
+    backgroundColor: '#1a1a2e',
+  },
+  darkOverlay: {
+    backgroundColor: 'rgba(0,0,0,0.8)',
+  },
+  mediumOverlay: {
+    backgroundColor: 'rgba(0,0,0,0.6)',
   },
   progressContainer: {
     paddingHorizontal: 32,
@@ -212,8 +305,13 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: '#fff',
+    backgroundColor: '#1db954',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#1db954',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 8,
   },
 });

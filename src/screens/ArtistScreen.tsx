@@ -1,5 +1,6 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, Animated } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { InnerTube } from '../api/innertube';
 import { usePlayer } from '../store/PlayerContext';
@@ -18,39 +19,75 @@ export default function ArtistScreen({ route, navigation }: any) {
     extrapolate: 'clamp',
   });
 
+  const { songsSection, otherSections } = useMemo(() => {
+    if (!data?.sections) return { songsSection: null, otherSections: [] };
+    const songs = data.sections.find((s: any) => s.items[0]?.type === 'song');
+    const others = data.sections.filter((s: any) => s !== songs);
+    return { songsSection: songs, otherSections: others };
+  }, [data?.sections]);
+
   useEffect(() => {
     loadArtist();
   }, [artistId]);
 
-  const loadArtist = async () => {
+  const loadArtist = useCallback(async () => {
     setLoading(true);
-    const result = await InnerTube.getArtist(artistId);
-    setData(result);
-    setLoading(false);
-  };
+    try {
+      const result = await InnerTube.getArtist(artistId);
+      setData(result);
+    } catch (error) {
+      console.error('Error loading artist:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [artistId]);
+
+  const renderGridItem = useCallback(({ item }) => (
+    <TouchableOpacity 
+      style={styles.gridItem}
+      onPress={() => {
+        if (item.type === 'album') {
+          navigation.navigate('Album', { albumId: item.id });
+        } else if (item.type === 'playlist') {
+          navigation.navigate('Playlist', { playlistId: item.id });
+        } else if (item.type === 'artist') {
+          navigation.navigate('Artist', { artistId: item.id });
+        } else if (item.type === 'video' || item.type === 'song') {
+          playSong(item);
+        }
+      }}
+    >
+      <Image 
+        source={{ uri: item.thumbnailUrl }} 
+        style={[styles.gridThumbnail, item.type === 'artist' && { borderRadius: 70 }]}
+        defaultSource={require('../../assets/icon.png')}
+        resizeMode="cover"
+      />
+      <Text style={styles.gridTitle} numberOfLines={2}>{item.title || item.name}</Text>
+      {item.subtitle && (
+        <Text style={styles.gridSubtitle} numberOfLines={1}>{item.subtitle}</Text>
+      )}
+    </TouchableOpacity>
+  ), [navigation, playSong]);
 
   if (loading) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container}>
         <ActivityIndicator size="large" color="#fff" style={{ marginTop: 100 }} />
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (!data) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container}>
         <Text style={styles.errorText}>Failed to load artist</Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
-  // Find songs section (could be "Songs", "Top songs", or any section with song items)
-  const songsSection = data.sections.find((s: any) => s.items[0]?.type === 'song');
-  const otherSections = data.sections.filter((s: any) => s !== songsSection);
-
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={[]}>
       <Animated.View style={[styles.animatedHeader, { opacity: headerOpacity }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBackButton}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -176,37 +213,17 @@ export default function ArtistScreen({ route, navigation }: any) {
               horizontal
               data={section.items}
               keyExtractor={(item, idx) => `${item.id}-${idx}`}
-              renderItem={({ item }) => (
-                <TouchableOpacity 
-                  style={styles.gridItem}
-                  onPress={() => {
-                    if (item.type === 'album') {
-                      navigation.navigate('Album', { albumId: item.id });
-                    } else if (item.type === 'playlist') {
-                      navigation.navigate('Playlist', { playlistId: item.id });
-                    } else if (item.type === 'artist') {
-                      navigation.navigate('Artist', { artistId: item.id });
-                    } else if (item.type === 'video') {
-                      playSong(item);
-                    } else if (item.type === 'song') {
-                      playSong(item);
-                    }
-                  }}
-                >
-                  <Image source={{ uri: item.thumbnailUrl }} style={[styles.gridThumbnail, item.type === 'artist' && { borderRadius: 70 }]} />
-                  <Text style={styles.gridTitle} numberOfLines={2}>{item.title || item.name}</Text>
-                  {item.subtitle && (
-                    <Text style={styles.gridSubtitle} numberOfLines={1}>{item.subtitle}</Text>
-                  )}
-                </TouchableOpacity>
-              )}
+              renderItem={renderGridItem}
+              removeClippedSubviews={true}
+              maxToRenderPerBatch={5}
+              windowSize={5}
               showsHorizontalScrollIndicator={false}
             />
           )}
         </View>
       ))}
       </Animated.ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -223,7 +240,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 50,
+    paddingTop: 60,
     paddingHorizontal: 16,
     zIndex: 20,
     borderBottomWidth: 1,
@@ -239,7 +256,7 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     flex: 1,
   },
-  backButton: { position: 'absolute', top: 50, left: 16, zIndex: 10, padding: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 },
+  backButton: { position: 'absolute', top: 60, left: 16, zIndex: 10, padding: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 },
   artistImage: { width: '100%', height: 300, resizeMode: 'cover' },
   infoContainer: { padding: 16 },
   artistName: { fontSize: 32, fontWeight: 'bold', color: '#fff', marginBottom: 16 },

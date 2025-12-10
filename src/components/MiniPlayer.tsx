@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, Image, StyleSheet, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import { usePlayer } from '../store/PlayerContext';
 import PlayerScreen from '../screens/PlayerScreen';
 import QueueScreen from '../screens/QueueScreen';
 
-export default function MiniPlayer() {
+const MiniPlayer = React.memo(() => {
   const navigation = useNavigation();
   const { currentSong, isPlaying, pause, resume, position, duration, skipNext, skipPrevious } = usePlayer();
   const [showPlayer, setShowPlayer] = useState(false);
@@ -16,15 +17,27 @@ export default function MiniPlayer() {
 
   const progress = duration > 0 ? position / duration : 0;
 
+  const onGestureEvent = (event: any) => {
+    if (event.nativeEvent.translationY < -50 && event.nativeEvent.state === State.END) {
+      setShowPlayer(true);
+    }
+  };
+
   return (
     <>
       <View style={styles.wrapper}>
         <View style={styles.progressBar}>
           <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
         </View>
-        <TouchableOpacity style={styles.container} onPress={() => setShowPlayer(true)} activeOpacity={0.95}>
+        <PanGestureHandler onHandlerStateChange={onGestureEvent}>
+          <TouchableOpacity style={styles.container} onPress={() => setShowPlayer(true)} activeOpacity={0.95}>
           {currentSong.thumbnailUrl && (
-            <Image source={{ uri: currentSong.thumbnailUrl }} style={styles.thumbnail} />
+            <Image 
+              source={{ uri: currentSong.thumbnailUrl }} 
+              style={styles.thumbnail}
+              defaultSource={require('../../assets/icon.png')}
+              resizeMode="cover"
+            />
           )}
           <View style={styles.info}>
             <Text style={styles.title} numberOfLines={1}>{currentSong.title}</Text>
@@ -44,9 +57,10 @@ export default function MiniPlayer() {
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
+        </PanGestureHandler>
       </View>
 
-      <Modal visible={showPlayer} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setShowPlayer(false)}>
+      <Modal visible={showPlayer} animationType="slide" presentationStyle="fullScreen" statusBarTranslucent={true} onRequestClose={() => setShowPlayer(false)}>
         <PlayerScreen 
           onClose={() => setShowPlayer(false)} 
           onOpenQueue={() => { setShowPlayer(false); setShowQueue(true); }}
@@ -54,12 +68,14 @@ export default function MiniPlayer() {
         />
       </Modal>
 
-      <Modal visible={showQueue} animationType="slide" onRequestClose={() => setShowQueue(false)}>
+      <Modal visible={showQueue} animationType="slide" statusBarTranslucent={true} onRequestClose={() => setShowQueue(false)}>
         <QueueScreen onClose={() => setShowQueue(false)} />
       </Modal>
     </>
   );
-}
+});
+
+export default MiniPlayer;
 
 const styles = StyleSheet.create({
   wrapper: {

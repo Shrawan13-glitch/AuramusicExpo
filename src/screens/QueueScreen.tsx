@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet, FlatList } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { usePlayer } from '../store/PlayerContext';
 
@@ -7,7 +8,7 @@ export default function QueueScreen({ onClose }: { onClose: () => void }) {
   const { queue, currentSong } = usePlayer();
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={onClose}>
           <Ionicons name="chevron-down" size={32} color="#fff" />
@@ -37,6 +38,7 @@ export default function QueueScreen({ onClose }: { onClose: () => void }) {
         <FlatList
           data={queue}
           keyExtractor={(item, index) => `${item.id}-${index}`}
+          showsVerticalScrollIndicator={false}
           renderItem={({ item, index }) => (
             <View style={styles.queueItem}>
               <Image source={{ uri: item.thumbnailUrl }} style={styles.queueThumbnail} />
@@ -46,12 +48,11 @@ export default function QueueScreen({ onClose }: { onClose: () => void }) {
                   {item.artists.map(a => a.name).join(', ')}
                 </Text>
               </View>
-              <Text style={styles.queueIndex}>{index + 1}</Text>
             </View>
           )}
         />
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -115,9 +116,5 @@ const styles = StyleSheet.create({
     color: '#aaa',
     fontSize: 12,
   },
-  queueIndex: {
-    color: '#666',
-    fontSize: 14,
-    marginLeft: 12,
-  },
+
 });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { View, TextInput, FlatList, TouchableOpacity, Image, Text, StyleSheet, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,6 +6,8 @@ import { InnerTube } from '../api/innertube';
 import { usePlayer } from '../store/PlayerContext';
 import { useAuth } from '../store/AuthContext';
 import { Song } from '../types';
+import SongOptionsModal from '../components/SongOptionsModal';
+import { useSongOptions } from '../hooks/useSongOptions';
 
 const FILTERS = [
   { label: 'All', value: null },
@@ -29,6 +31,7 @@ export default function SearchScreen({ navigation: tabNavigation }: any) {
   const debounceTimer = useRef<NodeJS.Timeout>();
   const { playSong } = usePlayer();
   const { isAuthenticated, accountInfo, logout } = useAuth();
+  const { modalVisible, selectedSong, showOptions, hideOptions } = useSongOptions();
 
   useEffect(() => {
     if (query.length < 2) {
@@ -47,16 +50,20 @@ export default function SearchScreen({ navigation: tabNavigation }: any) {
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
 
     debounceTimer.current = setTimeout(async () => {
-      const sugg = await InnerTube.searchSuggestions(query);
-      setSuggestions(sugg);
-    }, 300);
+      try {
+        const sugg = await InnerTube.searchSuggestions(query);
+        setSuggestions(sugg.slice(0, 8)); // Limit suggestions for performance
+      } catch (error) {
+        console.error('Search suggestions error:', error);
+      }
+    }, 400); // Increased debounce for better performance
 
     return () => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
     };
   }, [query, showSuggestions]);
 
-  const executeSearch = async (searchQuery: string, filter: string | null = null) => {
+  const executeSearch = useCallback(async (searchQuery: string, filter: string | null = null) => {
     setQuery(searchQuery);
     setShowSuggestions(false);
     setLoading(true);
@@ -74,12 +81,13 @@ export default function SearchScreen({ navigation: tabNavigation }: any) {
         setFilteredItems([]);
       }
     } catch (error) {
+      console.error('Search error:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const renderItem = ({ item }: { item: any }) => {
+  const renderItem = useCallback(({ item }: { item: any }) => {
     const getSubtitle = () => {
       if (item.type === 'song') {
         return item.artists?.map((a: any) => a.name).join(', ') || 'Song';
@@ -117,16 +125,26 @@ export default function SearchScreen({ navigation: tabNavigation }: any) {
             navigation?.navigate('Playlist', { playlistId: item.id });
           }
         }}
+        onLongPress={item.type === 'song' ? () => showOptions(item) : undefined}
       >
-        <Image source={{ uri: item.thumbnailUrl }} style={thumbnailStyle} />
+        <Image 
+          source={{ uri: item.thumbnailUrl }} 
+          style={thumbnailStyle}
+          defaultSource={require('../../assets/icon.png')}
+          resizeMode="cover"
+        />
         <View style={styles.itemInfo}>
           <Text style={styles.title} numberOfLines={1}>{title}</Text>
           <Text style={styles.subtitle} numberOfLines={1}>{getSubtitle()}</Text>
         </View>
-        <Ionicons name="ellipsis-vertical" size={20} color="#666" />
+        {item.type === 'song' && (
+          <TouchableOpacity onPress={() => showOptions(item)}>
+            <Ionicons name="ellipsis-vertical" size={20} color="#666" />
+          </TouchableOpacity>
+        )}
       </TouchableOpacity>
     );
-  };
+  }, [playSong, navigation, showOptions]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -189,6 +207,9 @@ export default function SearchScreen({ navigation: tabNavigation }: any) {
         <FlatList
           data={suggestions}
           keyExtractor={(item, index) => `suggestion-${index}`}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={5}
+          windowSize={5}
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.suggestionItem}
@@ -238,6 +259,10 @@ export default function SearchScreen({ navigation: tabNavigation }: any) {
               data={filteredItems}
               renderItem={renderItem}
               keyExtractor={(item, index) => `${item.type}-${item.id}-${index}`}
+              removeClippedSubviews={true}
+              maxToRenderPerBatch={10}
+              windowSize={10}
+              initialNumToRender={15}
               ListEmptyComponent={
                 query.length >= 2 && !loading && filteredItems.length === 0 ? (
                   <Text style={styles.emptyText}>No results found</Text>
@@ -307,6 +332,14 @@ export default function SearchScreen({ navigation: tabNavigation }: any) {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      <SongOptionsModal
+        visible={modalVisible}
+        onClose={hideOptions}
+        song={selectedSong}
+        showDeleteOption={false}
+        navigation={navigation}
+      />
     </SafeAreaView>
   );
 }

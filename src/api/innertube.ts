@@ -3,6 +3,59 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import { Song, Artist } from '../types';
 
+// Configure axios defaults for better performance
+axios.defaults.timeout = 8000; // Reduced timeout for faster failures
+axios.defaults.headers.common['Accept-Encoding'] = 'gzip, deflate';
+
+// Simple cache for API responses with LRU-like behavior
+const cache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_DURATION = 3 * 60 * 1000; // Reduced to 3 minutes for fresher data
+const MAX_CACHE_SIZE = 50; // Reduced cache size
+
+const getCachedData = (key: string) => {
+  const cached = cache.get(key);
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    // Move to end (LRU)
+    cache.delete(key);
+    cache.set(key, cached);
+    return cached.data;
+  }
+  cache.delete(key); // Remove expired
+  return null;
+};
+
+const setCachedData = (key: string, data: any) => {
+  // Clean old cache entries more aggressively
+  if (cache.size >= MAX_CACHE_SIZE) {
+    const firstKey = cache.keys().next().value;
+    cache.delete(firstKey);
+  }
+  cache.set(key, { data, timestamp: Date.now() });
+};
+
+// Optimize thumbnail URLs for better performance
+const optimizeThumbnail = (url: string | undefined): string | undefined => {
+  if (!url) return undefined;
+  // Use smaller thumbnail size for better performance
+  return url.replace(/=w\d+-h\d+/, '=w300-h300').replace(/=s\d+/, '=s300');
+};
+
+// Request deduplication to prevent duplicate API calls
+const pendingRequests = new Map<string, Promise<any>>();
+
+const deduplicateRequest = async <T>(key: string, requestFn: () => Promise<T>): Promise<T> => {
+  if (pendingRequests.has(key)) {
+    return pendingRequests.get(key)!;
+  }
+  
+  const promise = requestFn().finally(() => {
+    pendingRequests.delete(key);
+  });
+  
+  pendingRequests.set(key, promise);
+  return promise;
+};
+
 const API_KEY = 'AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30';
 const BASE_URL = 'https://music.youtube.com/youtubei/v1';
 
@@ -76,7 +129,7 @@ const getHeaders = async (setLogin: boolean = false) => {
 const parseThumbnail = (thumbnails: any[]): string | undefined => {
   if (!thumbnails || thumbnails.length === 0) return undefined;
   const url = thumbnails[thumbnails.length - 1]?.url;
-  return url?.split('=')[0];
+  return optimizeThumbnail(url?.split('=')[0]);
 };
 
 const parseArtists = (runs: any[]): Artist[] => {
@@ -141,16 +194,21 @@ const parseSongFromTwoRow = (renderer: any): Song | null => {
 
 export const InnerTube = {
   async searchSuggestions(query: string): Promise<string[]> {
-    try {
-      const headers = await getHeaders(false);
-      const response = await axios.post(
-        `${BASE_URL}/music/get_search_suggestions?key=${API_KEY}`,
-        {
-          context: createContext(),
-          input: query,
-        },
-        { headers }
-      );
+    const cacheKey = `suggestions_${query}`;
+    const cached = getCachedData(cacheKey);
+    if (cached) return cached;
+    
+    return deduplicateRequest(cacheKey, async () => {
+      try {
+        const headers = await getHeaders(false);
+        const response = await axios.post(
+          `${BASE_URL}/music/get_search_suggestions?key=${API_KEY}`,
+          {
+            context: createContext(),
+            input: query,
+          },
+          { headers, timeout: 3000 }
+        );
 
       const suggestions = response.data?.contents?.[0]?.searchSuggestionsSectionRenderer?.contents
         ?.map((item: any) => {
@@ -160,29 +218,37 @@ export const InnerTube = {
         })
         ?.filter((text: string | null) => text) || [];
 
-      return suggestions;
-    } catch (error) {
-      return [];
-    }
+        setCachedData(cacheKey, suggestions);
+        return suggestions;
+      } catch (error) {
+        return [];
+      }
+    });
   },
 
   async next(videoId: string, continuation?: string): Promise<{ songs: Song[]; continuation: string | null }> {
-    try {
-      const payload: any = {
-        context: createContext(),
-      };
+    const cacheKey = continuation ? `next_cont_${continuation}` : `next_${videoId}`;
+    const cached = getCachedData(cacheKey);
+    if (cached) return cached;
+    
+    return deduplicateRequest(cacheKey, async () => {
+      try {
+        const payload: any = {
+          context: createContext(),
+        };
 
-      if (continuation) {
-        payload.continuation = continuation;
-      } else {
-        payload.videoId = videoId;
-        payload.playlistId = `RDAMVM${videoId}`;
-      }
+        if (continuation) {
+          payload.continuation = continuation;
+        } else {
+          payload.videoId = videoId;
+          payload.playlistId = `RDAMVM${videoId}`;
+        }
 
-      const response = await axios.post(
-        `${BASE_URL}/next?key=${API_KEY}`,
-        payload
-      );
+        const response = await axios.post(
+          `${BASE_URL}/next?key=${API_KEY}`,
+          payload,
+          { timeout: 4000 }
+        );
 
       let playlistPanelRenderer;
       
@@ -220,12 +286,15 @@ export const InnerTube = {
         });
       });
 
-      const nextContinuation = playlistPanelRenderer.continuations?.[0]?.nextRadioContinuationData?.continuation;
+        const nextContinuation = playlistPanelRenderer.continuations?.[0]?.nextRadioContinuationData?.continuation;
 
-      return { songs, continuation: nextContinuation };
-    } catch (error) {
-      return { songs: [], continuation: null };
-    }
+        const result = { songs, continuation: nextContinuation };
+        setCachedData(cacheKey, result);
+        return result;
+      } catch (error) {
+        return { songs: [], continuation: null };
+      }
+    });
   },
 
   async getHomeContinuation(continuation: string): Promise<{ sections: any[]; continuation: string | null }> {
@@ -415,22 +484,27 @@ export const InnerTube = {
   },
 
   async search(query: string, filter?: string): Promise<{ items: any[]; continuation: string | null }> {
-    try {
-      const payload: any = {
-        context: createContext(),
-        query,
-      };
+    const cacheKey = `search_${query}_${filter || 'all'}`;
+    const cached = getCachedData(cacheKey);
+    if (cached) return cached;
+    
+    return deduplicateRequest(cacheKey, async () => {
+      try {
+        const payload: any = {
+          context: createContext(),
+          query,
+        };
 
-      if (filter) {
-        payload.params = filter;
-      }
+        if (filter) {
+          payload.params = filter;
+        }
 
-      const headers = await getHeaders(true);
-      const response = await axios.post(
-        `${BASE_URL}/search?key=${API_KEY}`,
-        payload,
-        { headers }
-      );
+        const headers = await getHeaders(true);
+        const response = await axios.post(
+          `${BASE_URL}/search?key=${API_KEY}`,
+          payload,
+          { headers, timeout: 4000 }
+        );
 
       const shelf = response.data?.contents?.tabbedSearchResultsRenderer?.tabs?.[0]
         ?.tabRenderer?.content?.sectionListRenderer?.contents?.find((c: any) => c.musicShelfRenderer)?.musicShelfRenderer;
@@ -467,25 +541,33 @@ export const InnerTube = {
         }
       });
 
-      const continuation = shelf?.continuations?.[0]?.nextContinuationData?.continuation;
+        const continuation = shelf?.continuations?.[0]?.nextContinuationData?.continuation;
 
-      return { items, continuation };
-    } catch (error) {
-      return { songs: [], albums: [], artists: [], playlists: [] };
-    }
+        const result = { items, continuation };
+        setCachedData(cacheKey, result);
+        return result;
+      } catch (error) {
+        return { items: [], continuation: null };
+      }
+    });
   },
 
   async getHome(): Promise<{ quickPicks: Song[]; sections: any[]; continuation: string | null }> {
-    try {
-      const headers = await getHeaders(true);
-      const response = await axios.post(
-        `${BASE_URL}/browse?key=${API_KEY}`,
-        {
-          context: createContext(),
-          browseId: 'FEmusic_home',
-        },
-        { headers }
-      );
+    const cacheKey = 'home_data';
+    const cached = getCachedData(cacheKey);
+    if (cached) return cached;
+    
+    return deduplicateRequest(cacheKey, async () => {
+      try {
+        const headers = await getHeaders(true);
+        const response = await axios.post(
+          `${BASE_URL}/browse?key=${API_KEY}`,
+          {
+            context: createContext(),
+            browseId: 'FEmusic_home',
+          },
+          { headers, timeout: 6000 }
+        );
 
       const contents = response.data?.contents?.singleColumnBrowseResultsRenderer?.tabs?.[0]
         ?.tabRenderer?.content?.sectionListRenderer?.contents;
@@ -557,21 +639,30 @@ export const InnerTube = {
         ?.tabRenderer?.content?.sectionListRenderer?.continuations?.[0]
         ?.nextContinuationData?.continuation;
 
-      return { quickPicks, sections, continuation };
-    } catch (error) {
-      return { quickPicks: [], sections: [], continuation: null };
-    }
+        const result = { quickPicks, sections, continuation };
+        setCachedData(cacheKey, result);
+        return result;
+      } catch (error) {
+        return { quickPicks: [], sections: [], continuation: null };
+      }
+    });
   },
 
   async getArtist(browseId: string): Promise<any> {
-    try {
-      const response = await axios.post(
-        `${BASE_URL}/browse?key=${API_KEY}`,
-        {
-          context: createContext(),
-          browseId,
-        }
-      );
+    const cacheKey = `artist_${browseId}`;
+    const cached = getCachedData(cacheKey);
+    if (cached) return cached;
+    
+    return deduplicateRequest(cacheKey, async () => {
+      try {
+        const response = await axios.post(
+          `${BASE_URL}/browse?key=${API_KEY}`,
+          {
+            context: createContext(),
+            browseId,
+          },
+          { timeout: 5000 }
+        );
 
       const header = response.data?.header?.musicImmersiveHeaderRenderer || response.data?.header?.musicVisualHeaderRenderer;
       const contents = response.data?.contents?.singleColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents;
@@ -666,22 +757,31 @@ export const InnerTube = {
         }
       });
 
-      return { artist, sections };
-    } catch (error) {
-      return null;
-    }
+        const result = { artist, sections };
+        setCachedData(cacheKey, result);
+        return result;
+      } catch (error) {
+        return null;
+      }
+    });
   },
 
   async getAlbum(browseId: string): Promise<any> {
-    try {
-      // First browse with the browseId directly (includes MPRE prefix)
-      const response = await axios.post(
-        `${BASE_URL}/browse?key=${API_KEY}`,
-        {
-          context: createContext(),
-          browseId,
-        }
-      );
+    const cacheKey = `album_${browseId}`;
+    const cached = getCachedData(cacheKey);
+    if (cached) return cached;
+    
+    return deduplicateRequest(cacheKey, async () => {
+      try {
+        // First browse with the browseId directly (includes MPRE prefix)
+        const response = await axios.post(
+          `${BASE_URL}/browse?key=${API_KEY}`,
+          {
+            context: createContext(),
+            browseId,
+          },
+          { timeout: 5000 }
+        );
 
       // Extract playlistId from canonical URL
       const playlistId = response.data?.microformat?.microformatDataRenderer?.urlCanonical?.split('=').pop();
@@ -749,41 +849,51 @@ export const InnerTube = {
         type: 'Album',
       };
 
-      return { album, songs };
-    } catch (error) {
-      return null;
-    }
+        const result = { album, songs };
+        setCachedData(cacheKey, result);
+        return result;
+      } catch (error) {
+        return null;
+      }
+    });
   },
 
   async getPlaylist(playlistId: string, videoId?: string): Promise<any> {
-    try {
-      // If it's a mix (has videoId), use next endpoint
-      if (videoId) {
-        const result = await this.next(videoId);
-        // Use first song's thumbnail for mix
-        const mixThumbnail = result.songs[0]?.thumbnailUrl;
-        return {
-          playlist: {
-            id: playlistId,
-            title: 'Mix',
-            thumbnail: mixThumbnail,
-            author: 'YouTube Music',
-            songCount: `${result.songs.length}+ songs`,
-          },
-          songs: result.songs,
-          continuation: result.continuation,
-          isMix: true,
-        };
-      }
-
-      const browseId = playlistId.startsWith('VL') ? playlistId : `VL${playlistId}`;
-      const response = await axios.post(
-        `${BASE_URL}/browse?key=${API_KEY}`,
-        {
-          context: createContext(),
-          browseId,
+    const cacheKey = videoId ? `playlist_mix_${playlistId}_${videoId}` : `playlist_${playlistId}`;
+    const cached = getCachedData(cacheKey);
+    if (cached) return cached;
+    
+    return deduplicateRequest(cacheKey, async () => {
+      try {
+        // If it's a mix (has videoId), use next endpoint
+        if (videoId) {
+          const result = await this.next(videoId);
+          const mixThumbnail = result.songs[0]?.thumbnailUrl;
+          const mixResult = {
+            playlist: {
+              id: playlistId,
+              title: 'Mix',
+              thumbnail: mixThumbnail,
+              author: 'YouTube Music',
+              songCount: `${result.songs.length}+ songs`,
+            },
+            songs: result.songs,
+            continuation: result.continuation,
+            isMix: true,
+          };
+          setCachedData(cacheKey, mixResult);
+          return mixResult;
         }
-      );
+
+        const browseId = playlistId.startsWith('VL') ? playlistId : `VL${playlistId}`;
+        const response = await axios.post(
+          `${BASE_URL}/browse?key=${API_KEY}`,
+          {
+            context: createContext(),
+            browseId,
+          },
+          { timeout: 5000 }
+        );
 
       const header = response.data?.header?.musicDetailHeaderRenderer || 
                      response.data?.header?.musicEditablePlaylistDetailHeaderRenderer?.header?.musicResponsiveHeaderRenderer ||
@@ -816,10 +926,13 @@ export const InnerTube = {
         continuation = shelf.continuations?.[0]?.nextContinuationData?.continuation;
       });
 
-      return { playlist, songs, continuation };
-    } catch (error) {
-      return null;
-    }
+        const result = { playlist, songs, continuation };
+        setCachedData(cacheKey, result);
+        return result;
+      } catch (error) {
+        return null;
+      }
+    });
   },
 
   async getPlaylistContinuation(continuation: string): Promise<{ songs: Song[]; continuation: string | null }> {
@@ -1197,7 +1310,11 @@ export const InnerTube = {
     }
   },
 
-  async getStreamUrl(videoId: string): Promise<string | null> {
+  async getStreamUrl(videoId: string, quality: string = 'high'): Promise<string | null> {
+    const cacheKey = `stream_${videoId}_${quality}`;
+    const cached = getCachedData(cacheKey);
+    if (cached) return cached;
+    
     const clients = [CLIENTS.ANDROID, CLIENTS.IOS, CLIENTS.WEB_REMIX];
     
     for (const client of clients) {
@@ -1207,18 +1324,37 @@ export const InnerTube = {
           {
             context: createContext(client),
             videoId,
-          }
+          },
+          { timeout: 3000 }
         );
 
         const formats = response.data?.streamingData?.adaptiveFormats || [];
-        const audioFormat = formats.find((f: any) => 
-          f.mimeType?.includes('audio') && f.url
-        );
+        const audioFormats = formats.filter((f: any) => f.mimeType?.includes('audio') && f.url);
         
-        if (audioFormat?.url) {
-          return audioFormat.url;
+        if (audioFormats.length === 0) continue;
+        
+        // Sort by bitrate and select based on quality
+        audioFormats.sort((a: any, b: any) => (a.bitrate || 0) - (b.bitrate || 0));
+        
+        let selectedFormat;
+        if (quality === 'low') {
+          // Select lowest bitrate (fastest download)
+          selectedFormat = audioFormats[0];
+        } else if (quality === 'medium') {
+          // Select middle bitrate
+          selectedFormat = audioFormats[Math.floor(audioFormats.length / 2)];
+        } else {
+          // Select highest bitrate
+          selectedFormat = audioFormats[audioFormats.length - 1];
+        }
+        
+        if (selectedFormat?.url) {
+          // Cache stream URLs for shorter duration (30 seconds)
+          cache.set(cacheKey, { data: selectedFormat.url, timestamp: Date.now() - (CACHE_DURATION - 30000) });
+          return selectedFormat.url;
         }
       } catch (error) {
+        console.error(`Stream error with ${client.clientName}:`, error.message);
       }
     }
 

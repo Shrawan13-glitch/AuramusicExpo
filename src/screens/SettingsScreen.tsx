@@ -20,19 +20,17 @@ export default function SettingsScreen({ navigation }: any) {
     }
   };
 
-  const SettingItem = ({ icon, title, subtitle, onPress, showChevron = true }: any) => (
-    <TouchableOpacity style={styles.settingItem} onPress={onPress}>
-      <Ionicons name={icon} size={24} color="#666" style={styles.settingIcon} />
-      <View style={styles.settingText}>
-        <Text style={styles.settingTitle}>{title}</Text>
-        {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
+  const SettingCard = ({ icon, title, subtitle, onPress, iconColor = '#1db954' }: any) => (
+    <TouchableOpacity style={styles.settingCard} onPress={onPress} activeOpacity={0.7}>
+      <View style={[styles.iconContainer, { backgroundColor: iconColor + '20' }]}>
+        <Ionicons name={icon} size={24} color={iconColor} />
       </View>
-      {showChevron && <Ionicons name="chevron-forward" size={20} color="#666" />}
+      <View style={styles.cardContent}>
+        <Text style={styles.cardTitle}>{title}</Text>
+        {subtitle && <Text style={styles.cardSubtitle}>{subtitle}</Text>}
+      </View>
+      <Ionicons name="chevron-forward" size={20} color="#666" />
     </TouchableOpacity>
-  );
-
-  const SectionHeader = ({ title }: any) => (
-    <Text style={styles.sectionHeader}>{title}</Text>
   );
 
   return (
@@ -42,54 +40,77 @@ export default function SettingsScreen({ navigation }: any) {
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Settings</Text>
+        <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {isAuthenticated && (
-          <>
-            <SectionHeader title="ACCOUNT" />
-            <View style={styles.section}>
-              <View style={styles.accountCard}>
-                <View style={styles.accountInfo}>
-                  {accountInfo?.thumbnail ? (
-                    <View style={styles.avatarContainer}>
-                      <Text style={styles.avatarText}>{accountInfo.name?.[0]?.toUpperCase()}</Text>
-                    </View>
-                  ) : (
-                    <View style={styles.avatarContainer}>
-                      <Ionicons name="person" size={32} color="#fff" />
-                    </View>
-                  )}
-                  <View style={styles.accountDetails}>
-                    <Text style={styles.accountName}>{accountInfo?.name}</Text>
-                    <Text style={styles.accountEmail}>{accountInfo?.email}</Text>
-                  </View>
-                </View>
+          <View style={styles.accountSection}>
+            <View style={styles.accountCard}>
+              <View style={styles.avatarContainer}>
+                {accountInfo?.thumbnail ? (
+                  <Text style={styles.avatarText}>{accountInfo.name?.[0]?.toUpperCase()}</Text>
+                ) : (
+                  <Ionicons name="person" size={28} color="#fff" />
+                )}
               </View>
-              <SettingItem
-                icon="log-out-outline"
-                title="Sign out"
-                onPress={() => {
-                  logout();
-                  navigation.goBack();
-                }}
-                showChevron={false}
-              />
+              <View style={styles.accountInfo}>
+                <Text style={styles.accountName}>{accountInfo?.name || 'User'}</Text>
+                <Text style={styles.accountEmail}>{accountInfo?.email}</Text>
+              </View>
+              <TouchableOpacity onPress={() => { logout(); navigation.goBack(); }} style={styles.logoutButton}>
+                <Ionicons name="log-out-outline" size={20} color="#ff4757" />
+              </TouchableOpacity>
             </View>
-          </>
+          </View>
         )}
 
-        <SectionHeader title="ABOUT" />
-        <View style={styles.section}>
-          <SettingItem icon="information-circle-outline" title="Version" subtitle={getCurrentVersion()} onPress={() => {}} showChevron={false} />
-          <TouchableOpacity style={styles.settingItem} onPress={handleCheckUpdates} disabled={checking}>
-            <Ionicons name="cloud-download-outline" size={24} color="#666" style={styles.settingIcon} />
-            <View style={styles.settingText}>
-              <Text style={styles.settingTitle}>Check for updates</Text>
-            </View>
-            {checking ? <ActivityIndicator size="small" color="#1db954" /> : <Ionicons name="chevron-forward" size={20} color="#666" />}
-          </TouchableOpacity>
+        <View style={styles.settingsGrid}>
+          <SettingCard
+            icon="musical-notes"
+            title="Player"
+            subtitle="Playback & appearance"
+            onPress={() => navigation.navigate('PlayerSettings')}
+            iconColor="#1db954"
+          />
+          <SettingCard
+            icon="download-outline"
+            title="Downloads"
+            subtitle="Offline music"
+            onPress={() => navigation.navigate('DownloadSettings')}
+            iconColor="#3742fa"
+          />
+          <SettingCard
+            icon="notifications-outline"
+            title="Notifications"
+            subtitle="Alerts & sounds"
+            onPress={() => navigation.navigate('NotificationSettings')}
+            iconColor="#ff6b6b"
+          />
+          <SettingCard
+            icon="shield-checkmark-outline"
+            title="Privacy"
+            subtitle="Data & permissions"
+            onPress={() => navigation.navigate('PrivacySettings')}
+            iconColor="#ffa502"
+          />
+          <SettingCard
+            icon="information-circle-outline"
+            title="About"
+            subtitle={`Version ${getCurrentVersion()}`}
+            onPress={() => navigation.navigate('About')}
+            iconColor="#747d8c"
+          />
         </View>
+
+        <TouchableOpacity style={styles.updateButton} onPress={handleCheckUpdates} disabled={checking}>
+          {checking ? (
+            <ActivityIndicator size="small" color="#1db954" />
+          ) : (
+            <Ionicons name="cloud-download-outline" size={20} color="#1db954" />
+          )}
+          <Text style={styles.updateButtonText}>Check for Updates</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -97,20 +118,23 @@ export default function SettingsScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 16 },
-  headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff', flex: 1 },
-  sectionHeader: { fontSize: 14, fontWeight: '600', color: '#1db954', paddingHorizontal: 16, paddingTop: 24, paddingBottom: 8 },
-  section: { backgroundColor: '#121212', marginHorizontal: 16, marginBottom: 8, borderRadius: 8, overflow: 'hidden' },
-  accountCard: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#282828' },
-  accountInfo: { flexDirection: 'row', alignItems: 'center' },
-  avatarContainer: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#1db954', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
-  accountDetails: { marginLeft: 16, flex: 1 },
-  accountName: { fontSize: 18, fontWeight: '600', color: '#fff', marginBottom: 4 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16 },
+  headerTitle: { fontSize: 28, fontWeight: '700', color: '#fff', flex: 1 },
+  scrollContent: { paddingBottom: 100 },
+  accountSection: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 24 },
+  accountCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#121212', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#282828' },
+  avatarContainer: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#1db954', alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 20, fontWeight: '700', color: '#fff' },
+  accountInfo: { flex: 1, marginLeft: 16 },
+  accountName: { fontSize: 18, fontWeight: '600', color: '#fff', marginBottom: 2 },
   accountEmail: { fontSize: 14, color: '#aaa' },
-  settingItem: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#282828' },
-  settingIcon: { marginRight: 16 },
-  settingText: { flex: 1 },
-  settingTitle: { fontSize: 16, color: '#fff', marginBottom: 2 },
-  settingSubtitle: { fontSize: 14, color: '#aaa' },
+  logoutButton: { padding: 8 },
+  settingsGrid: { paddingHorizontal: 20, gap: 12 },
+  settingCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#121212', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#282828' },
+  iconContainer: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 16 },
+  cardContent: { flex: 1 },
+  cardTitle: { fontSize: 16, fontWeight: '600', color: '#fff', marginBottom: 2 },
+  cardSubtitle: { fontSize: 14, color: '#aaa' },
+  updateButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#121212', marginHorizontal: 20, marginTop: 24, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#1db954' },
+  updateButtonText: { fontSize: 16, fontWeight: '600', color: '#1db954', marginLeft: 8 },
 });
