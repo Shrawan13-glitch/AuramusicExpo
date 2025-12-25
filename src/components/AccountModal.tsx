@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
   },
   gradientBackground: {
     paddingBottom: 40,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#121212',
   },
   handle: {
     width: 40,
@@ -238,7 +238,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#1db954',
     borderWidth: 2,
-    borderColor: '#1a1a2e',
+    borderColor: '#121212',
   },
   profileInfo: {
     flex: 1,
@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: '#282828',
     marginHorizontal: 24,
     marginBottom: 16,
   },
@@ -296,21 +296,21 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 16,
     marginBottom: 8,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 12,
+    backgroundColor: '#1a1a1a',
     minHeight: 56,
   },
   menuIconContainer: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    backgroundColor: '#282828',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
   },
   dangerIconContainer: {
-    backgroundColor: 'rgba(255, 71, 87, 0.2)',
+    backgroundColor: '#2a1a1a',
   },
   menuContent: {
     flex: 1,

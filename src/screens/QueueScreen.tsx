@@ -10,11 +10,11 @@ export default function QueueScreen({ onClose }: { onClose: () => void }) {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={onClose}>
-          <Ionicons name="chevron-down" size={32} color="#fff" />
+        <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Ionicons name="arrow-back" size={28} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Queue</Text>
-        <View style={{ width: 32 }} />
+        <View style={{ width: 28 }} />
       </View>
 
       {currentSong && (

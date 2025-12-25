@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import HomeScreen from '../screens/HomeScreen';
@@ -26,7 +26,7 @@ import DownloadSettingsScreen from '../screens/DownloadSettingsScreen';
 import DownloadedSongsScreen from '../screens/DownloadedSongsScreen';
 import QualitySettingsScreen from '../screens/QualitySettingsScreen';
 import PrivacySettingsScreen from '../screens/PrivacySettingsScreen';
-import NotificationSettingsScreen from '../screens/NotificationSettingsScreen';
+import AuraMeterScreen from '../screens/AuraMeterScreen';
 import MiniPlayer from '../components/MiniPlayer';
 
 const Tab = createBottomTabNavigator();
@@ -39,17 +39,21 @@ const TabNavigator = React.memo(({ onTabBarLayout }: { onTabBarLayout: (height: 
   React.useEffect(() => {
     onTabBarLayout(tabBarHeight);
   }, [tabBarHeight]);
+
+  const screenOptions = {
+    tabBarStyle: { backgroundColor: '#121212', borderTopColor: '#282828', position: 'absolute', bottom: 0, left: 0, right: 0, paddingBottom: insets.bottom, height: tabBarHeight },
+    tabBarActiveTintColor: '#fff',
+    tabBarInactiveTintColor: '#666',
+    headerStyle: { backgroundColor: '#000' },
+    headerTintColor: '#fff',
+    headerShown: false,
+    animation: 'shift',
+  };
   
   return (
     <Tab.Navigator
-      screenOptions={{
-        tabBarStyle: { backgroundColor: '#121212', borderTopColor: '#282828', position: 'absolute', bottom: 0, left: 0, right: 0, paddingBottom: insets.bottom, height: tabBarHeight },
-        tabBarActiveTintColor: '#fff',
-        tabBarInactiveTintColor: '#666',
-        headerStyle: { backgroundColor: '#000' },
-        headerTintColor: '#fff',
-        headerShown: false,
-      }}
+      screenOptions={screenOptions}
+      sceneContainerStyle={{ backgroundColor: '#000' }}
     >
       <Tab.Screen 
         name="Home" 
@@ -57,14 +61,6 @@ const TabNavigator = React.memo(({ onTabBarLayout }: { onTabBarLayout: (height: 
         options={{
           tabBarLabel: 'Home',
           tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} />
-        }}
-      />
-      <Tab.Screen 
-        name="Search" 
-        component={SearchScreen}
-        options={{
-          tabBarLabel: 'Search',
-          tabBarIcon: ({ color, size }) => <Ionicons name="search" size={size} color={color} />
         }}
       />
       <Tab.Screen 
@@ -112,7 +108,14 @@ const MainScreen = React.memo(() => {
 
 export default function AppNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false, presentation: 'card' }}>
+    <Stack.Navigator 
+      screenOptions={{ 
+        headerShown: false, 
+        presentation: 'card',
+        cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
+        cardStyle: { backgroundColor: '#000' },
+      }}
+    >
       <Stack.Screen name="Main" component={MainScreen} />
       <Stack.Screen name="Artist">
         {(props) => (
@@ -312,6 +315,30 @@ export default function AppNavigator() {
           <View style={styles.container}>
             <View style={{ flex: 1 }}>
               <NotificationSettingsScreen {...props} />
+            </View>
+            <View style={styles.miniPlayerBottom}>
+              <MiniPlayer />
+            </View>
+          </View>
+        )}
+      </Stack.Screen>
+      <Stack.Screen name="AuraMeter">
+        {(props) => (
+          <View style={styles.container}>
+            <View style={{ flex: 1 }}>
+              <AuraMeterScreen {...props} />
+            </View>
+            <View style={styles.miniPlayerBottom}>
+              <MiniPlayer />
+            </View>
+          </View>
+        )}
+      </Stack.Screen>
+      <Stack.Screen name="Search">
+        {(props) => (
+          <View style={styles.container}>
+            <View style={{ flex: 1 }}>
+              <SearchScreen {...props} />
             </View>
             <View style={styles.miniPlayerBottom}>
               <MiniPlayer />

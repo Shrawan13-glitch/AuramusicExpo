@@ -20,6 +20,9 @@ interface PlayerContextType extends PlayerState {
   skipPrevious: () => Promise<void>;
   toggleShuffle: () => void;
   toggleRepeat: () => void;
+  setSleepTimer: (minutes: number) => void;
+  cancelSleepTimer: () => void;
+  sleepTimerRemaining: number | null;
 }
 
 const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
@@ -40,6 +43,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [radioContinuation, setRadioContinuation] = useState<string | null>(null);
   const [previousSongs, setPreviousSongs] = useState<Song[]>([]);
   const [intendedPlaying, setIntendedPlaying] = useState(false);
+  const [sleepTimerRemaining, setSleepTimerRemaining] = useState<number | null>(null);
+  const sleepTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const player = useAudioPlayer('');
   const status = useAudioPlayerStatus(player);
@@ -130,8 +135,12 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Update state in single batch
       setState(prev => ({ ...prev, currentSong: song, isPlaying: true }));
       
-      // Add to recently played and cache (non-blocking)
-      library.addToRecentlyPlayed(song);
+      // Add to recently played after 3 seconds
+      const startTime = Date.now();
+      setTimeout(() => {
+        const elapsed = Date.now() - startTime;
+        library.addToRecentlyPlayed(song, elapsed);
+      }, 3000);
       
       // Cache the song for offline-like experience
       AsyncStorage.getItem('cached_songs').then(cached => {
@@ -263,6 +272,38 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setRepeat(prev => prev === 'off' ? 'all' : prev === 'all' ? 'one' : 'off');
   }, []);
 
+  const setSleepTimer = useCallback((minutes: number) => {
+    if (sleepTimerRef.current) clearInterval(sleepTimerRef.current);
+    
+    const totalSeconds = Math.round(minutes * 60);
+    setSleepTimerRemaining(minutes);
+    
+    sleepTimerRef.current = setInterval(() => {
+      setSleepTimerRemaining(prev => {
+        if (prev === null || prev <= (1/60)) { // Less than 1 second remaining
+          if (sleepTimerRef.current) clearInterval(sleepTimerRef.current);
+          pause();
+          return null;
+        }
+        return prev - (1/60); // Decrease by 1 second
+      });
+    }, 1000); // Update every second
+  }, [pause]);
+
+  const cancelSleepTimer = useCallback(() => {
+    if (sleepTimerRef.current) {
+      clearInterval(sleepTimerRef.current);
+      sleepTimerRef.current = null;
+    }
+    setSleepTimerRemaining(null);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (sleepTimerRef.current) clearInterval(sleepTimerRef.current);
+    };
+  }, []);
+
   const contextValue = useMemo(() => ({
     ...state,
     shuffle,
@@ -277,7 +318,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     skipPrevious,
     toggleShuffle,
     toggleRepeat,
-  }), [state, shuffle, repeat, playSong, pause, resume, seek, addToQueue, playNext, skipNext, skipPrevious, toggleShuffle, toggleRepeat]);
+    setSleepTimer,
+    cancelSleepTimer,
+    sleepTimerRemaining,
+  }), [state, shuffle, repeat, playSong, pause, resume, seek, addToQueue, playNext, skipNext, skipPrevious, toggleShuffle, toggleRepeat, setSleepTimer, cancelSleepTimer, sleepTimerRemaining]);
 
   return (
     <PlayerContext.Provider value={contextValue}>

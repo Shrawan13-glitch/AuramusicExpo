@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Image, StyleSheet, Modal } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, Image, StyleSheet, Modal, BackHandler } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { PanGestureHandler, State } from 'react-native-gesture-handler';
@@ -12,6 +12,19 @@ const MiniPlayer = React.memo(() => {
   const { currentSong, isPlaying, pause, resume, position, duration, skipNext, skipPrevious } = usePlayer();
   const [showPlayer, setShowPlayer] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
+
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (showQueue) {
+        setShowQueue(false);
+        setShowPlayer(true);
+        return true;
+      }
+      return false;
+    });
+
+    return () => backHandler.remove();
+  }, [showQueue]);
 
   if (!currentSong) return null;
 
@@ -66,8 +79,8 @@ const MiniPlayer = React.memo(() => {
         />
       </Modal>
 
-      <Modal visible={showQueue} animationType="slide" statusBarTranslucent={true} onRequestClose={() => setShowQueue(false)}>
-        <QueueScreen onClose={() => setShowQueue(false)} />
+      <Modal visible={showQueue} animationType="slide" statusBarTranslucent={true} onRequestClose={() => { setShowQueue(false); setShowPlayer(true); }}>
+        <QueueScreen onClose={() => { setShowQueue(false); setShowPlayer(true); }} />
       </Modal>
     </>
   );

@@ -9,6 +9,25 @@ export interface Song {
   liked?: boolean;
 }
 
+export interface PlayHistory {
+  id: string;
+  song: Song;
+  playedAt: number;
+  duration: number;
+  genre?: string;
+}
+
+export interface AuraStats {
+  totalListeningTime: number;
+  genreBreakdown: { [genre: string]: number };
+  topGenres: { genre: string; time: number; percentage: number }[];
+  topArtists: { id: string; name: string; playCount: number; time: number; thumbnail?: string }[];
+  topSongs: { song: Song; playCount: number; time: number }[];
+  auraScore: number;
+  auraLevel: string;
+  nextRank: { name: string; pointsNeeded: number; emoji: string } | null;
+}
+
 export interface Artist {
   id: string;
   name: string;

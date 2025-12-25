@@ -4,10 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { InnerTube } from '../api/innertube';
 import { usePlayer } from '../store/PlayerContext';
-import { useAuth } from '../store/AuthContext';
 import { Song } from '../types';
 import SongOptionsModal from '../components/SongOptionsModal';
-import AccountModal from '../components/AccountModal';
+import TabHeader from '../components/TabHeader';
 import { useSongOptions } from '../hooks/useSongOptions';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -21,9 +20,7 @@ export default function HomeScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [showAccountModal, setShowAccountModal] = useState(false);
   const { playSong, currentSong } = usePlayer();
-  const { isAuthenticated, accountInfo, logout } = useAuth();
   const { modalVisible, selectedSong, showOptions, hideOptions } = useSongOptions();
 
   useEffect(() => {
@@ -121,22 +118,7 @@ export default function HomeScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.headerRow}>
-        <Text style={styles.header}>Home</Text>
-        <TouchableOpacity onPress={() => setShowAccountModal(true)} style={styles.accountButton}>
-          {isAuthenticated && accountInfo ? (
-            accountInfo.thumbnail ? (
-              <Image source={{ uri: accountInfo.thumbnail }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarText}>{accountInfo.name?.[0]?.toUpperCase()}</Text>
-              </View>
-            )
-          ) : (
-            <Ionicons name="person-circle-outline" size={32} color="#666" />
-          )}
-        </TouchableOpacity>
-      </View>
+      <TabHeader title="Home" navigation={navigation} />
     <ScrollView
       style={styles.container}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
@@ -212,16 +194,6 @@ export default function HomeScreen({ navigation }: any) {
       <View style={{ height: 100 }} />
     </ScrollView>
 
-    <AccountModal
-      visible={showAccountModal}
-      onClose={() => setShowAccountModal(false)}
-      isAuthenticated={isAuthenticated}
-      accountInfo={accountInfo}
-      onSignIn={() => { setShowAccountModal(false); navigation.getParent()?.navigate('Login'); }}
-      onSettings={() => { setShowAccountModal(false); navigation.getParent()?.navigate('Settings'); }}
-      onSignOut={() => { setShowAccountModal(false); logout(); }}
-    />
-
     <SongOptionsModal
       visible={modalVisible}
       onClose={hideOptions}
@@ -235,12 +207,6 @@ export default function HomeScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
-  header: { fontSize: 28, fontWeight: 'bold', color: '#fff' },
-  accountButton: { padding: 4 },
-  avatar: { width: 36, height: 36, borderRadius: 18 },
-  avatarPlaceholder: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1db954', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 16, fontWeight: 'bold', color: '#fff' },
   centerContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
   quickPicksSection: { marginBottom: 16 },
   quickPicksGrid: { paddingLeft: 16 },

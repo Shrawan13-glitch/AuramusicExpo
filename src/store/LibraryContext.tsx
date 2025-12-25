@@ -1,22 +1,24 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Song } from '../types';
+import { Song, PlayHistory } from '../types';
 import { InnerTube } from '../api/innertube';
+import { AuraDB } from '../services/auraDB';
 
 interface LibraryContextType {
   likedSongs: Song[];
-  recentlyPlayed: Song[];
+  recentlyPlayed: PlayHistory[];
   addLikedSong: (song: Song) => void;
   removeLikedSong: (songId: string) => void;
   isLiked: (songId: string) => boolean;
-  addToRecentlyPlayed: (song: Song) => void;
+  addToRecentlyPlayed: (song: Song, duration: number) => void;
+  loadMoreHistory: (offset: number) => Promise<PlayHistory[]>;
 }
 
 const LibraryContext = createContext<LibraryContextType | undefined>(undefined);
 
 export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [likedSongs, setLikedSongs] = useState<Song[]>([]);
-  const [recentlyPlayed, setRecentlyPlayed] = useState<Song[]>([]);
+  const [recentlyPlayed, setRecentlyPlayed] = useState<PlayHistory[]>([]);
 
   useEffect(() => {
     loadLibrary();
@@ -25,9 +27,20 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const loadLibrary = async () => {
     try {
       const liked = await AsyncStorage.getItem('likedSongs');
-      const recent = await AsyncStorage.getItem('recentlyPlayed');
+      
+      // Migrate old recently played to new DB
+      const oldRecent = await AsyncStorage.getItem('recentlyPlayed');
+      if (oldRecent) {
+        const oldSongs: Song[] = JSON.parse(oldRecent);
+        for (const song of oldSongs) {
+          await AuraDB.addPlayHistory(song, 30000); // Add with 30s duration
+        }
+        await AsyncStorage.removeItem('recentlyPlayed'); // Remove old data
+      }
+      
+      const history = await AuraDB.getHistory(0, 50);
       if (liked) setLikedSongs(JSON.parse(liked));
-      if (recent) setRecentlyPlayed(JSON.parse(recent));
+      setRecentlyPlayed(history);
     } catch (e) {
     }
   };
@@ -64,13 +77,15 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const isLiked = useCallback((songId: string) => likedSongs.some(s => s.id === songId), [likedSongs]);
 
-  const addToRecentlyPlayed = useCallback(async (song: Song) => {
-    const updated = [song, ...recentlyPlayed.filter(s => s.id !== song.id)].slice(0, 50);
+  const addToRecentlyPlayed = useCallback(async (song: Song, duration: number = 0) => {
+    await AuraDB.addPlayHistory(song, duration);
+    const updated = await AuraDB.getHistory(0, 50);
     setRecentlyPlayed(updated);
-    
-    // Non-blocking storage
-    AsyncStorage.setItem('recentlyPlayed', JSON.stringify(updated)).catch(() => {});
-  }, [recentlyPlayed]);
+  }, []);
+
+  const loadMoreHistory = useCallback(async (offset: number): Promise<PlayHistory[]> => {
+    return await AuraDB.getHistory(offset, 50);
+  }, []);
 
   const contextValue = useMemo(() => ({
     likedSongs,
@@ -78,8 +93,9 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     addLikedSong,
     removeLikedSong,
     isLiked,
-    addToRecentlyPlayed
-  }), [likedSongs, recentlyPlayed, addLikedSong, removeLikedSong, isLiked, addToRecentlyPlayed]);
+    addToRecentlyPlayed,
+    loadMoreHistory
+  }), [likedSongs, recentlyPlayed, addLikedSong, removeLikedSong, isLiked, addToRecentlyPlayed, loadMoreHistory]);
 
   return (
     <LibraryContext.Provider value={contextValue}>

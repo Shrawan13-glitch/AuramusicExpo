@@ -7,6 +7,7 @@ YouTube Music client built with React Native and Expo.
 - ✅ YouTube Music streaming via InnerTube API
 - ✅ Search songs, albums, artists, playlists
 - ✅ Music player with queue management
+- ✅ Background audio playback
 - ✅ Library management
 - ✅ Dark theme UI
 
@@ -31,9 +32,10 @@ npm run ios
 
 ## Limitations in Expo Go
 
-- Background playback requires custom dev build
 - Media notifications require custom dev build
 - Advanced audio features require native modules
+
+**Note:** Background playback is now supported! The app will continue playing music when in the background.
 
 ## Tech Stack
 

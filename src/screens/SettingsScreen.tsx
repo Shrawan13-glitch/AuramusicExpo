@@ -38,11 +38,11 @@ export default function SettingsScreen({ navigation }: any) {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Settings</Text>
-        <View style={{ width: 24 }} />
+        <View style={styles.backButton} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -127,8 +127,9 @@ export default function SettingsScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16 },
-  headerTitle: { fontSize: 28, fontWeight: '700', color: '#fff', flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16 },
+  backButton: { width: 32 },
+  headerTitle: { fontSize: 20, fontWeight: '600', color: '#fff', textAlign: 'center' },
   scrollContent: { paddingBottom: 100 },
   accountSection: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 24 },
   accountCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#121212', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#282828' },

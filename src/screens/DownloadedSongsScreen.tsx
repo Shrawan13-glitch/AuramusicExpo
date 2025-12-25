@@ -86,7 +86,7 @@ export default function DownloadedSongsScreen({ navigation }: any) {
   });
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -165,10 +165,6 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   fixedHeader: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
     paddingHorizontal: 20,
     paddingVertical: 16,
     zIndex: 5,

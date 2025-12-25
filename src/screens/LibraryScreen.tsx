@@ -1,33 +1,56 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, FlatList, ActivityIndicator, Modal } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, FlatList, ActivityIndicator, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLibrary } from '../store/LibraryContext';
 import { usePlayer } from '../store/PlayerContext';
-import { useAuth } from '../store/AuthContext';
 import { useDownload } from '../store/DownloadContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import TabHeader from '../components/TabHeader';
 
 export default function LibraryScreen({ navigation }: any) {
   const { likedSongs, recentlyPlayed } = useLibrary();
   const { playSong } = usePlayer();
-  const { isAuthenticated, accountInfo, logout } = useAuth();
   const { downloadedSongs } = useDownload();
   const [ytmLibrary, setYtmLibrary] = useState<any[]>([]);
   const [loadingYtm, setLoadingYtm] = useState(false);
   const [subscribedArtists, setSubscribedArtists] = useState<any[]>([]);
   const [loadingArtists, setLoadingArtists] = useState(false);
-  const [showAccountModal, setShowAccountModal] = useState(false);
   const [cachedSongs, setCachedSongs] = useState<any[]>([]);
   const [downloadedCount, setDownloadedCount] = useState(0);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [layoutMode, setLayoutMode] = useState<'list' | 'grid'>('list');
+  const slideAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.spring(slideAnim, {
+      toValue: layoutMode === 'grid' ? 1 : 0,
+      useNativeDriver: true,
+      tension: 80,
+      friction: 10,
+    }).start();
+  }, [layoutMode]);
 
   useEffect(() => {
     loadCachedSongs();
+    checkAuth();
+  }, []);
+
+  useEffect(() => {
     if (isAuthenticated) {
       loadYtmLibrary();
       loadSubscribedArtists();
     }
   }, [isAuthenticated]);
+
+  const checkAuth = async () => {
+    try {
+      const token = await AsyncStorage.getItem('ytm_token');
+      setIsAuthenticated(!!token);
+    } catch (error) {
+      // Error checking auth handled silently
+    }
+  };
 
   const loadCachedSongs = useCallback(async () => {
     try {
@@ -67,6 +90,14 @@ export default function LibraryScreen({ navigation }: any) {
   }, []);
 
   const folders = useMemo(() => [
+    {
+      title: 'AuraMeter',
+      count: 0,
+      icon: 'flame' as const,
+      color: '#8b5cf6',
+      hideCount: true,
+      onPress: () => navigation.navigate('AuraMeter'),
+    },
     {
       title: 'Downloaded',
       count: downloadedSongs.length,
@@ -113,41 +144,85 @@ export default function LibraryScreen({ navigation }: any) {
     </TouchableOpacity>
   ), [navigation]);
 
-  const renderFolder = useCallback(({ item }) => (
-    <TouchableOpacity
-      style={styles.folderItem}
-      onPress={item.onPress}
-      disabled={item.loading}
-    >
-      <View style={[styles.folderIcon, { backgroundColor: item.color }]}>
-        <Ionicons name={item.icon} size={24} color="#fff" />
-      </View>
-      <View style={styles.folderInfo}>
-        <Text style={styles.folderTitle}>{item.title}</Text>
-        <Text style={styles.folderCount}>
-          {item.loading ? 'Loading...' : `${item.count} ${item.count === 1 ? 'item' : 'items'}`}
-        </Text>
-      </View>
-      <Ionicons name="chevron-forward" size={20} color="#666" />
-    </TouchableOpacity>
-  ), []);
+  const renderFolder = useCallback(({ item }) => {
+    if (layoutMode === 'grid') {
+      return (
+        <TouchableOpacity
+          style={styles.gridItem}
+          onPress={item.onPress}
+          disabled={item.loading}
+          activeOpacity={0.7}
+        >
+          <View style={styles.gridIconContainer}>
+            <View style={[styles.gridIcon, { backgroundColor: item.color }]}>
+              <Ionicons name={item.icon} size={28} color="#fff" />
+            </View>
+          </View>
+          <View style={styles.gridTextContainer}>
+            <Text style={styles.gridTitle} numberOfLines={2}>{item.title}</Text>
+            {!item.hideCount && (
+              <Text style={styles.gridCount}>
+                {item.loading ? '...' : item.count}
+              </Text>
+            )}
+          </View>
+        </TouchableOpacity>
+      );
+    }
+    
+    return (
+      <TouchableOpacity
+        style={styles.folderItem}
+        onPress={item.onPress}
+        disabled={item.loading}
+      >
+        <View style={[styles.folderIcon, { backgroundColor: item.color }]}>
+          <Ionicons name={item.icon} size={24} color="#fff" />
+        </View>
+        <View style={styles.folderInfo}>
+          <Text style={styles.folderTitle}>{item.title}</Text>
+          {!item.hideCount && (
+            <Text style={styles.folderCount}>
+              {item.loading ? 'Loading...' : `${item.count} ${item.count === 1 ? 'item' : 'items'}`}
+            </Text>
+          )}
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#666" />
+      </TouchableOpacity>
+    );
+  }, [layoutMode]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.headerRow}>
-        <Text style={styles.header}>Library</Text>
-        <TouchableOpacity onPress={() => setShowAccountModal(true)} style={styles.accountButton}>
-          {isAuthenticated && accountInfo ? (
-            accountInfo.thumbnail ? (
-              <Image source={{ uri: accountInfo.thumbnail }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarText}>{accountInfo.name?.[0]?.toUpperCase()}</Text>
-              </View>
-            )
-          ) : (
-            <Ionicons name="person-circle-outline" size={32} color="#666" />
-          )}
+      <TabHeader title="Library" navigation={navigation} />
+      
+      <View style={styles.layoutToggle}>
+        <TouchableOpacity 
+          style={styles.toggleContainer} 
+          onPress={() => setLayoutMode(layoutMode === 'list' ? 'grid' : 'list')}
+          activeOpacity={0.8}
+        >
+          <Animated.View 
+            style={[
+              styles.toggleSlider,
+              {
+                transform: [{
+                  translateX: slideAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, 48]
+                  })
+                }]
+              }
+            ]}
+          >
+            <Ionicons name={layoutMode === 'list' ? 'list' : 'grid'} size={18} color="#000" />
+          </Animated.View>
+          <View style={styles.toggleOption}>
+            <Ionicons name="list" size={18} color={layoutMode === 'list' ? '#000' : '#666'} />
+          </View>
+          <View style={styles.toggleOption}>
+            <Ionicons name="grid" size={18} color={layoutMode === 'grid' ? '#000' : '#666'} />
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -177,7 +252,15 @@ export default function LibraryScreen({ navigation }: any) {
             ) : null;
           }
           
-          return (
+          return layoutMode === 'grid' ? (
+            <View style={styles.gridContainer}>
+              {folders.map((folder) => (
+                <View key={folder.title} style={styles.gridItemWrapper}>
+                  {renderFolder({ item: folder })}
+                </View>
+              ))}
+            </View>
+          ) : (
             <FlatList
               data={folders}
               keyExtractor={(folder) => folder.title}
@@ -187,73 +270,16 @@ export default function LibraryScreen({ navigation }: any) {
           );
         }}
       />
-
-
-      <Modal
-        visible={showAccountModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowAccountModal(false)}
-      >
-        <TouchableOpacity 
-          style={styles.modalOverlay} 
-          activeOpacity={1} 
-          onPress={() => setShowAccountModal(false)}
-        >
-          <View style={styles.modalContent}>
-            {isAuthenticated && accountInfo && (
-              <View style={styles.accountHeader}>
-                {accountInfo.thumbnail ? (
-                  <Image source={{ uri: accountInfo.thumbnail }} style={styles.modalAvatar} />
-                ) : (
-                  <View style={[styles.avatarPlaceholder, styles.modalAvatar]}>
-                    <Text style={styles.modalAvatarText}>{accountInfo.name?.[0]?.toUpperCase()}</Text>
-                  </View>
-                )}
-                <Text style={styles.accountName}>{accountInfo.name}</Text>
-                <Text style={styles.accountEmail}>{accountInfo.email}</Text>
-              </View>
-            )}
-
-            {!isAuthenticated && (
-              <TouchableOpacity style={styles.menuItem} onPress={() => { setShowAccountModal(false); navigation.navigate('Login'); }}>
-                <Ionicons name="log-in-outline" size={24} color="#1db954" />
-                <Text style={[styles.menuText, { color: '#1db954' }]}>Sign in</Text>
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity style={styles.menuItem} onPress={() => {
-              setShowAccountModal(false);
-              navigation.navigate('Settings');
-            }}>
-              <Ionicons name="settings-outline" size={24} color="#fff" />
-              <Text style={styles.menuText}>Settings</Text>
-            </TouchableOpacity>
-
-            {isAuthenticated && (
-              <TouchableOpacity style={styles.menuItem} onPress={() => {
-                setShowAccountModal(false);
-                logout();
-              }}>
-                <Ionicons name="log-out-outline" size={24} color="#ff4444" />
-                <Text style={[styles.menuText, { color: '#ff4444' }]}>Sign out</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </TouchableOpacity>
-      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 16 },
-  header: { fontSize: 28, fontWeight: 'bold', color: '#fff' },
-  accountButton: { padding: 4 },
-  avatar: { width: 36, height: 36, borderRadius: 18 },
-  avatarPlaceholder: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1db954', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 16, fontWeight: 'bold', color: '#fff' },
+  layoutToggle: { paddingHorizontal: 16, paddingBottom: 16, alignItems: 'center' },
+  toggleContainer: { flexDirection: 'row', backgroundColor: '#1a1a1a', borderRadius: 10, padding: 4, width: 100, position: 'relative' },
+  toggleSlider: { position: 'absolute', left: 4, top: 4, bottom: 4, width: 44, backgroundColor: '#1db954', borderRadius: 8, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+  toggleOption: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, zIndex: 2 },
   folderItem: { flexDirection: 'row', alignItems: 'center', padding: 16, marginHorizontal: 16, marginBottom: 12, backgroundColor: '#1a1a1a', borderRadius: 12 },
   folderIcon: { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   folderInfo: { flex: 1, marginLeft: 16 },
@@ -265,13 +291,12 @@ const styles = StyleSheet.create({
   artistItem: { width: 120, marginRight: 12, alignItems: 'center' },
   artistImage: { width: 120, height: 120, borderRadius: 60, marginBottom: 8 },
   artistName: { fontSize: 14, color: '#fff', textAlign: 'center', width: '100%' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-start', alignItems: 'flex-end', paddingTop: 50, paddingRight: 16 },
-  modalContent: { backgroundColor: '#1a1a1a', borderRadius: 12, minWidth: 280, overflow: 'hidden' },
-  accountHeader: { alignItems: 'center', padding: 24, borderBottomWidth: 1, borderBottomColor: '#333' },
-  modalAvatar: { width: 64, height: 64, borderRadius: 32, marginBottom: 12 },
-  modalAvatarText: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
-  accountName: { fontSize: 18, fontWeight: '600', color: '#fff', marginBottom: 4 },
-  accountEmail: { fontSize: 14, color: '#aaa' },
-  menuItem: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 16 },
-  menuText: { fontSize: 16, color: '#fff' },
+  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 8 },
+  gridItemWrapper: { width: '50%', padding: 8 },
+  gridItem: { backgroundColor: '#1a1a1a', borderRadius: 16, padding: 20, minHeight: 160, justifyContent: 'space-between' },
+  gridIconContainer: { marginBottom: 12 },
+  gridIcon: { width: 56, height: 56, borderRadius: 14, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 8 },
+  gridTextContainer: { flex: 1, justifyContent: 'flex-end' },
+  gridTitle: { fontSize: 15, fontWeight: '700', color: '#fff', marginBottom: 6, lineHeight: 20 },
+  gridCount: { fontSize: 24, fontWeight: '800', color: '#1db954', letterSpacing: -0.5 },
 });

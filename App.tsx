@@ -1,8 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { View, StyleSheet, InteractionManager } from 'react-native';
+import { View, StyleSheet, InteractionManager, AppState } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import AppNavigator from './src/navigation/AppNavigator';
 import { PlayerProvider } from './src/store/PlayerContext';
 import { LibraryProvider } from './src/store/LibraryContext';
@@ -20,6 +21,15 @@ if (__DEV__) {
 
 export default function App() {
   const navigationRef = useRef<any>(null);
+
+  useEffect(() => {
+    // Keep app awake during music playback
+    activateKeepAwakeAsync();
+    
+    return () => {
+      deactivateKeepAwake();
+    };
+  }, []);
 
   useEffect(() => {
     // Defer non-critical initialization until after interactions

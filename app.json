@@ -2,7 +2,7 @@
   "expo": {
     "name": "AuraMusic",
     "slug": "auramusic",
-    "version": "1.5.0",
+    "version": "1.7.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -11,7 +11,10 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.auramusic.app"
+      "bundleIdentifier": "com.auramusic.app",
+      "infoPlist": {
+        "UIBackgroundModes": ["audio"]
+      }
     },
     "android": {
       "package": "com.auramusic.app",
@@ -19,7 +22,11 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#000000"
-      }
+      },
+      "permissions": [
+        "FOREGROUND_SERVICE",
+        "WAKE_LOCK"
+      ]
     },
     "plugins": [
       [

@@ -11,6 +11,7 @@ import DownloadButton from '../components/DownloadButton';
 import SongOptionsModal from '../components/SongOptionsModal';
 import { useSongOptions } from '../hooks/useSongOptions';
 import LyricsScreen from './LyricsScreen';
+import SleepTimerModal from '../components/SleepTimerModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -22,12 +23,13 @@ const formatTime = (ms: number) => {
 };
 
 export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) {
-  const { currentSong, isPlaying, pause, resume, skipNext, skipPrevious, position, duration, seek, shuffle, repeat, toggleShuffle, toggleRepeat } = usePlayer();
+  const { currentSong, isPlaying, pause, resume, skipNext, skipPrevious, position, duration, seek, shuffle, repeat, toggleShuffle, toggleRepeat, setSleepTimer, cancelSleepTimer, sleepTimerRemaining } = usePlayer();
   const { isLiked, addLikedSong, removeLikedSong } = useLibrary();
   const { isDownloaded } = useDownload();
   const { modalVisible, selectedSong, showOptions, hideOptions } = useSongOptions();
   const [showLyrics, setShowLyrics] = useState(false);
   const [backgroundStyle, setBackgroundStyle] = useState('blur');
+  const [showSleepTimer, setShowSleepTimer] = useState(false);
 
   useEffect(() => {
     loadBackgroundStyle();
@@ -96,17 +98,9 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
               <Ionicons name="chevron-down" size={28} color="#fff" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Now Playing</Text>
-            <View style={styles.headerRight}>
-              <TouchableOpacity onPress={() => setShowLyrics(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={{ marginRight: 16 }}>
-                <Ionicons name="document-text-outline" size={24} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => showOptions(currentSong)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={{ marginRight: 16 }}>
-                <Ionicons name="ellipsis-vertical" size={24} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={onOpenQueue} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Ionicons name="list" size={24} color="#fff" />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity onPress={() => setShowSleepTimer(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="moon" size={24} color={sleepTimerRemaining ? '#1db954' : '#fff'} />
+            </TouchableOpacity>
           </View>
 
         <View style={styles.artworkContainer}>
@@ -181,6 +175,18 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
               <Ionicons name="play-skip-forward" size={32} color="#fff" />
             </TouchableOpacity>
           </View>
+
+          <View style={styles.bottomControls}>
+            <TouchableOpacity onPress={() => setShowLyrics(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="document-text-outline" size={26} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => showOptions(currentSong)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="ellipsis-horizontal" size={26} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onOpenQueue} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="list" size={26} color="#fff" />
+            </TouchableOpacity>
+          </View>
         </View>
         </View>
       </SafeAreaView>
@@ -195,6 +201,14 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
         song={selectedSong}
         showDeleteOption={false}
         navigation={navigation}
+      />
+
+      <SleepTimerModal
+        visible={showSleepTimer}
+        onClose={() => setShowSleepTimer(false)}
+        onSetTimer={setSleepTimer}
+        activeTimer={sleepTimerRemaining}
+        onCancelTimer={cancelSleepTimer}
       />
     </View>
   );
@@ -300,7 +314,7 @@ const styles = StyleSheet.create({
     color: '#aaa',
   },
   controlsContainer: {
-    paddingBottom: 40,
+    paddingBottom: 20,
   },
   secondaryControls: {
     flexDirection: 'row',
@@ -327,5 +341,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 16,
     elevation: 8,
+  },
+  bottomControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingHorizontal: 80,
+    paddingTop: 24,
+    paddingBottom: 20,
   },
 });
