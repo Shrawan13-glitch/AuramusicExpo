@@ -18,8 +18,8 @@ export default function TabHeader({ title, navigation }: TabHeaderProps) {
       <View style={styles.header}>
         <Text style={styles.title}>{title}</Text>
         <View style={styles.headerRight}>
-          <TouchableOpacity onPress={() => navigation.navigate('Search')} style={styles.searchButton}>
-            <Ionicons name="search" size={24} color="#fff" />
+          <TouchableOpacity onPress={() => navigation.navigate('RecentlyPlayed')} style={styles.recentButton}>
+            <Ionicons name="time" size={24} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setShowAccountModal(true)} style={styles.accountButton}>
           {isAuthenticated && accountInfo?.thumbnail ? (
@@ -66,7 +66,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  searchButton: {
+  recentButton: {
     padding: 4,
   },
   accountButton: {

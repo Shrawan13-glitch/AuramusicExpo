@@ -63,7 +63,7 @@ export default function HomeScreen({ navigation }: any) {
 
   const handleScroll = useCallback((event: any) => {
     const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
-    const paddingToBottom = 500;
+    const paddingToBottom = 200;
     if (layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom) {
       loadMore();
     }
@@ -110,8 +110,24 @@ export default function HomeScreen({ navigation }: any) {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#fff" />
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <TabHeader title="Home" navigation={navigation} />
+        <View style={styles.skeletonContainer}>
+          {Array.from({ length: 3 }).map((_, sectionIndex) => (
+            <View key={`skeleton-section-${sectionIndex}`} style={styles.skeletonSection}>
+              <View style={styles.skeletonSectionTitle} />
+              <View style={styles.skeletonRow}>
+                {Array.from({ length: 3 }).map((_, itemIndex) => (
+                  <View key={`skeleton-item-${itemIndex}`} style={styles.skeletonCard}>
+                    <View style={styles.skeletonImage} />
+                    <View style={styles.skeletonCardTitle} />
+                    <View style={styles.skeletonCardSubtitle} />
+                  </View>
+                ))}
+              </View>
+            </View>
+          ))}
+        </View>
       </SafeAreaView>
     );
   }
@@ -119,80 +135,133 @@ export default function HomeScreen({ navigation }: any) {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <TabHeader title="Home" navigation={navigation} />
-    <ScrollView
+    <FlatList
       style={styles.container}
+      data={sections}
+      keyExtractor={(item, index) => `section-${index}`}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
-      onScroll={handleScroll}
-      scrollEventThrottle={400}
-      removeClippedSubviews={true}
-      maxToRenderPerBatch={5}
-      windowSize={5}
-      initialNumToRender={3}
-      getItemLayout={(data, index) => ({ length: 200, offset: 200 * index, index })}
-    >
-      {quickPicks.length > 0 && (
-        <View style={styles.quickPicksSection}>
-          <Text style={styles.sectionTitle}>Quick Picks</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.quickPicksGrid}>
-              {Array.from({ length: Math.ceil(quickPicks.slice(0, 20).length / 5) }).map((_, rowIndex) => (
-                <View key={rowIndex} style={styles.quickPicksRow}>
-                  {quickPicks.slice(rowIndex * 5, (rowIndex + 1) * 5).map((song) => {
-                    const isPlaying = currentSong?.id === song.id;
-                    return (
-                      <TouchableOpacity
-                        key={song.id}
-                        style={styles.quickPickItem}
-                        onPress={() => playSong(song)}
-                        onLongPress={() => showOptions(song)}
-                      >
-                        <Image 
-                          source={song.thumbnailUrl ? { uri: song.thumbnailUrl } : require('../../assets/icon.png')} 
-                          style={styles.quickPickThumb}
-                          resizeMode="cover"
-                          onError={() => {}}
-                        />
-                        <View style={styles.quickPickInfo}>
-                          <Text style={[styles.quickPickTitle, isPlaying && styles.activeText]} numberOfLines={1}>
-                            {song.title}
-                          </Text>
-                          <Text style={styles.quickPickArtist} numberOfLines={1}>
-                            {song.artists.map(a => a.name).join(', ')}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })}
+      onEndReached={loadMore}
+      onEndReachedThreshold={0.5}
+      ListFooterComponent={loadingMore ? <View style={styles.footer}><ActivityIndicator size="small" color="#fff" /></View> : <View style={{ height: 100 }} />}
+      renderItem={({ item: section, index }) => {
+        // Special handling for quick picks to use grid layout
+        if (section.title?.toLowerCase().includes('quick')) {
+          return (
+            <View key={`quickpicks-${index}`} style={styles.quickPicksSection}>
+              <Text style={styles.sectionTitle}>{section.title}</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={styles.quickPicksGrid}>
+                  {Array.from({ length: Math.ceil(section.items.slice(0, 20).length / 5) }).map((_, rowIndex) => (
+                    <View key={rowIndex} style={styles.quickPicksRow}>
+                      {section.items.slice(rowIndex * 5, (rowIndex + 1) * 5).map((item: any) => {
+                        const isPlaying = item.type === 'song' && currentSong?.id === item.id;
+                        return (
+                          <TouchableOpacity
+                            key={item.id}
+                            style={styles.quickPickItem}
+                            onPress={() => {
+                              if (item.type === 'song') {
+                                playSong(item);
+                              }
+                            }}
+                            onLongPress={item.type === 'song' ? () => showOptions(item) : undefined}
+                          >
+                            <Image 
+                              source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : require('../../assets/icon.png')} 
+                              style={styles.quickPickThumb}
+                              resizeMode="cover"
+                              onError={() => {}}
+                            />
+                            <View style={styles.quickPickInfo}>
+                              <Text style={[styles.quickPickTitle, isPlaying && styles.activeText]} numberOfLines={1}>
+                                {item.title}
+                              </Text>
+                              <Text style={styles.quickPickArtist} numberOfLines={1}>
+                                {item.type === 'song' ? item.artists?.map((a: any) => a.name).join(', ') : item.subtitle || ''}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  ))}
                 </View>
-              ))}
+              </ScrollView>
             </View>
-          </ScrollView>
-        </View>
-      )}
-
-      {sections.map((section, index) => (
-        <View key={index} style={styles.section}>
-          <Text style={styles.sectionTitle}>{section.title}</Text>
-          <FlatList
-            horizontal
-            data={section.items.slice(0, 15)}
-            keyExtractor={(item) => `${item.id}-${item.type}`}
-            showsHorizontalScrollIndicator={false}
-            removeClippedSubviews={true}
-            maxToRenderPerBatch={5}
-            windowSize={5}
-            renderItem={renderSectionItem}
-          />
-        </View>
-      ))}
-
-      {loadingMore && (
-        <View style={styles.footer}>
-          <ActivityIndicator size="small" color="#fff" />
-        </View>
-      )}
-      <View style={{ height: 100 }} />
-    </ScrollView>
+          );
+        }
+        // Special handling for trending shorts to use quick pick layout
+        if (section.title?.toLowerCase().includes('trending') && section.title?.toLowerCase().includes('shorts')) {
+          return (
+            <View key={`trending-${index}`} style={styles.quickPicksSection}>
+              <Text style={styles.sectionTitle}>{section.title}</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={styles.quickPicksGrid}>
+                  {Array.from({ length: Math.ceil(section.items.slice(0, 20).length / 5) }).map((_, rowIndex) => (
+                    <View key={rowIndex} style={styles.quickPicksRow}>
+                      {section.items.slice(rowIndex * 5, (rowIndex + 1) * 5).map((item: any) => {
+                        const isPlaying = item.type === 'song' && currentSong?.id === item.id;
+                        return (
+                          <TouchableOpacity
+                            key={item.id}
+                            style={styles.quickPickItem}
+                            onPress={() => {
+                              if (item.type === 'song' || item.type === 'video') {
+                                playSong(item);
+                              }
+                            }}
+                            onLongPress={item.type === 'song' ? () => showOptions(item) : undefined}
+                          >
+                            <Image 
+                              source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : require('../../assets/icon.png')} 
+                              style={styles.quickPickThumb}
+                              resizeMode="cover"
+                              onError={() => {}}
+                            />
+                            <View style={styles.quickPickInfo}>
+                              <Text style={[styles.quickPickTitle, isPlaying && styles.activeText]} numberOfLines={1}>
+                                {item.title}
+                              </Text>
+                              <Text style={styles.quickPickArtist} numberOfLines={1}>
+                                {item.type === 'song' ? item.artists?.map((a: any) => a.name).join(', ') : item.subtitle || ''}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
+            </View>
+          );
+        }
+        
+        // Regular section rendering
+        return (
+          <View key={index} style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>{section.title}</Text>
+              {section.subtitle && (
+                <Text style={styles.sectionSubtitle}>{section.subtitle}</Text>
+              )}
+            </View>
+            <FlatList
+              horizontal
+              data={section.items.slice(0, 15)}
+              keyExtractor={(item) => `${item.id}-${item.type}-${index}`}
+              showsHorizontalScrollIndicator={false}
+              removeClippedSubviews={true}
+              maxToRenderPerBatch={5}
+              windowSize={5}
+              renderItem={renderSectionItem}
+              contentContainerStyle={styles.horizontalList}
+            />
+          </View>
+        );
+        return null;
+      }}
+    />
 
     <SongOptionsModal
       visible={modalVisible}
@@ -207,7 +276,6 @@ export default function HomeScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  centerContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
   quickPicksSection: { marginBottom: 16 },
   quickPicksGrid: { paddingLeft: 16 },
   quickPicksRow: { flexDirection: 'row' },
@@ -216,9 +284,13 @@ const styles = StyleSheet.create({
   quickPickInfo: { flex: 1, marginLeft: 12 },
   quickPickTitle: { fontSize: 14, color: '#fff', fontWeight: '500' },
   quickPickArtist: { fontSize: 12, color: '#aaa', marginTop: 2 },
-  section: { marginBottom: 20 },
-  sectionTitle: { fontSize: 22, fontWeight: 'bold', color: '#fff', marginLeft: 16, marginBottom: 12, marginTop: 4 },
-  sectionContent: { paddingLeft: 16, paddingRight: 8 },
+  section: { marginBottom: 24 },
+  sectionHeader: { paddingHorizontal: 16, marginBottom: 12 },
+  sectionTitle: { fontSize: 22, fontWeight: '900', color: '#fff', letterSpacing: 0.3 },
+  sectionSubtitle: { fontSize: 14, color: '#aaa', marginTop: 2, fontWeight: '500' },
+  horizontalList: { paddingLeft: 16 },
+  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16, gap: 8 },
+  gridItem: { width: '48%' },
   card: { width: 160, marginRight: 12 },
   cardImage: { width: 160, height: 160, borderRadius: 8 },
   roundImage: { borderRadius: 80 },
@@ -226,4 +298,45 @@ const styles = StyleSheet.create({
   cardArtist: { fontSize: 12, color: '#aaa', marginTop: 4 },
   activeText: { color: '#1db954' },
   footer: { padding: 20, alignItems: 'center' },
+  skeletonContainer: {
+    flex: 1,
+    padding: 16,
+  },
+  skeletonSection: {
+    marginBottom: 32,
+  },
+  skeletonSectionTitle: {
+    height: 24,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 4,
+    marginBottom: 16,
+    width: '60%',
+  },
+  skeletonRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  skeletonCard: {
+    width: 160,
+  },
+  skeletonImage: {
+    width: 160,
+    height: 160,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 8,
+  },
+  skeletonCardTitle: {
+    height: 16,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 4,
+    marginTop: 8,
+    width: '80%',
+  },
+  skeletonCardSubtitle: {
+    height: 12,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 4,
+    marginTop: 4,
+    width: '60%',
+  },
 });

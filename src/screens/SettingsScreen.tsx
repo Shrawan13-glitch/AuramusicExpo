@@ -76,27 +76,6 @@ export default function SettingsScreen({ navigation }: any) {
             iconColor="#1db954"
           />
           <SettingCard
-            icon="download-outline"
-            title="Downloads"
-            subtitle="Offline music"
-            onPress={() => navigation.navigate('DownloadSettings')}
-            iconColor="#3742fa"
-          />
-          <SettingCard
-            icon="notifications-outline"
-            title="Notifications"
-            subtitle="Push notifications"
-            onPress={() => navigation.navigate('NotificationSettings')}
-            iconColor="#ff6b6b"
-          />
-          <SettingCard
-            icon="shield-checkmark-outline"
-            title="Privacy"
-            subtitle="Data & permissions"
-            onPress={() => navigation.navigate('PrivacySettings')}
-            iconColor="#ffa502"
-          />
-          <SettingCard
             icon="information-circle-outline"
             title="About"
             subtitle={`Version ${getCurrentVersion()}`}

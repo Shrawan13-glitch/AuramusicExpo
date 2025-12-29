@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, Image, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { View, Text, Image, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -16,37 +16,19 @@ export default function PlaylistScreen({ route, navigation }: any) {
   const { playSong } = usePlayer();
   const { playlists } = useLibrary();
   const { modalVisible, selectedSong, showOptions, hideOptions } = useSongOptions();
+  const scrollY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     loadPlaylist();
   }, [playlistId, playlists]);
 
   const loadPlaylist = async () => {
-    console.log('📋 [PlaylistScreen] Loading playlist:', {
-      playlistId,
-      videoId,
-      timestamp: new Date().toISOString()
-    });
-    
     setLoading(true);
     
     // Check if it's a local playlist first
     const localPlaylist = playlists.find(p => p.id === playlistId && p.isLocal);
-    console.log('🔍 [PlaylistScreen] Local playlist search result:', {
-      found: !!localPlaylist,
-      playlistId,
-      totalPlaylists: playlists.length,
-      localPlaylists: playlists.filter(p => p.isLocal).length
-    });
     
     if (localPlaylist) {
-      console.log('💾 [PlaylistScreen] Loading local playlist:', {
-        id: localPlaylist.id,
-        title: localPlaylist.title,
-        songCount: localPlaylist.songs?.length || 0,
-        songs: localPlaylist.songs?.map(s => ({ id: s.id, title: s.title })) || []
-      });
-      
       setData({
         playlist: {
           id: localPlaylist.id,
@@ -58,8 +40,6 @@ export default function PlaylistScreen({ route, navigation }: any) {
         songs: localPlaylist.songs || []
       });
       setLoading(false);
-      
-      console.log('✅ [PlaylistScreen] Local playlist loaded successfully');
       return;
     }
     
@@ -67,41 +47,22 @@ export default function PlaylistScreen({ route, navigation }: any) {
     const cookies = await AsyncStorage.getItem('ytm_cookies');
     const isAuthenticated = !!cookies;
     
-    console.log('🔐 [PlaylistScreen] Authentication status:', {
-      isAuthenticated,
-      playlistId,
-      isRemotePlaylist: true
-    });
-    
     // Load remote playlist (including empty YTM playlists)
     try {
-      console.log('🔄 [PlaylistScreen] Fetching remote playlist from API...');
       const result = await InnerTube.getPlaylist(playlistId, videoId);
-      
-      console.log('📊 [PlaylistScreen] API response:', {
-        hasResult: !!result,
-        songCount: result?.songs?.length || 0,
-        hasContinuation: !!result?.continuation,
-        isMix: !!result?.isMix,
-        playlistTitle: result?.playlist?.title
-      });
       
       if (result) {
         setData(result);
         
         // Auto-load more songs if continuation exists
         if (result?.continuation && result?.isMix) {
-          console.log('🔄 [PlaylistScreen] Loading more songs for mix...');
           loadAllSongs(result.continuation, result.songs, true);
         } else if (result?.continuation && !result?.isMix) {
-          console.log('🔄 [PlaylistScreen] Loading more songs for playlist...');
           loadAllSongs(result.continuation, result.songs, false);
         }
       } else {
-        console.warn('⚠️ [PlaylistScreen] No result from API - creating fallback playlist');
         // Fallback for empty playlists
         const playlistInfo = playlists.find(p => p.id === playlistId);
-        console.log('🔍 [PlaylistScreen] Fallback playlist info:', playlistInfo);
         
         setData({
           playlist: {
@@ -115,10 +76,8 @@ export default function PlaylistScreen({ route, navigation }: any) {
         });
       }
     } catch (error) {
-      console.error('❌ [PlaylistScreen] Error loading remote playlist:', error);
       // Handle error case
       const playlistInfo = playlists.find(p => p.id === playlistId);
-      console.log('🔍 [PlaylistScreen] Error fallback playlist info:', playlistInfo);
       
       setData({
         playlist: {
@@ -132,28 +91,33 @@ export default function PlaylistScreen({ route, navigation }: any) {
       });
     }
     setLoading(false);
-    
-    console.log('✅ [PlaylistScreen] Playlist loading completed');
   };
 
-  const loadAllSongs = async (continuation: string, currentSongs: any[], isMix: boolean) => {
+  const loadAllSongs = useCallback(async (continuation: string, currentSongs: any[], isMix: boolean) => {
     let nextContinuation = continuation;
     let allSongs = [...currentSongs];
 
-    while (nextContinuation && allSongs.length < 100) {
-      const result = isMix
-        ? await InnerTube.next('', nextContinuation)
-        : await InnerTube.getPlaylistContinuation(nextContinuation);
-      allSongs = [...allSongs, ...result.songs];
-      nextContinuation = result.continuation;
-      
-      setData((prev: any) => ({
-        ...prev,
-        songs: allSongs,
-        continuation: nextContinuation,
-      }));
-    }
-  };
+    // Load in background without blocking UI
+    setTimeout(async () => {
+      while (nextContinuation && allSongs.length < 100) {
+        try {
+          const result = isMix
+            ? await InnerTube.next('', nextContinuation)
+            : await InnerTube.getPlaylistContinuation(nextContinuation);
+          allSongs = [...allSongs, ...result.songs];
+          nextContinuation = result.continuation;
+          
+          setData((prev: any) => ({
+            ...prev,
+            songs: allSongs,
+            continuation: nextContinuation,
+          }));
+        } catch (error) {
+          break;
+        }
+      }
+    }, 100);
+  }, []);
 
   if (loading) {
     return (
@@ -177,12 +141,42 @@ export default function PlaylistScreen({ route, navigation }: any) {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
+        <Animated.Text 
+          style={[
+            styles.headerTitle,
+            {
+              opacity: scrollY.interpolate({
+                inputRange: [150, 200],
+                outputRange: [0, 1],
+                extrapolate: 'clamp',
+              }),
+            },
+          ]}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          {data?.playlist?.title}
+        </Animated.Text>
       </View>
 
-      <FlatList
+      <Animated.FlatList
         data={data.songs}
         keyExtractor={(item, index) => `${item.id}-${index}`}
-        contentContainerStyle={{ paddingBottom: 80 }}
+        contentContainerStyle={{ paddingBottom: 80, paddingTop: 82 }}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
+        )}
+        scrollEventThrottle={16}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        windowSize={10}
+        initialNumToRender={10}
+        getItemLayout={(data, index) => ({
+          length: 72,
+          offset: 72 * index,
+          index,
+        })}
         ListHeaderComponent={
           <View style={styles.playlistHeader}>
             <Image source={{ uri: data.playlist.thumbnail }} style={styles.playlistArt} />
@@ -253,7 +247,8 @@ export default function PlaylistScreen({ route, navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  header: { padding: 16, paddingTop: 50 },
+  header: { padding: 16, paddingTop: 50, flexDirection: 'row', alignItems: 'center', position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1, backgroundColor: '#000' },
+  headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff', marginLeft: 16, flex: 1 },
   playlistHeader: { alignItems: 'center', padding: 16 },
   playlistArt: { width: 200, height: 200, borderRadius: 8, marginBottom: 16 },
   playlistTitle: { fontSize: 24, fontWeight: 'bold', color: '#fff', textAlign: 'center', marginBottom: 8 },

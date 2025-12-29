@@ -630,9 +630,7 @@ export const InnerTube = {
         });
 
         if (items.length > 0) {
-          if (title.toLowerCase().includes('quick')) {
-            quickPicks.push(...items.filter(i => i.type === 'song'));
-          }
+          // Always add to sections, don't extract as separate quickPicks
           sections.push({ title, items });
         }
       });

@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { View, TextInput, FlatList, TouchableOpacity, Image, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, TextInput, FlatList, TouchableOpacity, Image, Text, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { InnerTube } from '../api/innertube';
 import { usePlayer } from '../store/PlayerContext';
-import { Song } from '../types';
 import SongOptionsModal from '../components/SongOptionsModal';
 import { useSongOptions } from '../hooks/useSongOptions';
+import TabHeader from '../components/TabHeader';
 
 const FILTERS = [
   { label: 'All', value: null },
@@ -14,6 +14,14 @@ const FILTERS = [
   { label: 'Albums', value: 'EgWKAQIYAWoKEAoQAxAEEAkQBQ%3D%3D' },
   { label: 'Artists', value: 'EgWKAQIgAWoKEAoQAxAEEAkQBQ%3D%3D' },
   { label: 'Playlists', value: 'EgWKAQIoAWoKEAoQAxAEEAkQBQ%3D%3D' },
+];
+
+const MOOD_COLORS = [
+  ['#ff6b6b', '#ee5a52'], ['#4ecdc4', '#44a08d'], ['#45b7d1', '#2980b9'], 
+  ['#96ceb4', '#74b9ff'], ['#feca57', '#ff9ff3'], ['#ff9ff3', '#a29bfe'],
+  ['#54a0ff', '#2e86de'], ['#5f27cd', '#341f97'], ['#00d2d3', '#0abde3'],
+  ['#ff9f43', '#ee5a24'], ['#10ac84', '#00a085'], ['#ee5a24', '#c44569'],
+  ['#0abde3', '#006ba6'], ['#c44569', '#8e44ad'], ['#f8b500', '#f39c12']
 ];
 
 export default function SearchScreen({ navigation }: any) {
@@ -25,9 +33,22 @@ export default function SearchScreen({ navigation }: any) {
   const [selectedFilter, setSelectedFilter] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
+  const [exploreData, setExploreData] = useState<any>(null);
+  const [exploreLoading, setExploreLoading] = useState(true);
   const debounceTimer = useRef<NodeJS.Timeout>();
   const { playSong } = usePlayer();
   const { modalVisible, selectedSong, showOptions, hideOptions } = useSongOptions();
+
+  useEffect(() => {
+    loadExplore();
+  }, []);
+
+  const loadExplore = async () => {
+    setExploreLoading(true);
+    const result = await InnerTube.explore();
+    setExploreData(result);
+    setExploreLoading(false);
+  };
 
   useEffect(() => {
     if (query.length < 2) {
@@ -52,7 +73,7 @@ export default function SearchScreen({ navigation }: any) {
       } catch (error) {
         // Search suggestions error handled silently
       }
-    }, 400); // Increased debounce for better performance
+    }, 150); // Reduced debounce for faster suggestions
 
     return () => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
@@ -144,12 +165,7 @@ export default function SearchScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.headerRow}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.header}>Search</Text>
-      </View>
+      <TabHeader title="Search" navigation={navigation} />
       <View style={styles.searchBar}>
         <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
         <TextInput
@@ -187,7 +203,49 @@ export default function SearchScreen({ navigation }: any) {
         )}
       </View>
 
-      {showSuggestions && suggestions.length > 0 ? (
+      {query.length === 0 ? (
+        <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderContainer}>
+              <Text style={styles.sectionTitle}>Browse all</Text>
+              <Text style={styles.sectionSubtitle}>Discover music by mood and genre</Text>
+            </View>
+            <View style={styles.genreGrid}>
+              {exploreLoading ? (
+                Array.from({ length: 8 }).map((_, index) => (
+                  <View key={`skeleton-${index}`} style={styles.skeletonItem}>
+                    <View style={styles.skeletonContent} />
+                  </View>
+                ))
+              ) : (
+                exploreData?.moodAndGenres?.map((genre: any, index: number) => {
+                  const colors = MOOD_COLORS[index % MOOD_COLORS.length];
+                  return (
+                    <TouchableOpacity
+                      key={index}
+                      style={[
+                        styles.genreItem,
+                        {
+                          background: `linear-gradient(135deg, ${colors[0]} 0%, ${colors[1]} 100%)`,
+                          backgroundColor: colors[0],
+                          shadowColor: colors[1],
+                        }
+                      ]}
+                      onPress={() => navigation.navigate('Browse', { params: genre.params })}
+                    >
+                      <View style={styles.genreContent}>
+                        <Text style={styles.genreText}>{genre.title}</Text>
+                      </View>
+                      <View style={[styles.genreAccent, { backgroundColor: colors[1] }]} />
+                      <View style={[styles.genreAccent2, { backgroundColor: colors[0], opacity: 0.1 }]} />
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </View>
+          </View>
+        </ScrollView>
+      ) : showSuggestions && suggestions.length > 0 ? (
         <FlatList
           data={suggestions}
           keyExtractor={(item, index) => `suggestion-${index}`}
@@ -214,7 +272,17 @@ export default function SearchScreen({ navigation }: any) {
           )}
         />
       ) : loading ? (
-        <ActivityIndicator size="large" color="#fff" style={styles.loader} />
+        <View style={styles.skeletonContainer}>
+          {Array.from({ length: 6 }).map((_, index) => (
+            <View key={`search-skeleton-${index}`} style={styles.searchSkeletonItem}>
+              <View style={styles.searchSkeletonThumb} />
+              <View style={styles.searchSkeletonInfo}>
+                <View style={styles.searchSkeletonTitle} />
+                <View style={styles.searchSkeletonSubtitle} />
+              </View>
+            </View>
+          ))}
+        </View>
       ) : (
         <View style={{ flex: 1 }}>
           {query.length >= 2 && (
@@ -291,25 +359,91 @@ export default function SearchScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  headerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 8, gap: 12 },
-  backButton: { padding: 4 },
-  header: { fontSize: 28, fontWeight: 'bold', color: '#fff', flex: 1 },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#242424',
     margin: 16,
-    paddingHorizontal: 12,
-    borderRadius: 8,
+    paddingHorizontal: 16,
+    borderRadius: 25,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    color: '#fff',
-    padding: 12,
+  searchIcon: { marginRight: 12, opacity: 0.7 },
+  searchInput: { 
+    flex: 1, 
+    color: '#fff', 
+    padding: 14, 
     fontSize: 16,
+    fontWeight: '500',
+  },
+  section: { marginTop: 24, paddingHorizontal: 16 },
+  sectionHeaderContainer: {
+    marginBottom: 20,
+  },
+  sectionTitle: { 
+    fontSize: 24, 
+    fontWeight: '900', 
+    color: '#fff', 
+    letterSpacing: 0.5,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: '#aaa',
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  genreGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  genreItem: { 
+    width: '48%',
+    height: 120,
+    borderRadius: 16,
+    padding: 0,
+    justifyContent: 'flex-end',
+    position: 'relative',
+    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 12,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  genreContent: {
+    padding: 20,
+    zIndex: 3,
+  },
+  genreText: { 
+    color: '#fff', 
+    fontSize: 18, 
+    fontWeight: '900',
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
+    letterSpacing: 0.5,
+    lineHeight: 22,
+  },
+  genreAccent: {
+    position: 'absolute',
+    top: -40,
+    right: -40,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    opacity: 0.15,
+    transform: [{ rotate: '25deg' }],
+  },
+  genreAccent2: {
+    position: 'absolute',
+    bottom: -20,
+    left: -20,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    transform: [{ rotate: '-15deg' }],
   },
   suggestionItem: {
     flexDirection: 'row',
@@ -341,4 +475,48 @@ const styles = StyleSheet.create({
   chipTextSelected: { color: '#000', fontWeight: '600' },
   section: { marginTop: 16, paddingHorizontal: 16 },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff', marginBottom: 8 },
+  skeletonItem: {
+    width: '48%',
+    height: 120,
+    borderRadius: 16,
+    backgroundColor: '#1a1a1a',
+    overflow: 'hidden',
+  },
+  skeletonContent: {
+    flex: 1,
+    backgroundColor: '#2a2a2a',
+    margin: 1,
+    borderRadius: 15,
+  },
+  skeletonContainer: {
+    padding: 16,
+  },
+  searchSkeletonItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  searchSkeletonThumb: {
+    width: 56,
+    height: 56,
+    borderRadius: 4,
+    backgroundColor: '#1a1a1a',
+  },
+  searchSkeletonInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  searchSkeletonTitle: {
+    height: 16,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 4,
+    marginBottom: 8,
+    width: '70%',
+  },
+  searchSkeletonSubtitle: {
+    height: 12,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 4,
+    width: '50%',
+  },
 });

@@ -92,7 +92,7 @@ export default function ArtistScreen({ route, navigation }: any) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBackButton}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>{data?.artist.name}</Text>
+        <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">{data?.artist.name}</Text>
       </Animated.View>
 
       <Animated.ScrollView 
@@ -240,11 +240,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 60,
+    paddingTop: 50,
     paddingHorizontal: 16,
     zIndex: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
   },
   headerBackButton: {
     padding: 8,
@@ -256,7 +254,7 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     flex: 1,
   },
-  backButton: { position: 'absolute', top: 60, left: 16, zIndex: 10, padding: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 },
+  backButton: { position: 'absolute', top: 50, left: 16, zIndex: 10, padding: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 },
   artistImage: { width: '100%', height: 300, resizeMode: 'cover' },
   infoContainer: { padding: 16 },
   artistName: { fontSize: 32, fontWeight: 'bold', color: '#fff', marginBottom: 16 },

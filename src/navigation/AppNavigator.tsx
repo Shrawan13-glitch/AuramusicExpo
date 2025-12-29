@@ -7,7 +7,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import HomeScreen from '../screens/HomeScreen';
 import SearchScreen from '../screens/SearchScreen';
 import LibraryScreen from '../screens/LibraryScreen';
-import ExploreScreen from '../screens/ExploreScreen';
 import ArtistScreen from '../screens/ArtistScreen';
 import AlbumScreen from '../screens/AlbumScreen';
 import PlaylistScreen from '../screens/PlaylistScreen';
@@ -19,14 +18,10 @@ import RecentlyPlayedScreen from '../screens/RecentlyPlayedScreen';
 import LikedSongsScreen from '../screens/LikedSongsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import UpdateScreen from '../screens/UpdateScreen';
-import CachedSongsScreen from '../screens/CachedSongsScreen';
 import PlayerSettingsScreen from '../screens/PlayerSettingsScreen';
 import AboutScreen from '../screens/AboutScreen';
-import DownloadSettingsScreen from '../screens/DownloadSettingsScreen';
 import DownloadedSongsScreen from '../screens/DownloadedSongsScreen';
 import QualitySettingsScreen from '../screens/QualitySettingsScreen';
-import PrivacySettingsScreen from '../screens/PrivacySettingsScreen';
-import AuraMeterScreen from '../screens/AuraMeterScreen';
 import MiniPlayer from '../components/MiniPlayer';
 
 const Tab = createBottomTabNavigator();
@@ -64,11 +59,11 @@ const TabNavigator = React.memo(({ onTabBarLayout }: { onTabBarLayout: (height: 
         }}
       />
       <Tab.Screen 
-        name="Explore" 
-        component={ExploreScreen}
+        name="Search" 
+        component={SearchScreen}
         options={{
-          tabBarLabel: 'Explore',
-          tabBarIcon: ({ color, size }) => <Ionicons name="compass" size={size} color={color} />
+          tabBarLabel: 'Search',
+          tabBarIcon: ({ color, size }) => <Ionicons name="search" size={size} color={color} />
         }}
       />
       <Tab.Screen 
@@ -225,18 +220,7 @@ export default function AppNavigator() {
           </View>
         )}
       </Stack.Screen>
-      <Stack.Screen name="CachedSongs">
-        {(props) => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <CachedSongsScreen {...props} />
-            </View>
-            <View style={styles.miniPlayerBottom}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
-      </Stack.Screen>
+
       <Stack.Screen name="PlayerSettings">
         {(props) => (
           <View style={styles.container}>
@@ -261,19 +245,6 @@ export default function AppNavigator() {
           </View>
         )}
       </Stack.Screen>
-      <Stack.Screen name="DownloadSettings">
-        {(props) => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <DownloadSettingsScreen {...props} />
-            </View>
-            <View style={styles.miniPlayerBottom}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
-      </Stack.Screen>
-
       <Stack.Screen name="DownloadedSongs">
         {(props) => (
           <View style={styles.container}>
@@ -298,54 +269,7 @@ export default function AppNavigator() {
           </View>
         )}
       </Stack.Screen>
-      <Stack.Screen name="PrivacySettings">
-        {(props) => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <PrivacySettingsScreen {...props} />
-            </View>
-            <View style={styles.miniPlayerBottom}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
-      </Stack.Screen>
-      <Stack.Screen name="NotificationSettings">
-        {(props) => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <NotificationSettingsScreen {...props} />
-            </View>
-            <View style={styles.miniPlayerBottom}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
-      </Stack.Screen>
-      <Stack.Screen name="AuraMeter">
-        {(props) => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <AuraMeterScreen {...props} />
-            </View>
-            <View style={styles.miniPlayerBottom}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
-      </Stack.Screen>
-      <Stack.Screen name="Search">
-        {(props) => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <SearchScreen {...props} />
-            </View>
-            <View style={styles.miniPlayerBottom}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
-      </Stack.Screen>
+
       <Stack.Screen name="Update" component={UpdateScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
     </Stack.Navigator>

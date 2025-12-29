@@ -6,10 +6,21 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function PlayerSettingsScreen({ navigation }: any) {
   const [backgroundStyle, setBackgroundStyle] = useState('blur');
+  const [skipDuration, setSkipDuration] = useState(10);
 
   useEffect(() => {
     loadBackgroundStyle();
+    loadSkipDuration();
   }, []);
+
+  const loadSkipDuration = async () => {
+    try {
+      const duration = await AsyncStorage.getItem('skipDuration');
+      if (duration) setSkipDuration(parseInt(duration));
+    } catch (error) {
+      // Error loading skip duration handled silently
+    }
+  };
 
   const loadBackgroundStyle = async () => {
     try {
@@ -17,6 +28,15 @@ export default function PlayerSettingsScreen({ navigation }: any) {
       if (style) setBackgroundStyle(style);
     } catch (error) {
       // Error loading background style handled silently
+    }
+  };
+
+  const saveSkipDuration = async (duration: number) => {
+    try {
+      await AsyncStorage.setItem('skipDuration', duration.toString());
+      setSkipDuration(duration);
+    } catch (error) {
+      // Error saving skip duration handled silently
     }
   };
 
@@ -28,6 +48,8 @@ export default function PlayerSettingsScreen({ navigation }: any) {
       // Error saving background style handled silently
     }
   };
+
+  const skipDurationOptions = [5, 10, 15, 30];
 
   const backgroundOptions = [
     { key: 'blur', label: 'Gradient', description: 'Blurred album art with gradient overlay', icon: 'color-palette' },
@@ -72,6 +94,40 @@ export default function PlayerSettingsScreen({ navigation }: any) {
                     <Text style={styles.optionDescription}>{option.description}</Text>
                   </View>
                   {backgroundStyle === option.key && (
+                    <Ionicons name="checkmark-circle" size={24} color="#1db954" />
+                  )}
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Skip Duration</Text>
+          <Text style={styles.sectionDescription}>Choose how many seconds to skip forward/backward</Text>
+          
+          <View style={styles.optionsContainer}>
+            {skipDurationOptions.map((duration) => (
+              <TouchableOpacity
+                key={duration}
+                style={[styles.optionCard, skipDuration === duration && styles.optionCardActive]}
+                onPress={() => saveSkipDuration(duration)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.optionHeader}>
+                  <View style={[styles.optionIcon, skipDuration === duration && styles.optionIconActive]}>
+                    <Ionicons 
+                      name="time" 
+                      size={24} 
+                      color={skipDuration === duration ? '#1db954' : '#666'} 
+                    />
+                  </View>
+                  <View style={styles.optionContent}>
+                    <Text style={[styles.optionTitle, skipDuration === duration && styles.optionTitleActive]}>
+                      {duration} seconds
+                    </Text>
+                  </View>
+                  {skipDuration === duration && (
                     <Ionicons name="checkmark-circle" size={24} color="#1db954" />
                   )}
                 </View>
