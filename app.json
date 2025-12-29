@@ -13,7 +13,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.auramusic.app",
       "infoPlist": {
-        "UIBackgroundModes": ["audio"]
+        "UIBackgroundModes": [
+          "audio"
+        ]
       }
     },
     "android": {
@@ -36,7 +38,8 @@
           "color": "#1db954",
           "defaultChannel": "default"
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "extra": {
       "eas": {

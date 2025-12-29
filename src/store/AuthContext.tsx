@@ -56,6 +56,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setVisitorData(visitorData || null);
     setAccountInfo(accountInfo || null);
     setIsAuthenticated(true);
+    
+    // Trigger sync after login (small delay to ensure state is updated)
+    setTimeout(() => {
+      // This will be handled by LibraryProvider's useEffect
+    }, 100);
   };
 
   const logout = async () => {

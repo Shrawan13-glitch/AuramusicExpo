@@ -66,6 +66,9 @@ export default function DownloadedSongsScreen({ navigation }: any) {
           {item.artists.map((a: any) => a.name).join(', ')}
         </Text>
       </View>
+      <TouchableOpacity style={styles.menuButton} onPress={() => showOptions(item)}>
+        <Ionicons name="ellipsis-vertical" size={20} color="#666" />
+      </TouchableOpacity>
     </TouchableOpacity>
   );
 
@@ -192,6 +195,7 @@ const styles = StyleSheet.create({
   songInfo: { flex: 1, marginLeft: 12 },
   songTitle: { fontSize: 16, fontWeight: '500', color: '#fff', marginBottom: 2 },
   songArtist: { fontSize: 14, color: '#aaa' },
+  menuButton: { padding: 8 },
   emptyState: { 
     alignItems: 'center', 
     justifyContent: 'center', 

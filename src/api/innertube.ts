@@ -144,8 +144,11 @@ const parseArtists = (runs: any[]): Artist[] => {
 
 const parseSongFromRenderer = (renderer: any): Song | null => {
   try {
+    // Primary path: playlistItemData.videoId (for playlist items)
     const videoId = renderer.playlistItemData?.videoId || 
-                    renderer.navigationEndpoint?.watchEndpoint?.videoId;
+                    renderer.navigationEndpoint?.watchEndpoint?.videoId ||
+                    renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.videoId;
+    
     if (!videoId) return null;
 
     const title = renderer.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
@@ -153,7 +156,6 @@ const parseSongFromRenderer = (renderer: any): Song | null => {
 
     const artistRuns = renderer.flexColumns?.[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
     const artists = parseArtists(artistRuns);
-
     const thumbnail = parseThumbnail(renderer.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails);
 
     return {
@@ -822,11 +824,11 @@ export const InnerTube = {
           {
             context: createContext(),
             continuation: nextContinuation,
-          }
+          },
+          { headers }
         );
 
-        const contContents = contResponse.data?.continuationContents?.musicPlaylistShelfContinuation?.contents || 
-                            contResponse.data?.onResponseReceivedActions?.[0]?.appendContinuationItemsAction?.continuationItems || [];
+        const contContents = contResponse.data?.continuationContents?.musicPlaylistShelfContinuation?.contents || [];
 
         contContents.forEach((item: any) => {
           const song = parseSongFromRenderer(item.musicResponsiveListItemRenderer);
@@ -859,57 +861,64 @@ export const InnerTube = {
   },
 
   async getPlaylist(playlistId: string, videoId?: string): Promise<any> {
-    const cacheKey = videoId ? `playlist_mix_${playlistId}_${videoId}` : `playlist_${playlistId}`;
-    const cached = getCachedData(cacheKey);
-    if (cached) return cached;
-    
-    return deduplicateRequest(cacheKey, async () => {
-      try {
-        // If it's a mix (has videoId), use next endpoint
-        if (videoId) {
-          const result = await this.next(videoId);
-          const mixThumbnail = result.songs[0]?.thumbnailUrl;
-          const mixResult = {
-            playlist: {
-              id: playlistId,
-              title: 'Mix',
-              thumbnail: mixThumbnail,
-              author: 'YouTube Music',
-              songCount: `${result.songs.length}+ songs`,
-            },
-            songs: result.songs,
-            continuation: result.continuation,
-            isMix: true,
-          };
-          setCachedData(cacheKey, mixResult);
-          return mixResult;
-        }
-
-        const browseId = playlistId.startsWith('VL') ? playlistId : `VL${playlistId}`;
-        const response = await axios.post(
-          `${BASE_URL}/browse?key=${API_KEY}`,
-          {
-            context: createContext(),
-            browseId,
+    // Always fetch fresh data - no caching for playlists
+    try {
+      // If it's a mix (has videoId), use next endpoint
+      if (videoId) {
+        const result = await this.next(videoId);
+        const mixThumbnail = result.songs[0]?.thumbnailUrl;
+        return {
+          playlist: {
+            id: playlistId,
+            title: 'Mix',
+            thumbnail: mixThumbnail,
+            author: 'YouTube Music',
+            songCount: `${result.songs.length}+ songs`,
           },
-          { timeout: 5000 }
-        );
+          songs: result.songs,
+          continuation: result.continuation,
+          isMix: true,
+        };
+      }
+
+      const browseId = playlistId.startsWith('VL') ? playlistId : `VL${playlistId}`;
+      const headers = await getHeaders(true);
+      
+      const response = await axios.post(
+        `${BASE_URL}/browse?key=${API_KEY}`,
+        {
+          context: createContext(),
+          browseId,
+        },
+        { headers, timeout: 5000 }
+      );
+
+      // Handle empty playlists with musicEditablePlaylistDetailHeaderRenderer
+      const editableHeader = response.data?.contents?.twoColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents?.[0]?.musicEditablePlaylistDetailHeaderRenderer;
+      
+      if (editableHeader && !response.data?.contents?.twoColumnBrowseResultsRenderer?.secondaryContents) {
+        const header = editableHeader.header?.musicResponsiveHeaderRenderer;
+        return {
+          playlist: {
+            id: playlistId,
+            title: header?.title?.runs?.[0]?.text || 'Playlist',
+            thumbnail: parseThumbnail(header?.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails) || 'https://via.placeholder.com/200',
+            author: header?.subtitle?.runs?.[0]?.text || 'Unknown',
+            songCount: header?.secondSubtitle?.runs?.[0]?.text || '0 tracks',
+          },
+          songs: []
+        };
+      }
 
       const header = response.data?.header?.musicDetailHeaderRenderer || 
                      response.data?.header?.musicEditablePlaylistDetailHeaderRenderer?.header?.musicResponsiveHeaderRenderer ||
                      response.data?.contents?.twoColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents?.[0]?.musicResponsiveHeaderRenderer;
       
+      // Try multiple paths for playlist contents
       const secondaryContents = response.data?.contents?.twoColumnBrowseResultsRenderer?.secondaryContents?.sectionListRenderer?.contents;
       const singleColumnContents = response.data?.contents?.singleColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents;
-      const contents = secondaryContents || singleColumnContents;
-
-      const playlist = {
-        id: playlistId,
-        title: header?.title?.runs?.[0]?.text,
-        thumbnail: parseThumbnail(header?.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails || header?.thumbnail?.croppedSquareThumbnailRenderer?.thumbnail?.thumbnails),
-        author: header?.straplineTextOne?.runs?.[0]?.text || header?.subtitle?.runs?.[0]?.text,
-        songCount: header?.secondSubtitle?.runs?.[0]?.text,
-      };
+      const tabContents = response.data?.contents?.twoColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents;
+      const contents = secondaryContents || singleColumnContents || tabContents;
 
       const songs: Song[] = [];
       let continuation = null;
@@ -926,13 +935,18 @@ export const InnerTube = {
         continuation = shelf.continuations?.[0]?.nextContinuationData?.continuation;
       });
 
-        const result = { playlist, songs, continuation };
-        setCachedData(cacheKey, result);
-        return result;
-      } catch (error) {
-        return null;
-      }
-    });
+      const playlist = {
+        id: playlistId,
+        title: header?.title?.runs?.[0]?.text || editableHeader?.header?.musicResponsiveHeaderRenderer?.title?.runs?.[0]?.text || 'Playlist',
+        thumbnail: parseThumbnail(header?.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails || header?.thumbnail?.croppedSquareThumbnailRenderer?.thumbnail?.thumbnails || editableHeader?.header?.musicResponsiveHeaderRenderer?.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails) || songs[0]?.thumbnailUrl || 'https://via.placeholder.com/200',
+        author: header?.straplineTextOne?.runs?.[0]?.text || header?.subtitle?.runs?.[0]?.text || editableHeader?.header?.musicResponsiveHeaderRenderer?.subtitle?.runs?.[0]?.text || 'Unknown',
+        songCount: `${songs.length} songs`,
+      };
+
+      return { playlist, songs, continuation };
+    } catch (error) {
+      return null;
+    }
   },
 
   async getPlaylistContinuation(continuation: string): Promise<{ songs: Song[]; continuation: string | null }> {
@@ -1199,7 +1213,7 @@ export const InnerTube = {
     }
   },
 
-  async getLibrary(browseId: string = 'FEmusic_liked_videos'): Promise<any> {
+  async getLibrary(browseId: string = 'VLLM'): Promise<any> {
     try {
       const headers = await getHeaders(true);
       const response = await axios.post(
@@ -1207,57 +1221,197 @@ export const InnerTube = {
         {
           context: createContext(),
           browseId,
+          params: browseId === 'FEmusic_library_corpus_artists' ? 'ggMCCAU%3D' : undefined,
         },
         { headers }
       );
 
-      const tabs = response.data?.contents?.singleColumnBrowseResultsRenderer?.tabs;
-      const contents = tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents?.[0];
       const items: any[] = [];
+      let continuation = null;
 
-      if (contents?.gridRenderer) {
-        contents.gridRenderer.items?.forEach((item: any) => {
-          const renderer = item.musicTwoRowItemRenderer;
-          if (!renderer) return;
-          const browseId = renderer.navigationEndpoint?.browseEndpoint?.browseId;
-          const videoId = renderer.navigationEndpoint?.watchEndpoint?.videoId;
-          const title = renderer.title?.runs?.[0]?.text;
-          const name = title;
-          const thumbnail = parseThumbnail(renderer.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail?.thumbnails);
-          
-          if (browseId?.startsWith('UC') && name) {
-            // Artist
-            items.push({ id: browseId, name, thumbnailUrl: thumbnail, type: 'artist' });
-          } else if (browseId && title) {
-            // Playlist/Album
-            const id = browseId.replace('VL', '');
-            items.push({ id, title, thumbnailUrl: thumbnail, type: 'playlist' });
-          } else if (videoId && title) {
-            // Song
-            items.push({ id: videoId, title, thumbnailUrl: thumbnail, type: 'song' });
-          }
-        });
-      } else if (contents?.musicShelfRenderer) {
-        contents.musicShelfRenderer.contents?.forEach((item: any) => {
+      // Handle subscribed artists (browseId: 'FEmusic_library_corpus_artists')
+      if (browseId === 'FEmusic_library_corpus_artists') {
+        const contents = response.data?.contents?.singleColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents?.[0]?.musicShelfRenderer?.contents || [];
+        
+        contents.forEach((item: any) => {
           const renderer = item.musicResponsiveListItemRenderer;
           if (!renderer) return;
           
-          // Check if it's an artist
           const browseId = renderer.navigationEndpoint?.browseEndpoint?.browseId;
-          if (browseId?.startsWith('UC')) {
-            const name = renderer.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
-            const thumbnail = parseThumbnail(renderer.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails);
-            if (name) items.push({ id: browseId, name, thumbnailUrl: thumbnail, type: 'artist' });
-          } else {
-            const song = parseSongFromRenderer(renderer);
-            if (song) items.push({ ...song, type: 'song' });
+          const name = renderer.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
+          const thumbnail = parseThumbnail(renderer.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails);
+          
+          if (browseId?.startsWith('UC') && name) {
+            items.push({
+              id: browseId,
+              name,
+              title: name,
+              thumbnailUrl: thumbnail,
+              type: 'artist'
+            });
           }
         });
-      } else if (contents?.musicPlaylistShelfRenderer) {
-        contents.musicPlaylistShelfRenderer.contents?.forEach((item: any) => {
-          const song = parseSongFromRenderer(item.musicResponsiveListItemRenderer);
-          if (song) items.push({ ...song, type: 'song' });
+      }
+      // Handle library landing page (browseId: 'FEmusic_library_landing')
+      else if (browseId === 'FEmusic_library_landing') {
+        const contents = response.data?.contents?.singleColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents?.[0]?.gridRenderer?.items || [];
+        
+        contents.forEach((item: any) => {
+          const renderer = item.musicTwoRowItemRenderer;
+          if (!renderer) return;
+          
+          const navigationEndpoint = renderer.navigationEndpoint;
+          const title = renderer.title?.runs?.[0]?.text;
+          const subtitle = renderer.subtitle?.runs?.map((r: any) => r.text).join('') || '';
+          const thumbnail = parseThumbnail(renderer.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail?.thumbnails);
+          
+          if (navigationEndpoint?.browseEndpoint) {
+            const browseId = navigationEndpoint.browseEndpoint.browseId;
+            
+            if (browseId === 'VLLM') {
+              // Liked Music
+              items.push({
+                id: 'VLLM',
+                title: 'Liked music',
+                subtitle: 'Auto playlist',
+                thumbnailUrl: thumbnail,
+                type: 'liked'
+              });
+            } else if (browseId?.startsWith('VL')) {
+              // Playlist
+              const playlistId = browseId.substring(2);
+              items.push({
+                id: playlistId,
+                title,
+                subtitle,
+                thumbnailUrl: thumbnail,
+                type: 'playlist'
+              });
+            } else if (browseId?.startsWith('UC')) {
+              // Artist
+              items.push({
+                id: browseId,
+                name: title,
+                thumbnailUrl: thumbnail,
+                type: 'artist'
+              });
+            } else if (browseId) {
+              // Album or other content
+              const isAlbum = browseId.startsWith('MPRE') || subtitle.toLowerCase().includes('album');
+              items.push({
+                id: browseId,
+                title,
+                subtitle,
+                thumbnailUrl: thumbnail,
+                type: isAlbum ? 'album' : 'playlist'
+              });
+            }
+          }
         });
+      }
+      // Handle liked songs (browseId: 'VLLM')
+      else if (browseId === 'VLLM') {
+        const playlistShelf = response.data?.contents?.twoColumnBrowseResultsRenderer?.secondaryContents?.sectionListRenderer?.contents?.[0]?.musicPlaylistShelfRenderer;
+        
+        if (playlistShelf) {
+          playlistShelf.contents?.forEach((item: any) => {
+            const renderer = item.musicResponsiveListItemRenderer;
+            if (!renderer) return;
+            
+            const videoId = renderer.playlistItemData?.videoId;
+            const title = renderer.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
+            
+            if (videoId && title) {
+              const artistRuns = renderer.flexColumns?.[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
+              const artists = parseArtists(artistRuns);
+              const thumbnail = parseThumbnail(renderer.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails);
+              
+              items.push({
+                id: videoId,
+                title,
+                artists,
+                thumbnailUrl: thumbnail,
+                duration: -1,
+                type: 'song'
+              });
+            }
+          });
+          
+          continuation = playlistShelf.continuations?.[0]?.nextContinuationData?.continuation;
+        }
+      } else {
+        // Handle other library sections (artists, playlists, etc.)
+        const tabs = response.data?.contents?.singleColumnBrowseResultsRenderer?.tabs;
+        const contents = tabs?.[0]?.tabRenderer?.content?.sectionListRenderer?.contents?.[0];
+
+        if (contents?.gridRenderer) {
+          contents.gridRenderer.items?.forEach((item: any) => {
+            const renderer = item.musicTwoRowItemRenderer;
+            if (!renderer) return;
+            const browseId = renderer.navigationEndpoint?.browseEndpoint?.browseId;
+            const videoId = renderer.navigationEndpoint?.watchEndpoint?.videoId;
+            const title = renderer.title?.runs?.[0]?.text;
+            const name = title;
+            const thumbnail = parseThumbnail(renderer.thumbnailRenderer?.musicThumbnailRenderer?.thumbnail?.thumbnails);
+            
+            if (browseId?.startsWith('UC') && name) {
+              items.push({ id: browseId, name, thumbnailUrl: thumbnail, type: 'artist' });
+            } else if (browseId && title) {
+              const id = browseId.replace('VL', '');
+              items.push({ id, title, thumbnailUrl: thumbnail, type: 'playlist' });
+            } else if (videoId && title) {
+              const artists = parseArtists(renderer.subtitle?.runs || []);
+              items.push({ id: videoId, title, artists, thumbnailUrl: thumbnail, duration: -1, type: 'song' });
+            }
+          });
+        }
+      }
+
+      // Load continuation for liked songs
+      if (browseId === 'VLLM' && continuation) {
+        let nextContinuation = continuation;
+        while (nextContinuation) {
+          try {
+            const contResponse = await axios.post(
+              `${BASE_URL}/browse?key=${API_KEY}`,
+              {
+                context: createContext(),
+                continuation: nextContinuation,
+              },
+              { headers }
+            );
+
+            const contPlaylistShelf = contResponse.data?.continuationContents?.musicPlaylistShelfContinuation;
+            if (!contPlaylistShelf) break;
+
+            contPlaylistShelf.contents?.forEach((item: any) => {
+              const renderer = item.musicResponsiveListItemRenderer;
+              if (!renderer) return;
+              
+              const videoId = renderer.playlistItemData?.videoId;
+              const title = renderer.flexColumns?.[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.text;
+              
+              if (videoId && title) {
+                const artistRuns = renderer.flexColumns?.[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
+                const artists = parseArtists(artistRuns);
+                const thumbnail = parseThumbnail(renderer.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails);
+                
+                items.push({
+                  id: videoId,
+                  title,
+                  artists,
+                  thumbnailUrl: thumbnail,
+                  duration: -1,
+                  type: 'song'
+                });
+              }
+            });
+
+            nextContinuation = contPlaylistShelf.continuations?.[0]?.nextContinuationData?.continuation;
+          } catch (error) {
+            break;
+          }
+        }
       }
 
       return { items };
@@ -1422,6 +1576,68 @@ export const InnerTube = {
       return lines.length > 0 ? { lines } : null;
     } catch (error) {
       return null;
+    }
+  },
+
+  async createPlaylist(title: string, description: string = '', privacy: string = 'PRIVATE'): Promise<string | null> {
+    try {
+      const headers = await getHeaders(true);
+      const response = await axios.post(
+        `${BASE_URL}/playlist/create?key=${API_KEY}`,
+        {
+          context: createContext(),
+          title,
+          description,
+          privacyStatus: privacy,
+        },
+        { headers }
+      );
+      return response.data?.playlistId || null;
+    } catch (error) {
+      return null;
+    }
+  },
+
+  async addToPlaylist(playlistId: string, videoId: string): Promise<boolean> {
+    try {
+      const headers = await getHeaders(true);
+      const response = await axios.post(
+        `${BASE_URL}/browse/edit_playlist?key=${API_KEY}`,
+        {
+          context: createContext(),
+          playlistId,
+          actions: [{
+            action: 'ACTION_ADD_VIDEO',
+            addedVideoId: videoId,
+          }],
+        },
+        { headers }
+      );
+      return response.status === 200;
+    } catch (error) {
+      return false;
+    }
+  },
+
+  async removeFromPlaylist(playlistId: string, videoId: string, setVideoId?: string): Promise<boolean> {
+    try {
+      const headers = await getHeaders(true);
+      const response = await axios.post(
+        `${BASE_URL}/browse/edit_playlist?key=${API_KEY}`,
+        {
+          context: createContext(),
+          playlistId,
+          actions: [{
+            action: 'ACTION_REMOVE_VIDEO',
+            removedVideoId: videoId,
+            setVideoId: setVideoId,
+          }],
+        },
+        { headers }
+      );
+      return response.status === 200;
+    } catch (error) {
+      return false;
     }
   },
 };

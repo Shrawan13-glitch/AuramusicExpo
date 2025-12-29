@@ -5,32 +5,22 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLibrary } from '../store/LibraryContext';
 import { usePlayer } from '../store/PlayerContext';
 import { useAuth } from '../store/AuthContext';
-import { InnerTube } from '../api/innertube';
+import SongOptionsModal from '../components/SongOptionsModal';
+import { useSongOptions } from '../hooks/useSongOptions';
 
 export default function LikedSongsScreen({ navigation }: any) {
-  const { likedSongs } = useLibrary();
+  const { likedSongs, syncLikedSongs } = useLibrary();
   const { playSong } = usePlayer();
   const { isAuthenticated } = useAuth();
-  const [ytmLibrary, setYtmLibrary] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { modalVisible, selectedSong, showOptions, hideOptions } = useSongOptions();
+  const [syncing, setSyncing] = useState(false);
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      loadYtmLibrary();
-    }
-  }, [isAuthenticated]);
-
-  const loadYtmLibrary = async () => {
-    setLoading(true);
-    try {
-      const result = await InnerTube.getLibrary('FEmusic_liked_videos');
-      setYtmLibrary(result.items || []);
-    } catch (error) {
-    }
-    setLoading(false);
+  const handleSync = async () => {
+    if (!isAuthenticated) return;
+    setSyncing(true);
+    await syncLikedSongs();
+    setSyncing(false);
   };
-
-  const data = isAuthenticated && ytmLibrary.length > 0 ? ytmLibrary : likedSongs;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -38,51 +28,66 @@ export default function LikedSongsScreen({ navigation }: any) {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>
-          {isAuthenticated ? 'Liked Songs (YouTube Music)' : 'Liked Songs'}
-        </Text>
+        <Text style={styles.headerTitle}>Liked Songs</Text>
+        {isAuthenticated && (
+          <TouchableOpacity onPress={handleSync} disabled={syncing}>
+            <Ionicons 
+              name={syncing ? "sync" : "refresh"} 
+              size={24} 
+              color={syncing ? "#666" : "#1db954"} 
+            />
+          </TouchableOpacity>
+        )}
       </View>
 
-      {loading ? (
-        <View style={styles.loading}>
-          <ActivityIndicator size="large" color="#1db954" />
-        </View>
-      ) : (
-        <FlatList
-          data={data}
-          keyExtractor={(item, index) => `${item.id}-${index}`}
-          contentContainerStyle={{ paddingBottom: 80 }}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons name="heart-outline" size={64} color="#666" />
-              <Text style={styles.emptyText}>
-                {isAuthenticated ? 'No liked songs in YouTube Music' : 'No liked songs yet'}
+      <FlatList
+        data={likedSongs}
+        keyExtractor={(item, index) => `${item.id}-${index}`}
+        contentContainerStyle={{ paddingBottom: 80 }}
+        ListEmptyComponent={
+          <View style={styles.empty}>
+            <Ionicons name="heart-outline" size={64} color="#666" />
+            <Text style={styles.emptyText}>No liked songs yet</Text>
+            {isAuthenticated && (
+              <TouchableOpacity style={styles.syncButton} onPress={handleSync}>
+                <Text style={styles.syncButtonText}>Sync with YouTube Music</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        }
+        renderItem={({ item, index }) => (
+          <TouchableOpacity
+            style={styles.songItem}
+            onPress={() => {
+              if (item.type === 'playlist') {
+                navigation.navigate('Playlist', { playlistId: item.id });
+              } else {
+                const queue = likedSongs.slice(index + 1).filter((s: any) => s.type !== 'playlist');
+                playSong(item, queue, false);
+              }
+            }}
+            onLongPress={() => showOptions(item)}
+          >
+            <Image source={{ uri: item.thumbnailUrl }} style={styles.thumbnail} />
+            <View style={styles.songInfo}>
+              <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
+              <Text style={styles.artist} numberOfLines={1}>
+                {item.artists?.map((a: any) => a.name).join(', ') || (item.type === 'playlist' ? 'Playlist' : '')}
               </Text>
             </View>
-          }
-          renderItem={({ item, index }) => (
-            <TouchableOpacity
-              style={styles.songItem}
-              onPress={() => {
-                if (item.type === 'playlist') {
-                  navigation.navigate('Playlist', { playlistId: item.id });
-                } else {
-                  const queue = data.slice(index + 1).filter((s: any) => s.type !== 'playlist');
-                  playSong(item, queue, false);
-                }
-              }}
-            >
-              <Image source={{ uri: item.thumbnailUrl }} style={styles.thumbnail} />
-              <View style={styles.songInfo}>
-                <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
-                <Text style={styles.artist} numberOfLines={1}>
-                  {item.artists?.map((a: any) => a.name).join(', ') || (item.type === 'playlist' ? 'Playlist' : '')}
-                </Text>
-              </View>
+            <TouchableOpacity style={styles.menuButton} onPress={() => showOptions(item)}>
+              <Ionicons name="ellipsis-vertical" size={20} color="#666" />
             </TouchableOpacity>
-          )}
-        />
-      )}
+          </TouchableOpacity>
+        )}
+      />
+      
+      <SongOptionsModal
+        visible={modalVisible}
+        onClose={hideOptions}
+        song={selectedSong}
+        navigation={navigation}
+      />
     </SafeAreaView>
   );
 }
@@ -97,6 +102,9 @@ const styles = StyleSheet.create({
   songInfo: { flex: 1, marginLeft: 12 },
   title: { fontSize: 16, color: '#fff', fontWeight: '500' },
   artist: { fontSize: 14, color: '#aaa', marginTop: 4 },
+  menuButton: { padding: 8 },
   empty: { alignItems: 'center', justifyContent: 'center', marginTop: 100 },
   emptyText: { color: '#666', fontSize: 16, marginTop: 16 },
+  syncButton: { backgroundColor: '#1db954', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, marginTop: 16 },
+  syncButtonText: { color: '#fff', fontWeight: '600' },
 });

@@ -7,11 +7,18 @@ import { AuraDB } from '../services/auraDB';
 interface LibraryContextType {
   likedSongs: Song[];
   recentlyPlayed: PlayHistory[];
+  playlists: any[];
   addLikedSong: (song: Song) => void;
   removeLikedSong: (songId: string) => void;
   isLiked: (songId: string) => boolean;
   addToRecentlyPlayed: (song: Song, duration: number) => void;
   loadMoreHistory: (offset: number) => Promise<PlayHistory[]>;
+  syncLikedSongs: () => Promise<void>;
+  createPlaylist: (title: string, description?: string) => Promise<string | null>;
+  addToPlaylist: (playlistId: string, song: Song) => Promise<boolean>;
+  removeFromPlaylist: (playlistId: string, songId: string) => Promise<boolean>;
+  syncPlaylists: () => Promise<void>;
+  loadPlaylistSongs: (playlistId: string) => Promise<Song[]>;
 }
 
 const LibraryContext = createContext<LibraryContextType | undefined>(undefined);
@@ -19,10 +26,31 @@ const LibraryContext = createContext<LibraryContextType | undefined>(undefined);
 export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [likedSongs, setLikedSongs] = useState<Song[]>([]);
   const [recentlyPlayed, setRecentlyPlayed] = useState<PlayHistory[]>([]);
+  const [playlists, setPlaylists] = useState<any[]>([]);
 
   useEffect(() => {
     loadLibrary();
   }, []);
+
+  // Sync liked songs when authentication changes
+  useEffect(() => {
+    const checkAuth = async () => {
+      const cookies = await AsyncStorage.getItem('ytm_cookies');
+      if (cookies) {
+        syncLikedSongs();
+        syncPlaylists();
+        
+        // Set up periodic sync every 5 minutes when authenticated
+        const interval = setInterval(() => {
+          syncLikedSongs();
+          syncPlaylists();
+        }, 5 * 60 * 1000);
+        
+        return () => clearInterval(interval);
+      }
+    };
+    checkAuth();
+  }, [syncLikedSongs, syncPlaylists]);
 
   const loadLibrary = async () => {
     try {
@@ -41,9 +69,67 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const history = await AuraDB.getHistory(0, 50);
       if (liked) setLikedSongs(JSON.parse(liked));
       setRecentlyPlayed(history);
+      
+      // Auto-sync if authenticated
+      const cookies = await AsyncStorage.getItem('ytm_cookies');
+      if (cookies) {
+        syncLikedSongs();
+      }
     } catch (e) {
     }
   };
+
+  const syncLikedSongs = useCallback(async () => {
+    try {
+      const cookies = await AsyncStorage.getItem('ytm_cookies');
+      if (!cookies) return;
+
+      // Get local liked songs first
+      const localLiked = await AsyncStorage.getItem('likedSongs');
+      const localLikedSongs: Song[] = localLiked ? JSON.parse(localLiked) : [];
+
+      // Get YouTube Music liked songs
+      const ytmLibrary = await InnerTube.getLibrary('VLLM');
+      const ytmLikedSongs = ytmLibrary.items?.filter((item: any) => item.type === 'song') || [];
+      
+      // Sync local songs to YouTube Music first
+      for (const localSong of localLikedSongs) {
+        try {
+          await InnerTube.likeSong(localSong.id, true);
+        } catch (error) {
+          // Continue if individual song sync fails
+        }
+      }
+      
+      // Create a map for faster lookup
+      const localLikedMap = new Map(localLikedSongs.map(song => [song.id, song]));
+      const ytmLikedMap = new Map(ytmLikedSongs.map((song: any) => [song.id, song]));
+      
+      // Merge songs: prioritize YTM data but keep local songs not in YTM
+      const mergedSongs: Song[] = [];
+      const processedIds = new Set<string>();
+      
+      // Add all YTM liked songs first
+      for (const ytmSong of ytmLikedSongs) {
+        mergedSongs.push(ytmSong);
+        processedIds.add(ytmSong.id);
+      }
+      
+      // Add local songs that aren't in YTM
+      for (const localSong of localLikedSongs) {
+        if (!processedIds.has(localSong.id)) {
+          mergedSongs.push(localSong);
+        }
+      }
+      
+      // Update state and storage
+      setLikedSongs(mergedSongs);
+      await AsyncStorage.setItem('likedSongs', JSON.stringify(mergedSongs));
+      
+    } catch (error) {
+      // Sync failed, continue with local data
+    }
+  }, []);
 
   const addLikedSong = useCallback(async (song: Song) => {
     const updated = [song, ...likedSongs.filter(s => s.id !== song.id)];
@@ -87,15 +173,195 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return await AuraDB.getHistory(offset, 50);
   }, []);
 
+  const createPlaylist = useCallback(async (title: string, description: string = ''): Promise<string | null> => {
+    // Always create local playlist first for immediate UI response
+    const localId = `local_${Date.now()}`;
+    const newPlaylist = { 
+      id: localId, 
+      title, 
+      description, 
+      songs: [], 
+      isLocal: true,
+      thumbnailUrl: 'https://i.imgur.com/placeholder.png',
+      type: 'playlist'
+    };
+    const updated = [newPlaylist, ...playlists];
+    setPlaylists(updated);
+    await AsyncStorage.setItem('playlists', JSON.stringify(updated));
+    
+    // Try to sync with YouTube Music in background if authenticated
+    const cookies = await AsyncStorage.getItem('ytm_cookies');
+    if (cookies) {
+      try {
+        const remoteId = await InnerTube.createPlaylist(title, description);
+        if (remoteId) {
+          // Replace local playlist with remote one
+          const syncedPlaylist = { ...newPlaylist, id: remoteId, isLocal: false };
+          const synced = updated.map(p => p.id === localId ? syncedPlaylist : p);
+          setPlaylists(synced);
+          await AsyncStorage.setItem('playlists', JSON.stringify(synced));
+          return remoteId;
+        }
+      } catch (error) {
+        // Keep local playlist if sync fails
+      }
+    }
+    
+    return localId;
+  }, [playlists]);
+
+  const addToPlaylist = useCallback(async (playlistId: string, song: Song): Promise<boolean> => {
+    try {
+      const playlist = playlists.find(p => p.id === playlistId);
+      if (!playlist) return false;
+
+      // Check if song already exists in playlist
+      const songExists = playlist.songs?.some(s => s.id === song.id);
+      if (songExists) return true;
+
+      // Always update locally first
+      const updatedSongs = [...(playlist.songs || []), song];
+      const updated = playlists.map(p => 
+        p.id === playlistId ? { ...p, songs: updatedSongs } : p
+      );
+      
+      setPlaylists(updated);
+      await AsyncStorage.setItem('playlists', JSON.stringify(updated));
+
+      // Try to sync with YouTube Music if authenticated and not local
+      const cookies = await AsyncStorage.getItem('ytm_cookies');
+      if (!playlist.isLocal && cookies) {
+        try {
+          const syncResult = await InnerTube.addToPlaylist(playlistId, song.id);
+          if (!syncResult) {
+            // Revert on failure
+            const reverted = playlists.map(p => 
+              p.id === playlistId ? { ...p, songs: (p.songs || []).filter(s => s.id !== song.id) } : p
+            );
+            setPlaylists(reverted);
+            await AsyncStorage.setItem('playlists', JSON.stringify(reverted));
+            return false;
+          }
+        } catch (syncError) {
+          // Revert on failure
+          const reverted = playlists.map(p => 
+            p.id === playlistId ? { ...p, songs: (p.songs || []).filter(s => s.id !== song.id) } : p
+          );
+          setPlaylists(reverted);
+          await AsyncStorage.setItem('playlists', JSON.stringify(reverted));
+          return false;
+        }
+      }
+      
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }, [playlists]);
+
+  const removeFromPlaylist = useCallback(async (playlistId: string, songId: string): Promise<boolean> => {
+    const playlist = playlists.find(p => p.id === playlistId);
+    if (!playlist) return false;
+
+    const cookies = await AsyncStorage.getItem('ytm_cookies');
+    
+    if (!playlist.isLocal && cookies) {
+      const success = await InnerTube.removeFromPlaylist(playlistId, songId);
+      if (success) {
+        const updated = playlists.map(p => 
+          p.id === playlistId ? { ...p, songs: p.songs.filter((s: Song) => s.id !== songId) } : p
+        );
+        setPlaylists(updated);
+        await AsyncStorage.setItem('playlists', JSON.stringify(updated));
+        return true;
+      }
+    } else {
+      const updated = playlists.map(p => 
+        p.id === playlistId ? { ...p, songs: p.songs.filter((s: Song) => s.id !== songId) } : p
+      );
+      setPlaylists(updated);
+      await AsyncStorage.setItem('playlists', JSON.stringify(updated));
+      return true;
+    }
+    return false;
+  }, [playlists]);
+
+  const syncPlaylists = useCallback(async () => {
+    try {
+      const cookies = await AsyncStorage.getItem('ytm_cookies');
+      if (!cookies) return;
+
+      // Get current local playlists
+      const localPlaylists = await AsyncStorage.getItem('playlists');
+      const localPlaylistsData: any[] = localPlaylists ? JSON.parse(localPlaylists) : [];
+      const localOnlyPlaylists = localPlaylistsData.filter(p => p.isLocal);
+
+      // Sync local playlists to YouTube Music
+      for (const localPlaylist of localOnlyPlaylists) {
+        try {
+          const remoteId = await InnerTube.createPlaylist(localPlaylist.title, localPlaylist.description || '');
+          if (remoteId) {
+            // Add all songs to the remote playlist
+            for (const song of localPlaylist.songs || []) {
+              await InnerTube.addToPlaylist(remoteId, song.id);
+            }
+            // Update local playlist to point to remote
+            localPlaylist.id = remoteId;
+            localPlaylist.isLocal = false;
+          }
+        } catch (error) {
+          // Keep as local if sync fails
+        }
+      }
+
+      // Get YouTube Music playlists
+      const [libraryData, artistsData] = await Promise.all([
+        InnerTube.getLibrary('FEmusic_library_landing'),
+        InnerTube.getLibrary('FEmusic_library_corpus_artists')
+      ]);
+      
+      const ytmPlaylists = libraryData.items?.filter((item: any) => item.type === 'playlist') || [];
+      const ytmArtists = artistsData.items?.filter((item: any) => item.type === 'artist') || [];
+      
+      // Merge all playlists
+      const mergedPlaylists = [
+        ...ytmPlaylists.map((p: any) => ({ ...p, isLocal: false, synced: true })),
+        ...ytmArtists.map((a: any) => ({ ...a, isLocal: false, synced: true })),
+        ...localPlaylistsData.filter((p: any) => p.isLocal) // Keep remaining local playlists
+      ];
+      
+      setPlaylists(mergedPlaylists);
+      await AsyncStorage.setItem('playlists', JSON.stringify(mergedPlaylists));
+    } catch (error) {
+      // Sync failed, continue with local data
+    }
+  }, []);
+
+  const loadPlaylistSongs = useCallback(async (playlistId: string): Promise<Song[]> => {
+    try {
+      const playlistData = await InnerTube.getPlaylist(playlistId);
+      return playlistData?.songs || [];
+    } catch (error) {
+      return [];
+    }
+  }, []);
+
   const contextValue = useMemo(() => ({
     likedSongs,
     recentlyPlayed,
+    playlists,
     addLikedSong,
     removeLikedSong,
     isLiked,
     addToRecentlyPlayed,
-    loadMoreHistory
-  }), [likedSongs, recentlyPlayed, addLikedSong, removeLikedSong, isLiked, addToRecentlyPlayed, loadMoreHistory]);
+    loadMoreHistory,
+    syncLikedSongs,
+    createPlaylist,
+    addToPlaylist,
+    removeFromPlaylist,
+    syncPlaylists,
+    loadPlaylistSongs
+  }), [likedSongs, recentlyPlayed, playlists, addLikedSong, removeLikedSong, isLiked, addToRecentlyPlayed, loadMoreHistory, syncLikedSongs, createPlaylist, addToPlaylist, removeFromPlaylist, syncPlaylists, loadPlaylistSongs]);
 
   return (
     <LibraryContext.Provider value={contextValue}>
