@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import HomeScreen from '../screens/HomeScreen';
 import SearchScreen from '../screens/SearchScreen';
 import LibraryScreen from '../screens/LibraryScreen';
+import MessagesScreen from '../screens/MessagesScreen';
 import ArtistScreen from '../screens/ArtistScreen';
 import AlbumScreen from '../screens/AlbumScreen';
 import PlaylistScreen from '../screens/PlaylistScreen';
@@ -17,12 +18,14 @@ import BrowseScreen from '../screens/BrowseScreen';
 import RecentlyPlayedScreen from '../screens/RecentlyPlayedScreen';
 import LikedSongsScreen from '../screens/LikedSongsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import ThemeSettingsScreen from '../screens/ThemeSettingsScreen';
 import UpdateScreen from '../screens/UpdateScreen';
 import PlayerSettingsScreen from '../screens/PlayerSettingsScreen';
 import AboutScreen from '../screens/AboutScreen';
 import DownloadedSongsScreen from '../screens/DownloadedSongsScreen';
 import QualitySettingsScreen from '../screens/QualitySettingsScreen';
 import MiniPlayer from '../components/MiniPlayer';
+import MessageDetailScreen from '../screens/MessageDetailScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -64,6 +67,14 @@ const TabNavigator = React.memo(({ onTabBarLayout }: { onTabBarLayout: (height: 
         options={{
           tabBarLabel: 'Search',
           tabBarIcon: ({ color, size }) => <Ionicons name="search" size={size} color={color} />
+        }}
+      />
+      <Tab.Screen 
+        name="Messages" 
+        component={MessagesScreen}
+        options={{
+          tabBarLabel: 'Messages',
+          tabBarIcon: ({ color, size }) => <Ionicons name="mail" size={size} color={color} />
         }}
       />
       <Tab.Screen 
@@ -208,43 +219,12 @@ export default function AppNavigator() {
           </View>
         )}
       </Stack.Screen>
-      <Stack.Screen name="Settings">
-        {(props) => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <SettingsScreen {...props} />
-            </View>
-            <View style={styles.miniPlayerBottom}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
-      </Stack.Screen>
+      <Stack.Screen name="Settings" component={SettingsScreen} options={{ animationEnabled: false }} />
 
-      <Stack.Screen name="PlayerSettings">
-        {(props) => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <PlayerSettingsScreen {...props} />
-            </View>
-            <View style={styles.miniPlayerBottom}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
-      </Stack.Screen>
-      <Stack.Screen name="About">
-        {(props) => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <AboutScreen {...props} />
-            </View>
-            <View style={styles.miniPlayerBottom}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
-      </Stack.Screen>
+      <Stack.Screen name="ThemeSettings" component={ThemeSettingsScreen} />
+
+      <Stack.Screen name="PlayerSettings" component={PlayerSettingsScreen} options={{ animationEnabled: false }} />
+      <Stack.Screen name="About" component={AboutScreen} options={{ animationEnabled: false }} />
       <Stack.Screen name="DownloadedSongs">
         {(props) => (
           <View style={styles.container}>
@@ -257,18 +237,9 @@ export default function AppNavigator() {
           </View>
         )}
       </Stack.Screen>
-      <Stack.Screen name="QualitySettings">
-        {(props) => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <QualitySettingsScreen {...props} />
-            </View>
-            <View style={styles.miniPlayerBottom}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
-      </Stack.Screen>
+      <Stack.Screen name="QualitySettings" component={QualitySettingsScreen} />
+
+      <Stack.Screen name="MessageDetail" component={MessageDetailScreen} />
 
       <Stack.Screen name="Update" component={UpdateScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
