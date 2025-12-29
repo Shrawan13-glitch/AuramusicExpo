@@ -1,10 +1,17 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, Dimensions, Share, Alert, ScrollView } from 'react-native';
+import React, { useState, useMemo, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, Dimensions, Share, Alert, ScrollView, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useDownload } from '../store/DownloadContext';
 import { useLibrary } from '../store/LibraryContext';
 import { useNotification } from '../store/NotificationContext';
 import CreatePlaylistModal from './CreatePlaylistModal';
+
+const OptionItem = React.memo(({ option }: any) => (
+  <TouchableOpacity style={styles.option} onPress={option.onPress} activeOpacity={0.7}>
+    <Ionicons name={option.icon as any} size={24} color={option.color || '#fff'} />
+    <Text style={[styles.optionText, { color: option.color || '#fff' }]}>{option.label}</Text>
+  </TouchableOpacity>
+));
 
 interface SongOptionsModalProps {
   visible: boolean;
@@ -88,7 +95,10 @@ export default function SongOptionsModal({ visible, onClose, song, showDeleteOpt
   };
 
   const liked = isLiked(song?.id);
-  const userPlaylists = playlists.filter(p => p.type === 'playlist' || !p.type);
+  const userPlaylists = useMemo(() => playlists.filter(p => p.type === 'playlist' || !p.type), [playlists]);
+  
+  const renderOption = useCallback(({ item }: any) => <OptionItem option={item} />, []);
+  const keyExtractor = useCallback((item: any) => item.id, []);
   
   const options = [
     { 
@@ -124,19 +134,13 @@ export default function SongOptionsModal({ visible, onClose, song, showDeleteOpt
                 {song?.artists?.map((a: any) => a.name).join(', ')}
               </Text>
             </View>
-            <ScrollView style={styles.options} showsVerticalScrollIndicator={false}>
-              {options.map((option, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.option}
-                  onPress={option.onPress}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name={option.icon as any} size={24} color={option.color || '#fff'} />
-                  <Text style={[styles.optionText, { color: option.color || '#fff' }]}>{option.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+            <FlatList
+              data={options}
+              keyExtractor={keyExtractor}
+              renderItem={renderOption}
+              style={styles.options}
+              showsVerticalScrollIndicator={false}
+            />
           </View>
         </TouchableOpacity>
       </Modal>

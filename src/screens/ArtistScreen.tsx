@@ -5,6 +5,34 @@ import { Ionicons } from '@expo/vector-icons';
 import { InnerTube } from '../api/innertube';
 import { usePlayer } from '../store/PlayerContext';
 
+const SongItem = React.memo(({ song, index, onPress }: any) => (
+  <TouchableOpacity style={styles.songItem} onPress={onPress}>
+    {index !== undefined && <Text style={styles.trackNumber}>{index + 1}</Text>}
+    <Image source={{ uri: song.thumbnailUrl }} style={styles.songThumbnail} />
+    <View style={styles.songInfo}>
+      <Text style={styles.songTitle} numberOfLines={1}>{song.title}</Text>
+      <Text style={styles.songArtist} numberOfLines={1}>
+        {song.artists?.map((a: any) => a.name).join(', ')}
+      </Text>
+    </View>
+  </TouchableOpacity>
+));
+
+const GridItem = React.memo(({ item, onPress }: any) => (
+  <TouchableOpacity style={styles.gridItem} onPress={onPress}>
+    <Image 
+      source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : require('../../assets/icon.png')} 
+      style={[styles.gridThumbnail, item.type === 'artist' && { borderRadius: 70 }]}
+      resizeMode="cover"
+      onError={() => {}}
+    />
+    <Text style={styles.gridTitle} numberOfLines={2}>{item.title || item.name}</Text>
+    {item.subtitle && (
+      <Text style={styles.gridSubtitle} numberOfLines={1}>{item.subtitle}</Text>
+    )}
+  </TouchableOpacity>
+));
+
 export default function ArtistScreen({ route, navigation }: any) {
   const { artistId } = route.params;
   const [data, setData] = useState<any>(null);
@@ -42,9 +70,9 @@ export default function ArtistScreen({ route, navigation }: any) {
     }
   }, [artistId]);
 
-  const renderGridItem = useCallback(({ item }) => (
-    <TouchableOpacity 
-      style={styles.gridItem}
+  const renderGridItem = useCallback(({ item }: any) => (
+    <GridItem
+      item={item}
       onPress={() => {
         if (item.type === 'album') {
           navigation.navigate('Album', { albumId: item.id });
@@ -56,19 +84,10 @@ export default function ArtistScreen({ route, navigation }: any) {
           playSong(item);
         }
       }}
-    >
-      <Image 
-        source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : require('../../assets/icon.png')} 
-        style={[styles.gridThumbnail, item.type === 'artist' && { borderRadius: 70 }]}
-        resizeMode="cover"
-        onError={() => {}}
-      />
-      <Text style={styles.gridTitle} numberOfLines={2}>{item.title || item.name}</Text>
-      {item.subtitle && (
-        <Text style={styles.gridSubtitle} numberOfLines={1}>{item.subtitle}</Text>
-      )}
-    </TouchableOpacity>
+    />
   ), [navigation, playSong]);
+
+  const keyExtractor = useCallback((item: any, idx: number) => `${item.id}-${idx}`, []);
 
   if (loading) {
     return (
@@ -163,20 +182,12 @@ export default function ArtistScreen({ route, navigation }: any) {
             )}
           </View>
           {songsSection.items.slice(0, 5).map((song: any, idx: number) => (
-            <TouchableOpacity
-              key={idx}
-              style={styles.songItem}
+            <SongItem
+              key={`song-${idx}`}
+              song={song}
+              index={idx}
               onPress={() => playSong(song)}
-            >
-              <Text style={styles.trackNumber}>{idx + 1}</Text>
-              <Image source={{ uri: song.thumbnailUrl }} style={styles.songThumbnail} />
-              <View style={styles.songInfo}>
-                <Text style={styles.songTitle} numberOfLines={1}>{song.title}</Text>
-                <Text style={styles.songArtist} numberOfLines={1}>
-                  {song.artists?.map((a: any) => a.name).join(', ')}
-                </Text>
-              </View>
-            </TouchableOpacity>
+            />
           ))}
         </View>
       )}
@@ -194,29 +205,22 @@ export default function ArtistScreen({ route, navigation }: any) {
           
           {section.items[0]?.type === 'song' ? (
             section.items.map((song: any, idx: number) => (
-              <TouchableOpacity
-                key={idx}
-                style={styles.songItem}
+              <SongItem
+                key={`section-${index}-song-${idx}`}
+                song={song}
                 onPress={() => playSong(song)}
-              >
-                <Image source={{ uri: song.thumbnailUrl }} style={styles.songThumbnail} />
-                <View style={styles.songInfo}>
-                  <Text style={styles.songTitle} numberOfLines={1}>{song.title}</Text>
-                  <Text style={styles.songArtist} numberOfLines={1}>
-                    {song.artists?.map((a: any) => a.name).join(', ')}
-                  </Text>
-                </View>
-              </TouchableOpacity>
+              />
             ))
           ) : (
             <FlatList
               horizontal
               data={section.items}
-              keyExtractor={(item, idx) => `${item.id}-${idx}`}
+              keyExtractor={keyExtractor}
               renderItem={renderGridItem}
-              removeClippedSubviews={true}
+              removeClippedSubviews
               maxToRenderPerBatch={5}
               windowSize={5}
+              initialNumToRender={3}
               showsHorizontalScrollIndicator={false}
             />
           )}

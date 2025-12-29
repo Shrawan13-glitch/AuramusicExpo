@@ -1,17 +1,30 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useState, useCallback, useMemo } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../store/AuthContext';
 import { checkForUpdates, getCurrentVersion } from '../utils/updateChecker';
 import Toast from '../components/Toast';
 
+const SettingCard = React.memo(({ icon, title, subtitle, onPress, iconColor = '#1db954', disabled }: any) => (
+  <TouchableOpacity style={[styles.settingCard, disabled && styles.disabledCard]} onPress={onPress} activeOpacity={0.7} disabled={disabled}>
+    <View style={[styles.iconContainer, { backgroundColor: iconColor + '20' }]}>
+      <Ionicons name={icon} size={24} color={iconColor} />
+    </View>
+    <View style={styles.cardContent}>
+      <Text style={styles.cardTitle}>{title}</Text>
+      {subtitle && <Text style={styles.cardSubtitle}>{subtitle}</Text>}
+    </View>
+    <Ionicons name="chevron-forward" size={20} color="#666" />
+  </TouchableOpacity>
+));
+
 export default function SettingsScreen({ navigation }: any) {
   const { isAuthenticated, accountInfo, logout } = useAuth();
   const [checking, setChecking] = useState(false);
   const [showToast, setShowToast] = useState(false);
 
-  const handleCheckUpdates = async () => {
+  const handleCheckUpdates = useCallback(async () => {
     setChecking(true);
     const { hasUpdate, updateInfo } = await checkForUpdates();
     setChecking(false);
@@ -20,20 +33,32 @@ export default function SettingsScreen({ navigation }: any) {
     } else {
       setShowToast(true);
     }
-  };
+  }, [navigation]);
 
-  const SettingCard = ({ icon, title, subtitle, onPress, iconColor = '#1db954' }: any) => (
-    <TouchableOpacity style={styles.settingCard} onPress={onPress} activeOpacity={0.7}>
-      <View style={[styles.iconContainer, { backgroundColor: iconColor + '20' }]}>
-        <Ionicons name={icon} size={24} color={iconColor} />
-      </View>
-      <View style={styles.cardContent}>
-        <Text style={styles.cardTitle}>{title}</Text>
-        {subtitle && <Text style={styles.cardSubtitle}>{subtitle}</Text>}
-      </View>
-      <Ionicons name="chevron-forward" size={20} color="#666" />
-    </TouchableOpacity>
-  );
+  const settingsData = useMemo(() => [
+    {
+      id: 'player',
+      icon: 'musical-notes',
+      title: 'Player',
+      subtitle: 'Playback & appearance',
+      onPress: () => navigation.navigate('PlayerSettings'),
+      iconColor: '#1db954'
+    },
+    {
+      id: 'about',
+      icon: 'information-circle-outline',
+      title: 'About',
+      subtitle: `Version ${getCurrentVersion()}`,
+      onPress: () => navigation.navigate('About'),
+      iconColor: '#747d8c'
+    }
+  ], [navigation]);
+
+  const renderSettingCard = useCallback(({ item }: any) => (
+    <SettingCard {...item} />
+  ), []);
+
+  const keyExtractor = useCallback((item: any) => item.id, []);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -45,7 +70,7 @@ export default function SettingsScreen({ navigation }: any) {
         <View style={styles.backButton} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <View style={styles.content}>
         {isAuthenticated && (
           <View style={styles.accountSection}>
             <View style={styles.accountCard}>
@@ -67,32 +92,25 @@ export default function SettingsScreen({ navigation }: any) {
           </View>
         )}
 
-        <View style={styles.settingsGrid}>
-          <SettingCard
-            icon="musical-notes"
-            title="Player"
-            subtitle="Playback & appearance"
-            onPress={() => navigation.navigate('PlayerSettings')}
-            iconColor="#1db954"
-          />
-          <SettingCard
-            icon="information-circle-outline"
-            title="About"
-            subtitle={`Version ${getCurrentVersion()}`}
-            onPress={() => navigation.navigate('About')}
-            iconColor="#747d8c"
-          />
-        </View>
-
-        <TouchableOpacity style={styles.updateButton} onPress={handleCheckUpdates} disabled={checking}>
-          {checking ? (
-            <ActivityIndicator size="small" color="#1db954" />
-          ) : (
-            <Ionicons name="cloud-download-outline" size={20} color="#1db954" />
-          )}
-          <Text style={styles.updateButtonText}>Check for Updates</Text>
-        </TouchableOpacity>
-      </ScrollView>
+        <FlatList
+          data={[
+            ...settingsData,
+            {
+              id: 'updates',
+              icon: 'cloud-download-outline',
+              title: 'Check for Updates',
+              subtitle: checking ? 'Checking...' : 'Stay up to date',
+              onPress: handleCheckUpdates,
+              iconColor: '#1db954',
+              disabled: checking
+            }
+          ]}
+          keyExtractor={keyExtractor}
+          renderItem={renderSettingCard}
+          contentContainerStyle={styles.settingsGrid}
+          showsVerticalScrollIndicator={false}
+        />
+      </View>
       
       <Toast
         visible={showToast}
@@ -109,7 +127,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16 },
   backButton: { width: 32 },
   headerTitle: { fontSize: 20, fontWeight: '600', color: '#fff', textAlign: 'center' },
-  scrollContent: { paddingBottom: 100 },
+  content: { flex: 1 },
   accountSection: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 24 },
   accountCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#121212', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#282828' },
   avatarContainer: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#1db954', alignItems: 'center', justifyContent: 'center' },
@@ -120,10 +138,9 @@ const styles = StyleSheet.create({
   logoutButton: { padding: 8 },
   settingsGrid: { paddingHorizontal: 20, gap: 12 },
   settingCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#121212', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#282828' },
+  disabledCard: { opacity: 0.6 },
   iconContainer: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 16 },
   cardContent: { flex: 1 },
   cardTitle: { fontSize: 16, fontWeight: '600', color: '#fff', marginBottom: 2 },
   cardSubtitle: { fontSize: 14, color: '#aaa' },
-  updateButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#121212', marginHorizontal: 20, marginTop: 24, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#1db954' },
-  updateButtonText: { fontSize: 16, fontWeight: '600', color: '#1db954', marginLeft: 8 },
 });

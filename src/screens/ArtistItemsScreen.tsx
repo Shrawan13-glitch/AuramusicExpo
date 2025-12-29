@@ -41,6 +41,37 @@ export default function ArtistItemsScreen({ route, navigation }: any) {
     setLoading(false);
   };
 
+  const renderItem = useCallback(({ item }: any) => {
+    if (isSongList) {
+      return <SongItem item={item} onPress={() => playSong(item)} />;
+    }
+
+    return (
+      <GridItem
+        item={item}
+        onPress={() => {
+          if (item.type === 'album') {
+            navigation.navigate('Album', { albumId: item.id });
+          } else if (item.type === 'playlist') {
+            navigation.navigate('Playlist', { playlistId: item.id });
+          } else if (item.type === 'artist') {
+            navigation.navigate('Artist', { artistId: item.id });
+          } else if (item.type === 'video' || item.type === 'song') {
+            playSong(item);
+          }
+        }}
+      />
+    );
+  }, [isSongList, playSong, navigation]);
+
+  const keyExtractor = useCallback((item: any, index: number) => `${item.id}-${index}`, []);
+
+  const getItemLayout = useCallback((data: any, index: number) => ({
+    length: isSongList ? 64 : 200,
+    offset: (isSongList ? 64 : 200) * index,
+    index,
+  }), [isSongList]);
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -57,7 +88,7 @@ export default function ArtistItemsScreen({ route, navigation }: any) {
     );
   }
 
-  const isSongList = data.items[0]?.type === 'song';
+  const isSongList = data.items[0]?.type === 'song' && data.title?.toLowerCase().includes('song');
 
   return (
     <View style={styles.container}>

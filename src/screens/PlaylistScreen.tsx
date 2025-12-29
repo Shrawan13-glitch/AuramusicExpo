@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { View, Text, Image, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,42 @@ import { usePlayer } from '../store/PlayerContext';
 import { useLibrary } from '../store/LibraryContext';
 import SongOptionsModal from '../components/SongOptionsModal';
 import { useSongOptions } from '../hooks/useSongOptions';
+
+const ITEM_HEIGHT = 72;
+
+const SongItem = React.memo(({ item, index, onPress, onLongPress, onMenuPress }: any) => (
+  <TouchableOpacity style={styles.songItem} onPress={onPress} onLongPress={onLongPress}>
+    <Image source={{ uri: item.thumbnailUrl }} style={styles.thumbnail} />
+    <View style={styles.songInfo}>
+      <Text style={styles.songTitle} numberOfLines={1}>{item.title}</Text>
+      <Text style={styles.songArtist} numberOfLines={1}>
+        {item.artists?.map((a: any) => a.name).join(', ')}
+      </Text>
+    </View>
+    <TouchableOpacity style={styles.menuButton} onPress={onMenuPress}>
+      <Ionicons name="ellipsis-vertical" size={20} color="#666" />
+    </TouchableOpacity>
+  </TouchableOpacity>
+));
+
+const PlaylistHeader = React.memo(({ data, onPlay, onShuffle }: any) => (
+  <View style={styles.playlistHeader}>
+    <Image source={{ uri: data.playlist.thumbnail }} style={styles.playlistArt} />
+    <Text style={styles.playlistTitle}>{data.playlist.title}</Text>
+    <Text style={styles.playlistInfo}>{data.playlist.author} • {data.playlist.songCount}</Text>
+    
+    <View style={styles.buttonRow}>
+      <TouchableOpacity style={styles.playButton} onPress={onPlay}>
+        <Ionicons name="play" size={20} color="#000" />
+        <Text style={styles.playButtonText}>Play</Text>
+      </TouchableOpacity>
+      
+      <TouchableOpacity style={styles.shuffleButton} onPress={onShuffle}>
+        <Ionicons name="shuffle" size={20} color="#fff" />
+      </TouchableOpacity>
+    </View>
+  </View>
+));
 
 export default function PlaylistScreen({ route, navigation }: any) {
   const { playlistId, videoId } = route.params;
@@ -21,6 +57,48 @@ export default function PlaylistScreen({ route, navigation }: any) {
   useEffect(() => {
     loadPlaylist();
   }, [playlistId, playlists]);
+
+  const renderItem = useCallback(({ item, index }: any) => (
+    <SongItem
+      item={item}
+      index={index}
+      onPress={() => {
+        const queue = data.songs.slice(index + 1);
+        playSong(item, queue, false);
+      }}
+      onLongPress={() => showOptions(item)}
+      onMenuPress={() => showOptions(item)}
+    />
+  ), [data?.songs, playSong, showOptions]);
+
+  const keyExtractor = useCallback((item: any, index: number) => `${item.id}-${index}`, []);
+
+  const getItemLayout = useCallback((data: any, index: number) => ({
+    length: ITEM_HEIGHT,
+    offset: ITEM_HEIGHT * index,
+    index,
+  }), []);
+
+  const headerComponent = useMemo(() => data ? (
+    <PlaylistHeader
+      data={data}
+      onPlay={() => {
+        if (data.songs.length > 0) {
+          const queue = data.songs.slice(1);
+          playSong(data.songs[0], queue, false);
+        }
+      }}
+      onShuffle={() => {
+        if (data.songs.length > 0) {
+          const shuffled = [...data.songs].sort(() => Math.random() - 0.5);
+          const queue = shuffled.slice(1);
+          playSong(shuffled[0], queue, false);
+        }
+      }}
+    />
+  ) : null, [data, playSong]);
+
+
 
   const loadPlaylist = async () => {
     setLoading(true);
@@ -161,78 +239,21 @@ export default function PlaylistScreen({ route, navigation }: any) {
 
       <Animated.FlatList
         data={data.songs}
-        keyExtractor={(item, index) => `${item.id}-${index}`}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        getItemLayout={getItemLayout}
+        ListHeaderComponent={headerComponent}
         contentContainerStyle={{ paddingBottom: 80, paddingTop: 82 }}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
           { useNativeDriver: true }
         )}
         scrollEventThrottle={16}
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={10}
-        windowSize={10}
-        initialNumToRender={10}
-        getItemLayout={(data, index) => ({
-          length: 72,
-          offset: 72 * index,
-          index,
-        })}
-        ListHeaderComponent={
-          <View style={styles.playlistHeader}>
-            <Image source={{ uri: data.playlist.thumbnail }} style={styles.playlistArt} />
-            <Text style={styles.playlistTitle}>{data.playlist.title}</Text>
-            <Text style={styles.playlistInfo}>{data.playlist.author} • {data.playlist.songCount}</Text>
-            
-            <View style={styles.buttonRow}>
-              <TouchableOpacity 
-                style={styles.playButton}
-                onPress={() => {
-                  if (data.songs.length > 0) {
-                    const queue = data.songs.slice(1);
-                    playSong(data.songs[0], queue, false);
-                  }
-                }}
-              >
-                <Ionicons name="play" size={20} color="#000" />
-                <Text style={styles.playButtonText}>Play</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.shuffleButton}
-                onPress={() => {
-                  if (data.songs.length > 0) {
-                    const shuffled = [...data.songs].sort(() => Math.random() - 0.5);
-                    const queue = shuffled.slice(1);
-                    playSong(shuffled[0], queue, false);
-                  }
-                }}
-              >
-                <Ionicons name="shuffle" size={20} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        }
-        renderItem={({ item, index }) => (
-          <TouchableOpacity
-            style={styles.songItem}
-            onPress={() => {
-              const queue = data.songs.slice(index + 1);
-              playSong(item, queue, false);
-            }}
-            onLongPress={() => showOptions(item)}
-          >
-            <Image source={{ uri: item.thumbnailUrl }} style={styles.thumbnail} />
-            <View style={styles.songInfo}>
-              <Text style={styles.songTitle} numberOfLines={1}>{item.title}</Text>
-              <Text style={styles.songArtist} numberOfLines={1}>
-                {item.artists?.map((a: any) => a.name).join(', ')}
-              </Text>
-            </View>
-            <TouchableOpacity style={styles.menuButton} onPress={() => showOptions(item)}>
-              <Ionicons name="ellipsis-vertical" size={20} color="#666" />
-            </TouchableOpacity>
-          </TouchableOpacity>
-        )}
+        removeClippedSubviews
+        maxToRenderPerBatch={6}
+        windowSize={6}
+        initialNumToRender={8}
+        updateCellsBatchingPeriod={50}
       />
       
       <SongOptionsModal

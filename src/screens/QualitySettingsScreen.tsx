@@ -1,8 +1,29 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const QualityOption = React.memo(({ option, isSelected, onPress }: any) => (
+  <TouchableOpacity
+    style={[styles.optionCard, isSelected && styles.optionCardActive]}
+    onPress={onPress}
+    activeOpacity={0.7}
+  >
+    <View style={styles.optionContent}>
+      <View style={styles.optionHeader}>
+        <Text style={[styles.optionTitle, isSelected && styles.optionTitleActive]}>
+          {option.label}
+        </Text>
+        {isSelected && (
+          <Ionicons name="checkmark-circle" size={24} color="#1db954" />
+        )}
+      </View>
+      <Text style={styles.optionSubtitle}>{option.subtitle}</Text>
+      <Text style={styles.optionSize}>{option.size}</Text>
+    </View>
+  </TouchableOpacity>
+));
 
 export default function QualitySettingsScreen({ navigation }: any) {
   const [selectedQuality, setSelectedQuality] = useState('low');
@@ -20,20 +41,30 @@ export default function QualitySettingsScreen({ navigation }: any) {
     }
   };
 
-  const saveQuality = async (quality: string) => {
+  const qualityOptions = useMemo(() => [
+    { key: 'low', label: 'Low Quality', subtitle: '128 kbps • Fastest downloads', size: '~1-2 MB per song' },
+    { key: 'medium', label: 'Medium Quality', subtitle: '192 kbps • Good quality', size: '~2-4 MB per song' },
+    { key: 'high', label: 'High Quality', subtitle: '320 kbps • Best quality', size: '~4-6 MB per song' }
+  ], []);
+
+  const saveQuality = useCallback(async (quality: string) => {
     try {
       await AsyncStorage.setItem('downloadQuality', quality);
       setSelectedQuality(quality);
     } catch (error) {
       // Error saving quality handled silently
     }
-  };
+  }, []);
 
-  const qualityOptions = [
-    { key: 'low', label: 'Low Quality', subtitle: '128 kbps • Fastest downloads', size: '~1-2 MB per song' },
-    { key: 'medium', label: 'Medium Quality', subtitle: '192 kbps • Good quality', size: '~2-4 MB per song' },
-    { key: 'high', label: 'High Quality', subtitle: '320 kbps • Best quality', size: '~4-6 MB per song' }
-  ];
+  const renderItem = useCallback(({ item }: any) => (
+    <QualityOption
+      option={item}
+      isSelected={selectedQuality === item.key}
+      onPress={() => saveQuality(item.key)}
+    />
+  ), [selectedQuality, saveQuality]);
+
+  const keyExtractor = useCallback((item: any) => item.key, []);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -45,35 +76,19 @@ export default function QualitySettingsScreen({ navigation }: any) {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <View style={styles.content}>
         <Text style={styles.description}>
           Choose your preferred download quality. Higher quality means larger file sizes and longer download times.
         </Text>
 
-        <View style={styles.optionsContainer}>
-          {qualityOptions.map((option) => (
-            <TouchableOpacity
-              key={option.key}
-              style={[styles.optionCard, selectedQuality === option.key && styles.optionCardActive]}
-              onPress={() => saveQuality(option.key)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.optionContent}>
-                <View style={styles.optionHeader}>
-                  <Text style={[styles.optionTitle, selectedQuality === option.key && styles.optionTitleActive]}>
-                    {option.label}
-                  </Text>
-                  {selectedQuality === option.key && (
-                    <Ionicons name="checkmark-circle" size={24} color="#1db954" />
-                  )}
-                </View>
-                <Text style={styles.optionSubtitle}>{option.subtitle}</Text>
-                <Text style={styles.optionSize}>{option.size}</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </ScrollView>
+        <FlatList
+          data={qualityOptions}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          contentContainerStyle={styles.optionsContainer}
+          showsVerticalScrollIndicator={false}
+        />
+      </View>
     </SafeAreaView>
   );
 }
@@ -83,9 +98,9 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16 },
   backButton: { padding: 4 },
   headerTitle: { fontSize: 20, fontWeight: '600', color: '#fff', flex: 1, textAlign: 'center' },
-  scrollContent: { paddingHorizontal: 20, paddingBottom: 100 },
+  content: { flex: 1, paddingHorizontal: 20 },
   description: { fontSize: 16, color: '#aaa', lineHeight: 22, marginBottom: 24 },
-  optionsContainer: { gap: 12 },
+  optionsContainer: { gap: 12, paddingBottom: 100 },
   optionCard: { 
     backgroundColor: '#121212', 
     borderRadius: 16, 

@@ -5,6 +5,46 @@ import { Ionicons } from '@expo/vector-icons';
 import { InnerTube } from '../api/innertube';
 import { usePlayer } from '../store/PlayerContext';
 
+const ITEM_HEIGHT = 60;
+
+const SongItem = React.memo(({ item, index, onPress }: any) => (
+  <TouchableOpacity style={styles.songItem} onPress={onPress}>
+    <Text style={styles.trackNumber}>{index + 1}</Text>
+    <View style={styles.songInfo}>
+      <Text style={styles.songTitle} numberOfLines={1}>{item.title}</Text>
+      <Text style={styles.songArtist} numberOfLines={1}>
+        {item.artists?.map((a: any) => a.name).join(', ')}
+      </Text>
+    </View>
+    <Ionicons name="ellipsis-vertical" size={20} color="#666" />
+  </TouchableOpacity>
+));
+
+const AlbumHeader = React.memo(({ data, onPlay, onShuffle }: any) => (
+  <View style={styles.albumHeader}>
+    {data.album.thumbnail ? (
+      <Image source={{ uri: data.album.thumbnail }} style={styles.albumArt} />
+    ) : (
+      <View style={[styles.albumArt, { backgroundColor: '#333' }]} />
+    )}
+    <Text style={styles.albumType}>{data.album.type || 'Album'}</Text>
+    <Text style={styles.albumTitle}>{data.album.title || 'Unknown Album'}</Text>
+    <Text style={styles.albumArtist}>{data.album.artist || 'Unknown Artist'}</Text>
+    <Text style={styles.albumYear}>{data.album.year || ''} {data.album.year && '•'} {data.songs?.length || 0} songs</Text>
+    
+    <View style={styles.buttonRow}>
+      <TouchableOpacity style={styles.playButton} onPress={onPlay}>
+        <Ionicons name="play" size={24} color="#000" />
+        <Text style={styles.playButtonText}>Play</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.shuffleButton} onPress={onShuffle}>
+        <Ionicons name="shuffle" size={24} color="#fff" />
+        <Text style={styles.shuffleButtonText}>Shuffle</Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+));
+
 export default function AlbumScreen({ route, navigation }: any) {
   const { albumId } = route.params;
   const [data, setData] = useState<any>(null);
@@ -27,24 +67,43 @@ export default function AlbumScreen({ route, navigation }: any) {
     }
   }, [albumId]);
 
-  const renderSongItem = useCallback(({ item, index }) => (
-    <TouchableOpacity
-      style={styles.songItem}
+  const renderSongItem = useCallback(({ item, index }: any) => (
+    <SongItem
+      item={item}
+      index={index}
       onPress={() => {
         const queue = data.songs.slice(index + 1);
         playSong(item, queue, false);
       }}
-    >
-      <Text style={styles.trackNumber}>{index + 1}</Text>
-      <View style={styles.songInfo}>
-        <Text style={styles.songTitle} numberOfLines={1}>{item.title}</Text>
-        <Text style={styles.songArtist} numberOfLines={1}>
-          {item.artists?.map((a: any) => a.name).join(', ')}
-        </Text>
-      </View>
-      <Ionicons name="ellipsis-vertical" size={20} color="#666" />
-    </TouchableOpacity>
+    />
   ), [data?.songs, playSong]);
+
+  const keyExtractor = useCallback((item: any, index: number) => `${item.id}-${index}`, []);
+
+  const getItemLayout = useCallback((data: any, index: number) => ({
+    length: ITEM_HEIGHT,
+    offset: ITEM_HEIGHT * index,
+    index,
+  }), []);
+
+  const headerComponent = useMemo(() => (
+    <AlbumHeader
+      data={data}
+      onPlay={() => {
+        if (data.songs.length > 0) {
+          const queue = data.songs.slice(1);
+          playSong(data.songs[0], queue, false);
+        }
+      }}
+      onShuffle={() => {
+        if (data.songs.length > 0) {
+          const shuffled = [...data.songs].sort(() => Math.random() - 0.5);
+          const queue = shuffled.slice(1);
+          playSong(shuffled[0], queue, false);
+        }
+      }}
+    />
+  ), [data, playSong]);
 
   if (loading) {
     return (
@@ -74,55 +133,16 @@ export default function AlbumScreen({ route, navigation }: any) {
 
       <FlatList
         data={data.songs}
-        keyExtractor={(item, index) => `${item.id}-${index}`}
-        contentContainerStyle={{ paddingBottom: 80 }}
-        ListHeaderComponent={
-          <View style={styles.albumHeader}>
-            {data.album.thumbnail ? (
-              <Image source={{ uri: data.album.thumbnail }} style={styles.albumArt} />
-            ) : (
-              <View style={[styles.albumArt, { backgroundColor: '#333' }]} />
-            )}
-            <Text style={styles.albumType}>{data.album.type || 'Album'}</Text>
-            <Text style={styles.albumTitle}>{data.album.title || 'Unknown Album'}</Text>
-            <Text style={styles.albumArtist}>{data.album.artist || 'Unknown Artist'}</Text>
-            <Text style={styles.albumYear}>{data.album.year || ''} {data.album.year && '•'} {data.songs?.length || 0} songs</Text>
-            
-            <View style={styles.buttonRow}>
-              <TouchableOpacity 
-                style={styles.playButton}
-                onPress={() => {
-                  if (data.songs.length > 0) {
-                    const queue = data.songs.slice(1);
-                    playSong(data.songs[0], queue, false);
-                  }
-                }}
-              >
-                <Ionicons name="play" size={24} color="#000" />
-                <Text style={styles.playButtonText}>Play</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.shuffleButton}
-                onPress={() => {
-                  if (data.songs.length > 0) {
-                    const shuffled = [...data.songs].sort(() => Math.random() - 0.5);
-                    const queue = shuffled.slice(1);
-                    playSong(shuffled[0], queue, false);
-                  }
-                }}
-              >
-                <Ionicons name="shuffle" size={24} color="#fff" />
-                <Text style={styles.shuffleButtonText}>Shuffle</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        }
+        keyExtractor={keyExtractor}
         renderItem={renderSongItem}
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={15}
-        windowSize={10}
-        initialNumToRender={20}
-        getItemLayout={(data, index) => ({ length: 60, offset: 60 * index, index })}
+        getItemLayout={getItemLayout}
+        ListHeaderComponent={headerComponent}
+        contentContainerStyle={{ paddingBottom: 80 }}
+        removeClippedSubviews
+        maxToRenderPerBatch={8}
+        windowSize={8}
+        initialNumToRender={12}
+        updateCellsBatchingPeriod={50}
       />
     </SafeAreaView>
   );

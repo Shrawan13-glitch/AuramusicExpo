@@ -27,6 +27,27 @@ export default function BrowseScreen({ route, navigation }: any) {
     setLoading(false);
   };
 
+  const renderItem = useCallback(({ item }: any) => (
+    <GridItem
+      item={item}
+      onPress={() => {
+        if (item.type === 'playlist') {
+          navigation.navigate('Playlist', { playlistId: item.id });
+        } else if (item.type === 'song') {
+          playSong(item);
+        }
+      }}
+    />
+  ), [navigation, playSong]);
+
+  const keyExtractor = useCallback((item: any, index: number) => `${item.id}-${index}`, []);
+
+  const getItemLayout = useCallback((data: any, index: number) => ({
+    length: 200,
+    offset: 200 * index,
+    index,
+  }), []);
+
   if (loading) {
     return (
       <View style={styles.container}>
