@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,6 +7,21 @@ import { usePlayer } from '../store/PlayerContext';
 import { useAuth } from '../store/AuthContext';
 import SongOptionsModal from '../components/SongOptionsModal';
 import { useSongOptions } from '../hooks/useSongOptions';
+
+const SongItem = React.memo(({ item, index, onPress, onLongPress, onMenuPress }: any) => (
+  <TouchableOpacity style={styles.songItem} onPress={onPress} onLongPress={onLongPress}>
+    <Image source={{ uri: item.thumbnailUrl }} style={styles.thumbnail} />
+    <View style={styles.songInfo}>
+      <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
+      <Text style={styles.artist} numberOfLines={1}>
+        {item.artists?.map((a: any) => a.name).join(', ') || (item.type === 'playlist' ? 'Playlist' : '')}
+      </Text>
+    </View>
+    <TouchableOpacity style={styles.menuButton} onPress={onMenuPress}>
+      <Ionicons name="ellipsis-vertical" size={20} color="#666" />
+    </TouchableOpacity>
+  </TouchableOpacity>
+));
 
 export default function LikedSongsScreen({ navigation }: any) {
   const { likedSongs, syncLikedSongs } = useLibrary();
@@ -21,6 +36,31 @@ export default function LikedSongsScreen({ navigation }: any) {
     await syncLikedSongs();
     setSyncing(false);
   };
+
+  const renderItem = useCallback(({ item, index }: any) => (
+    <SongItem
+      item={item}
+      index={index}
+      onPress={() => {
+        if (item.type === 'playlist') {
+          navigation.navigate('Playlist', { playlistId: item.id });
+        } else {
+          const queue = likedSongs.slice(index + 1).filter((s: any) => s.type !== 'playlist');
+          playSong(item, queue, false);
+        }
+      }}
+      onLongPress={() => showOptions(item)}
+      onMenuPress={() => showOptions(item)}
+    />
+  ), [likedSongs, navigation, playSong, showOptions]);
+
+  const keyExtractor = useCallback((item: any, index: number) => `${item.id}-${index}`, []);
+
+  const getItemLayout = useCallback((data: any, index: number) => ({
+    length: 80,
+    offset: 80 * index,
+    index,
+  }), []);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -42,7 +82,13 @@ export default function LikedSongsScreen({ navigation }: any) {
 
       <FlatList
         data={likedSongs}
-        keyExtractor={(item, index) => `${item.id}-${index}`}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        getItemLayout={getItemLayout}
+        removeClippedSubviews
+        maxToRenderPerBatch={10}
+        windowSize={10}
+        initialNumToRender={15}
         contentContainerStyle={{ paddingBottom: 80 }}
         ListEmptyComponent={
           <View style={styles.empty}>
@@ -55,31 +101,6 @@ export default function LikedSongsScreen({ navigation }: any) {
             )}
           </View>
         }
-        renderItem={({ item, index }) => (
-          <TouchableOpacity
-            style={styles.songItem}
-            onPress={() => {
-              if (item.type === 'playlist') {
-                navigation.navigate('Playlist', { playlistId: item.id });
-              } else {
-                const queue = likedSongs.slice(index + 1).filter((s: any) => s.type !== 'playlist');
-                playSong(item, queue, false);
-              }
-            }}
-            onLongPress={() => showOptions(item)}
-          >
-            <Image source={{ uri: item.thumbnailUrl }} style={styles.thumbnail} />
-            <View style={styles.songInfo}>
-              <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
-              <Text style={styles.artist} numberOfLines={1}>
-                {item.artists?.map((a: any) => a.name).join(', ') || (item.type === 'playlist' ? 'Playlist' : '')}
-              </Text>
-            </View>
-            <TouchableOpacity style={styles.menuButton} onPress={() => showOptions(item)}>
-              <Ionicons name="ellipsis-vertical" size={20} color="#666" />
-            </TouchableOpacity>
-          </TouchableOpacity>
-        )}
       />
       
       <SongOptionsModal

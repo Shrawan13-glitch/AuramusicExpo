@@ -1,9 +1,53 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, RefreshControl, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import TabHeader from '../components/TabHeader';
 import MessagesAPI, { Message } from '../api/messages';
+
+const MessageItem = React.memo(({ message, isRead, onPress }: any) => {
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case 'announcement': return 'megaphone';
+      case 'update': return 'refresh-circle';
+      case 'maintenance': return 'construct';
+      case 'alert': return 'warning';
+      default: return 'mail';
+    }
+  };
+
+  const getTypeColor = (type: string) => {
+    switch (type) {
+      case 'announcement': return '#1db954';
+      case 'update': return '#3b82f6';
+      case 'maintenance': return '#f59e0b';
+      case 'alert': return '#ef4444';
+      default: return '#666';
+    }
+  };
+
+  const typeColor = getTypeColor(message.type);
+  
+  return (
+    <TouchableOpacity 
+      style={[styles.messageCard, !isRead && styles.unreadCard]} 
+      onPress={onPress}
+    >
+      <View style={styles.messageHeader}>
+        <View style={[styles.typeIcon, { backgroundColor: typeColor + '20' }]}>
+          <Ionicons name={getTypeIcon(message.type)} size={20} color={typeColor} />
+        </View>
+        <View style={styles.messageInfo}>
+          <Text style={[styles.messageTitle, !isRead && styles.unreadTitle]}>
+            {message.title}
+          </Text>
+          <Text style={styles.messageDate}>{message.date}</Text>
+        </View>
+        {!isRead && <View style={styles.unreadDot} />}
+      </View>
+    </TouchableOpacity>
+  );
+});
 
 export default function MessagesScreen({ navigation }: any) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -38,31 +82,27 @@ export default function MessagesScreen({ navigation }: any) {
     loadMessages();
   };
 
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case 'announcement': return 'megaphone';
-      case 'update': return 'refresh-circle';
-      case 'maintenance': return 'construct';
-      case 'alert': return 'warning';
-      default: return 'mail';
-    }
-  };
-
-  const getTypeColor = (type: string) => {
-    switch (type) {
-      case 'announcement': return '#1db954';
-      case 'update': return '#3b82f6';
-      case 'maintenance': return '#f59e0b';
-      case 'alert': return '#ef4444';
-      default: return '#666';
-    }
-  };
-
-  const handleMessagePress = async (message: Message) => {
+  const handleMessagePress = useCallback(async (message: Message) => {
     await MessagesAPI.markAsRead(message.id);
     setReadMessages(prev => [...prev, message.id]);
     navigation.navigate('MessageDetail', { message });
-  };
+  }, [navigation]);
+
+  const renderItem = useCallback(({ item }: { item: Message }) => (
+    <MessageItem
+      message={item}
+      isRead={readMessages.includes(item.id)}
+      onPress={() => handleMessagePress(item)}
+    />
+  ), [readMessages, handleMessagePress]);
+
+  const keyExtractor = useCallback((item: Message) => item.id, []);
+
+  const getItemLayout = useCallback((data: any, index: number) => ({
+    length: 88,
+    offset: 88 * index,
+    index,
+  }), []);
 
   if (loading) {
     return (
@@ -79,18 +119,20 @@ export default function MessagesScreen({ navigation }: any) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <TabHeader title="Messages" navigation={navigation} />
-        <ScrollView 
-          style={styles.content}
+        <FlatList
+          data={[]}
+          renderItem={() => null}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
-        >
-          <View style={styles.placeholder}>
-            <Ionicons name="mail-outline" size={64} color="#666" />
-            <Text style={styles.placeholderTitle}>No Messages</Text>
-            <Text style={styles.placeholderText}>
-              Check back later for updates and announcements from the developer.
-            </Text>
-          </View>
-        </ScrollView>
+          ListEmptyComponent={
+            <View style={styles.placeholder}>
+              <Ionicons name="mail-outline" size={64} color="#666" />
+              <Text style={styles.placeholderTitle}>No Messages</Text>
+              <Text style={styles.placeholderText}>
+                Check back later for updates and announcements from the developer.
+              </Text>
+            </View>
+          }
+        />
       </SafeAreaView>
     );
   }
@@ -98,36 +140,17 @@ export default function MessagesScreen({ navigation }: any) {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <TabHeader title="Messages" navigation={navigation} />
-      <ScrollView 
-        style={styles.content}
+      <FlatList
+        data={messages}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        getItemLayout={getItemLayout}
+        removeClippedSubviews
+        maxToRenderPerBatch={10}
+        windowSize={10}
+        initialNumToRender={15}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
-      >
-        {messages.map((message) => {
-          const isRead = readMessages.includes(message.id);
-          const typeColor = getTypeColor(message.type);
-          
-          return (
-            <TouchableOpacity 
-              key={message.id} 
-              style={[styles.messageCard, !isRead && styles.unreadCard]} 
-              onPress={() => handleMessagePress(message)}
-            >
-              <View style={styles.messageHeader}>
-                <View style={[styles.typeIcon, { backgroundColor: typeColor + '20' }]}>
-                  <Ionicons name={getTypeIcon(message.type)} size={20} color={typeColor} />
-                </View>
-                <View style={styles.messageInfo}>
-                  <Text style={[styles.messageTitle, !isRead && styles.unreadTitle]}>
-                    {message.title}
-                  </Text>
-                  <Text style={styles.messageDate}>{message.date}</Text>
-                </View>
-                {!isRead && <View style={styles.unreadDot} />}
-              </View>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      />
     </SafeAreaView>
   );
 }

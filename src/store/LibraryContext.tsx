@@ -93,13 +93,13 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const ytmLikedSongs = ytmLibrary.items?.filter((item: any) => item.type === 'song') || [];
       
       // Sync local songs to YouTube Music first
-      for (const localSong of localLikedSongs) {
+      await Promise.all(localLikedSongs.map(async (localSong) => {
         try {
           await InnerTube.likeSong(localSong.id, true);
         } catch (error) {
           // Continue if individual song sync fails
         }
-      }
+      }));
       
       // Create a map for faster lookup
       const localLikedMap = new Map(localLikedSongs.map(song => [song.id, song]));
@@ -110,17 +110,17 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const processedIds = new Set<string>();
       
       // Add all YTM liked songs first
-      for (const ytmSong of ytmLikedSongs) {
+      ytmLikedSongs.forEach((ytmSong: any) => {
         mergedSongs.push(ytmSong);
         processedIds.add(ytmSong.id);
-      }
+      });
       
       // Add local songs that aren't in YTM
-      for (const localSong of localLikedSongs) {
+      localLikedSongs.forEach((localSong: Song) => {
         if (!processedIds.has(localSong.id)) {
           mergedSongs.push(localSong);
         }
-      }
+      });
       
       // Update state and storage
       setLikedSongs(mergedSongs);
@@ -297,14 +297,18 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const localOnlyPlaylists = localPlaylistsData.filter(p => p.isLocal);
 
       // Sync local playlists to YouTube Music
-      for (const localPlaylist of localOnlyPlaylists) {
+      await Promise.all(localOnlyPlaylists.map(async (localPlaylist) => {
         try {
           const remoteId = await InnerTube.createPlaylist(localPlaylist.title, localPlaylist.description || '');
           if (remoteId) {
             // Add all songs to the remote playlist
-            for (const song of localPlaylist.songs || []) {
-              await InnerTube.addToPlaylist(remoteId, song.id);
-            }
+            await Promise.all((localPlaylist.songs || []).map(async (song: Song) => {
+              try {
+                await InnerTube.addToPlaylist(remoteId, song.id);
+              } catch (error) {
+                // Continue if individual song fails
+              }
+            }));
             // Update local playlist to point to remote
             localPlaylist.id = remoteId;
             localPlaylist.isLocal = false;
@@ -312,7 +316,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
         } catch (error) {
           // Keep as local if sync fails
         }
-      }
+      }));
 
       // Get YouTube Music playlists
       const [libraryData, artistsData] = await Promise.all([

@@ -1,8 +1,28 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { InnerTube } from '../api/innertube';
 import { usePlayer } from '../store/PlayerContext';
+
+const SongItem = React.memo(({ item, onPress }: any) => (
+  <TouchableOpacity style={styles.songItem} onPress={onPress}>
+    <Image source={{ uri: item.thumbnailUrl }} style={styles.songThumbnail} />
+    <View style={styles.songInfo}>
+      <Text style={styles.songTitle} numberOfLines={1}>{item.title}</Text>
+      <Text style={styles.songArtist} numberOfLines={1}>
+        {item.artists?.map((a: any) => a.name).join(', ')}
+      </Text>
+    </View>
+  </TouchableOpacity>
+));
+
+const GridItem = React.memo(({ item, onPress }: any) => (
+  <TouchableOpacity style={styles.gridItem} onPress={onPress}>
+    <Image source={{ uri: item.thumbnailUrl }} style={[styles.gridThumbnail, item.type === 'artist' && { borderRadius: 70 }]} />
+    <Text style={styles.gridTitle} numberOfLines={2}>{item.title || item.name}</Text>
+    {item.subtitle && <Text style={styles.gridSubtitle} numberOfLines={1}>{item.subtitle}</Text>}
+  </TouchableOpacity>
+));
 
 export default function ArtistItemsScreen({ route, navigation }: any) {
   const { browseId, params } = route.params;
@@ -50,46 +70,16 @@ export default function ArtistItemsScreen({ route, navigation }: any) {
 
       <FlatList
         data={data.items}
-        keyExtractor={(item, index) => `${item.id}-${index}`}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        getItemLayout={getItemLayout}
         numColumns={isSongList ? 1 : 2}
         key={isSongList ? 'list' : 'grid'}
+        removeClippedSubviews
+        maxToRenderPerBatch={8}
+        windowSize={8}
+        initialNumToRender={12}
         contentContainerStyle={{ paddingBottom: 80, paddingTop: 16 }}
-        renderItem={({ item }) => {
-          if (isSongList) {
-            return (
-              <TouchableOpacity style={styles.songItem} onPress={() => playSong(item)}>
-                <Image source={{ uri: item.thumbnailUrl }} style={styles.songThumbnail} />
-                <View style={styles.songInfo}>
-                  <Text style={styles.songTitle} numberOfLines={1}>{item.title}</Text>
-                  <Text style={styles.songArtist} numberOfLines={1}>
-                    {item.artists?.map((a: any) => a.name).join(', ')}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            );
-          }
-
-          return (
-            <TouchableOpacity
-              style={styles.gridItem}
-              onPress={() => {
-                if (item.type === 'album') {
-                  navigation.navigate('Album', { albumId: item.id });
-                } else if (item.type === 'playlist') {
-                  navigation.navigate('Playlist', { playlistId: item.id });
-                } else if (item.type === 'artist') {
-                  navigation.navigate('Artist', { artistId: item.id });
-                } else if (item.type === 'video') {
-                  playSong(item);
-                }
-              }}
-            >
-              <Image source={{ uri: item.thumbnailUrl }} style={[styles.gridThumbnail, item.type === 'artist' && { borderRadius: 70 }]} />
-              <Text style={styles.gridTitle} numberOfLines={2}>{item.title || item.name}</Text>
-              {item.subtitle && <Text style={styles.gridSubtitle} numberOfLines={1}>{item.subtitle}</Text>}
-            </TouchableOpacity>
-          );
-        }}
       />
     </View>
   );

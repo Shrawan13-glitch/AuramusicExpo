@@ -18,7 +18,6 @@ import BrowseScreen from '../screens/BrowseScreen';
 import RecentlyPlayedScreen from '../screens/RecentlyPlayedScreen';
 import LikedSongsScreen from '../screens/LikedSongsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
-import ThemeSettingsScreen from '../screens/ThemeSettingsScreen';
 import UpdateScreen from '../screens/UpdateScreen';
 import PlayerSettingsScreen from '../screens/PlayerSettingsScreen';
 import AboutScreen from '../screens/AboutScreen';
@@ -220,8 +219,6 @@ export default function AppNavigator() {
         )}
       </Stack.Screen>
       <Stack.Screen name="Settings" component={SettingsScreen} options={{ animationEnabled: false }} />
-
-      <Stack.Screen name="ThemeSettings" component={ThemeSettingsScreen} />
 
       <Stack.Screen name="PlayerSettings" component={PlayerSettingsScreen} options={{ animationEnabled: false }} />
       <Stack.Screen name="About" component={AboutScreen} options={{ animationEnabled: false }} />

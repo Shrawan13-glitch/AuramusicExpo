@@ -1,8 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { InnerTube } from '../api/innertube';
 import { usePlayer } from '../store/PlayerContext';
+
+const GridItem = React.memo(({ item, onPress }: any) => (
+  <TouchableOpacity style={styles.gridItem} onPress={onPress}>
+    <Image source={{ uri: item.thumbnailUrl }} style={styles.gridThumbnail} />
+    <Text style={styles.gridTitle} numberOfLines={2}>{item.title}</Text>
+  </TouchableOpacity>
+));
 
 export default function BrowseScreen({ route, navigation }: any) {
   const { params } = route.params;
@@ -39,24 +46,15 @@ export default function BrowseScreen({ route, navigation }: any) {
 
       <FlatList
         data={data?.items || []}
-        keyExtractor={(item, index) => `${item.id}-${index}`}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        getItemLayout={getItemLayout}
         numColumns={2}
+        removeClippedSubviews
+        maxToRenderPerBatch={6}
+        windowSize={6}
+        initialNumToRender={10}
         contentContainerStyle={{ paddingBottom: 80, paddingTop: 16 }}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.gridItem}
-            onPress={() => {
-              if (item.type === 'playlist') {
-                navigation.navigate('Playlist', { playlistId: item.id });
-              } else if (item.type === 'song') {
-                playSong(item);
-              }
-            }}
-          >
-            <Image source={{ uri: item.thumbnailUrl }} style={styles.gridThumbnail} />
-            <Text style={styles.gridTitle} numberOfLines={2}>{item.title}</Text>
-          </TouchableOpacity>
-        )}
       />
     </View>
   );
