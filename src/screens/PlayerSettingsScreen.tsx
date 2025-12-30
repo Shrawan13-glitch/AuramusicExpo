@@ -1,16 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import SettingsModal from '../components/SettingsModal';
 
 export default function PlayerSettingsScreen({ navigation }: any) {
   const [backgroundStyle, setBackgroundStyle] = useState('blur');
   const [skipDuration, setSkipDuration] = useState(10);
+  const [skipEnabled, setSkipEnabled] = useState(true);
+  const [showSkipModal, setShowSkipModal] = useState(false);
+  const [showBackgroundModal, setShowBackgroundModal] = useState(false);
 
   useEffect(() => {
     loadBackgroundStyle();
     loadSkipDuration();
+    loadSkipEnabled();
   }, []);
 
   const loadSkipDuration = async () => {
@@ -19,6 +24,15 @@ export default function PlayerSettingsScreen({ navigation }: any) {
       if (duration) setSkipDuration(parseInt(duration));
     } catch (error) {
       // Error loading skip duration handled silently
+    }
+  };
+
+  const loadSkipEnabled = async () => {
+    try {
+      const enabled = await AsyncStorage.getItem('skipEnabled');
+      if (enabled !== null) setSkipEnabled(enabled === 'true');
+    } catch (error) {
+      // Error loading skip enabled handled silently
     }
   };
 
@@ -40,6 +54,15 @@ export default function PlayerSettingsScreen({ navigation }: any) {
     }
   };
 
+  const saveSkipEnabled = async (enabled: boolean) => {
+    try {
+      await AsyncStorage.setItem('skipEnabled', enabled.toString());
+      setSkipEnabled(enabled);
+    } catch (error) {
+      // Error saving skip enabled handled silently
+    }
+  };
+
   const saveBackgroundStyle = async (style: string) => {
     try {
       await AsyncStorage.setItem('playerBackgroundStyle', style);
@@ -49,11 +72,16 @@ export default function PlayerSettingsScreen({ navigation }: any) {
     }
   };
 
-  const skipDurationOptions = [5, 10, 15, 30];
-
+  const skipDurationOptions = [
+    { key: '5', label: '5 seconds' },
+    { key: '10', label: '10 seconds' },
+    { key: '15', label: '15 seconds' },
+    { key: '30', label: '30 seconds' }
+  ];
+  
   const backgroundOptions = [
-    { key: 'blur', label: 'Gradient', description: 'Blurred album art with gradient overlay', icon: 'color-palette' },
-    { key: 'image', label: 'Blur', description: 'Album artwork background', icon: 'image' }
+    { key: 'blur', label: 'Gradient', subtitle: 'Blurred album art with gradient' },
+    { key: 'image', label: 'Blur', subtitle: 'Album artwork background' }
   ];
 
   return (
@@ -66,76 +94,61 @@ export default function PlayerSettingsScreen({ navigation }: any) {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Background Style</Text>
-          <Text style={styles.sectionDescription}>Choose how the player background appears</Text>
+          <Text style={styles.sectionHeader}>PLAYBACK</Text>
           
-          <View style={styles.optionsContainer}>
-            {backgroundOptions.map((option) => (
-              <TouchableOpacity
-                key={option.key}
-                style={[styles.optionCard, backgroundStyle === option.key && styles.optionCardActive]}
-                onPress={() => saveBackgroundStyle(option.key)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.optionHeader}>
-                  <View style={[styles.optionIcon, backgroundStyle === option.key && styles.optionIconActive]}>
-                    <Ionicons 
-                      name={option.icon as any} 
-                      size={24} 
-                      color={backgroundStyle === option.key ? '#1db954' : '#666'} 
-                    />
-                  </View>
-                  <View style={styles.optionContent}>
-                    <Text style={[styles.optionTitle, backgroundStyle === option.key && styles.optionTitleActive]}>
-                      {option.label}
-                    </Text>
-                    <Text style={styles.optionDescription}>{option.description}</Text>
-                  </View>
-                  {backgroundStyle === option.key && (
-                    <Ionicons name="checkmark-circle" size={24} color="#1db954" />
-                  )}
-                </View>
-              </TouchableOpacity>
-            ))}
+          <View style={styles.settingItem}>
+            <Text style={styles.settingTitle}>Skip Controls</Text>
+            <Switch
+              value={skipEnabled}
+              onValueChange={saveSkipEnabled}
+              trackColor={{ false: '#333', true: '#1db954' }}
+              thumbColor="#fff"
+            />
           </View>
+          
+          {skipEnabled && (
+            <TouchableOpacity style={styles.settingItem} onPress={() => setShowSkipModal(true)}>
+              <View style={styles.settingContent}>
+                <Text style={styles.settingTitle}>Skip Duration</Text>
+                <Text style={styles.settingSubtitle}>{skipDuration} seconds</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#666" />
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Skip Duration</Text>
-          <Text style={styles.sectionDescription}>Choose how many seconds to skip forward/backward</Text>
+          <Text style={styles.sectionHeader}>APPEARANCE</Text>
           
-          <View style={styles.optionsContainer}>
-            {skipDurationOptions.map((duration) => (
-              <TouchableOpacity
-                key={duration}
-                style={[styles.optionCard, skipDuration === duration && styles.optionCardActive]}
-                onPress={() => saveSkipDuration(duration)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.optionHeader}>
-                  <View style={[styles.optionIcon, skipDuration === duration && styles.optionIconActive]}>
-                    <Ionicons 
-                      name="time" 
-                      size={24} 
-                      color={skipDuration === duration ? '#1db954' : '#666'} 
-                    />
-                  </View>
-                  <View style={styles.optionContent}>
-                    <Text style={[styles.optionTitle, skipDuration === duration && styles.optionTitleActive]}>
-                      {duration} seconds
-                    </Text>
-                  </View>
-                  {skipDuration === duration && (
-                    <Ionicons name="checkmark-circle" size={24} color="#1db954" />
-                  )}
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <TouchableOpacity style={styles.settingItem} onPress={() => setShowBackgroundModal(true)}>
+            <View style={styles.settingContent}>
+              <Text style={styles.settingTitle}>Background Style</Text>
+              <Text style={styles.settingSubtitle}>{backgroundOptions.find(o => o.key === backgroundStyle)?.label}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#666" />
+          </TouchableOpacity>
         </View>
       </ScrollView>
+      
+      <SettingsModal
+        visible={showSkipModal}
+        title="Skip Duration"
+        options={skipDurationOptions}
+        selectedKey={skipDuration.toString()}
+        onSelect={(key) => saveSkipDuration(parseInt(key))}
+        onClose={() => setShowSkipModal(false)}
+      />
+      
+      <SettingsModal
+        visible={showBackgroundModal}
+        title="Background Style"
+        options={backgroundOptions}
+        selectedKey={backgroundStyle}
+        onSelect={saveBackgroundStyle}
+        onClose={() => setShowBackgroundModal(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -145,32 +158,20 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16 },
   backButton: { padding: 4 },
   headerTitle: { fontSize: 20, fontWeight: '600', color: '#fff', flex: 1, textAlign: 'center' },
-  scrollContent: { paddingBottom: 100 },
-  section: { paddingHorizontal: 20, paddingTop: 8 },
-  sectionTitle: { fontSize: 22, fontWeight: '700', color: '#fff', marginBottom: 8 },
-  sectionDescription: { fontSize: 16, color: '#aaa', marginBottom: 24, lineHeight: 22 },
-  optionsContainer: { gap: 12 },
-  optionCard: { 
-    backgroundColor: '#121212', 
-    borderRadius: 16, 
-    borderWidth: 2, 
-    borderColor: '#282828',
-    overflow: 'hidden'
-  },
-  optionCardActive: { borderColor: '#1db954' },
-  optionHeader: { flexDirection: 'row', alignItems: 'center', padding: 20 },
-  optionIcon: { 
-    width: 48, 
-    height: 48, 
-    borderRadius: 12, 
-    backgroundColor: '#1a1a1a', 
+  section: { marginTop: 32 },
+  sectionHeader: { fontSize: 13, fontWeight: '600', color: '#666', paddingHorizontal: 20, marginBottom: 8, letterSpacing: 0.5 },
+  settingItem: { 
+    flexDirection: 'row', 
     alignItems: 'center', 
-    justifyContent: 'center',
-    marginRight: 16
+    justifyContent: 'space-between', 
+    paddingHorizontal: 20, 
+    paddingVertical: 16, 
+    backgroundColor: '#121212',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1a1a1a'
   },
-  optionIconActive: { backgroundColor: '#1db954' + '20' },
-  optionContent: { flex: 1 },
-  optionTitle: { fontSize: 18, fontWeight: '600', color: '#fff', marginBottom: 4 },
-  optionTitleActive: { color: '#fff' },
-  optionDescription: { fontSize: 14, color: '#aaa', lineHeight: 20 },
+  settingContent: { flex: 1 },
+  settingTitle: { fontSize: 16, color: '#fff', fontWeight: '500' },
+  settingSubtitle: { fontSize: 14, color: '#666', marginTop: 2 },
+  scrollContent: { paddingBottom: 100 },
 });

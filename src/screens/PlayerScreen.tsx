@@ -31,10 +31,12 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
   const [backgroundStyle, setBackgroundStyle] = useState('blur');
   const [showSleepTimer, setShowSleepTimer] = useState(false);
   const [skipDuration, setSkipDuration] = useState(10);
+  const [skipEnabled, setSkipEnabled] = useState(true);
 
   useEffect(() => {
     loadBackgroundStyle();
     loadSkipDuration();
+    loadSkipEnabled();
   }, []);
 
   const loadBackgroundStyle = async () => {
@@ -52,6 +54,15 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
       if (duration) setSkipDuration(parseInt(duration));
     } catch (error) {
       // Error loading skip duration handled silently
+    }
+  };
+
+  const loadSkipEnabled = async () => {
+    try {
+      const enabled = await AsyncStorage.getItem('skipEnabled');
+      if (enabled !== null) setSkipEnabled(enabled === 'true');
+    } catch (error) {
+      // Error loading skip enabled handled silently
     }
   };
 
@@ -188,17 +199,21 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
               <Ionicons name="play-skip-back" size={32} color="#fff" />
             </TouchableOpacity>
             
-            <TouchableOpacity onPress={skipBackward} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name="play-back" size={28} color="#fff" />
-            </TouchableOpacity>
+            {skipEnabled && (
+              <TouchableOpacity onPress={skipBackward} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Ionicons name="play-back" size={28} color="#fff" />
+              </TouchableOpacity>
+            )}
             
             <TouchableOpacity onPress={isPlaying ? pause : resume} style={styles.playButton}>
               <Ionicons name={isPlaying ? "pause" : "play"} size={40} color="#000" />
             </TouchableOpacity>
             
-            <TouchableOpacity onPress={skipForward} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name="play-forward" size={28} color="#fff" />
-            </TouchableOpacity>
+            {skipEnabled && (
+              <TouchableOpacity onPress={skipForward} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Ionicons name="play-forward" size={28} color="#fff" />
+              </TouchableOpacity>
+            )}
             
             <TouchableOpacity onPress={skipNext} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}>
               <Ionicons name="play-skip-forward" size={32} color="#fff" />
@@ -321,7 +336,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a2e',
   },
   darkOverlay: {
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: 'rgba(0,0,0,0.65)',
   },
   mediumOverlay: {
     backgroundColor: 'rgba(0,0,0,0.6)',

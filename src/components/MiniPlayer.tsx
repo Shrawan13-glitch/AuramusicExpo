@@ -4,12 +4,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import { usePlayer } from '../store/PlayerContext';
+import { useAnimation } from '../store/AnimationContext';
 import PlayerScreen from '../screens/PlayerScreen';
 import QueueScreen from '../screens/QueueScreen';
 
 const MiniPlayer = React.memo(() => {
   const navigation = useNavigation();
   const { currentSong, isPlaying, pause, resume, position, duration, skipNext, skipPrevious } = usePlayer();
+  const { settings } = useAnimation();
   const [showPlayer, setShowPlayer] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
 
@@ -71,7 +73,13 @@ const MiniPlayer = React.memo(() => {
         </PanGestureHandler>
       </View>
 
-      <Modal visible={showPlayer} animationType="slide" presentationStyle="fullScreen" statusBarTranslucent={true} onRequestClose={() => setShowPlayer(false)}>
+      <Modal 
+        visible={showPlayer} 
+        animationType={settings.enabled ? "slide" : "none"} 
+        presentationStyle="fullScreen" 
+        statusBarTranslucent={true} 
+        onRequestClose={() => setShowPlayer(false)}
+      >
         <PlayerScreen 
           onClose={() => setShowPlayer(false)} 
           onOpenQueue={() => { setShowPlayer(false); setShowQueue(true); }}
@@ -79,7 +87,12 @@ const MiniPlayer = React.memo(() => {
         />
       </Modal>
 
-      <Modal visible={showQueue} animationType="slide" statusBarTranslucent={true} onRequestClose={() => { setShowQueue(false); setShowPlayer(true); }}>
+      <Modal 
+        visible={showQueue} 
+        animationType={settings.enabled ? "slide" : "none"} 
+        statusBarTranslucent={true} 
+        onRequestClose={() => { setShowQueue(false); setShowPlayer(true); }}
+      >
         <QueueScreen onClose={() => { setShowQueue(false); setShowPlayer(true); }} />
       </Modal>
     </>

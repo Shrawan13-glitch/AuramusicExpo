@@ -1,12 +1,15 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { View, Text, Image, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Animated } from 'react-native';
+import { View, Text, Image, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Animated, ImageBackground } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { InnerTube } from '../api/innertube';
 import { usePlayer } from '../store/PlayerContext';
 import { useLibrary } from '../store/LibraryContext';
+import { useDownload } from '../store/DownloadContext';
 import SongOptionsModal from '../components/SongOptionsModal';
+import PlaylistDownloadButton from '../components/PlaylistDownloadButton';
 import { useSongOptions } from '../hooks/useSongOptions';
 
 const ITEM_HEIGHT = 72;
@@ -26,7 +29,7 @@ const SongItem = React.memo(({ item, index, onPress, onLongPress, onMenuPress }:
   </TouchableOpacity>
 ));
 
-const PlaylistHeader = React.memo(({ data, onPlay, onShuffle }: any) => (
+const PlaylistHeader = React.memo(({ data, onPlay, onShuffle, playlistProgress }: any) => (
   <View style={styles.playlistHeader}>
     <Image source={{ uri: data.playlist.thumbnail }} style={styles.playlistArt} />
     <Text style={styles.playlistTitle}>{data.playlist.title}</Text>
@@ -42,6 +45,20 @@ const PlaylistHeader = React.memo(({ data, onPlay, onShuffle }: any) => (
         <Ionicons name="shuffle" size={20} color="#fff" />
       </TouchableOpacity>
     </View>
+    
+    <View style={styles.downloadSection}>
+      <PlaylistDownloadButton playlist={data.playlist} songs={data.songs} />
+      {playlistProgress && (
+        <View style={styles.downloadProgress}>
+          <View style={styles.progressContainer}>
+            <View style={[styles.progressFill, { width: `${playlistProgress.progress * 100}%` }]} />
+          </View>
+          <Text style={styles.downloadText}>
+            {playlistProgress.currentSong} • {playlistProgress.downloadedSongs}/{playlistProgress.totalSongs}
+          </Text>
+        </View>
+      )}
+    </View>
   </View>
 ));
 
@@ -49,10 +66,14 @@ export default function PlaylistScreen({ route, navigation }: any) {
   const { playlistId, videoId } = route.params;
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [showHeaderBg, setShowHeaderBg] = useState(false);
   const { playSong } = usePlayer();
   const { playlists } = useLibrary();
+  const { getPlaylistProgress, getDownloadedPlaylist, isPlaylistDownloaded } = useDownload();
   const { modalVisible, selectedSong, showOptions, hideOptions } = useSongOptions();
   const scrollY = useRef(new Animated.Value(0)).current;
+
+  const playlistProgress = getPlaylistProgress(playlistId);
 
   useEffect(() => {
     loadPlaylist();
@@ -82,6 +103,7 @@ export default function PlaylistScreen({ route, navigation }: any) {
   const headerComponent = useMemo(() => data ? (
     <PlaylistHeader
       data={data}
+      playlistProgress={playlistProgress}
       onPlay={() => {
         if (data.songs.length > 0) {
           const queue = data.songs.slice(1);
@@ -96,14 +118,31 @@ export default function PlaylistScreen({ route, navigation }: any) {
         }
       }}
     />
-  ) : null, [data, playSong]);
+  ) : null, [data, playSong, playlistProgress]);
 
 
 
   const loadPlaylist = async () => {
     setLoading(true);
     
-    // Check if it's a local playlist first
+    // Check if playlist is downloaded first
+    const downloadedPlaylist = getDownloadedPlaylist(playlistId);
+    if (downloadedPlaylist) {
+      setData({
+        playlist: {
+          id: downloadedPlaylist.id,
+          title: downloadedPlaylist.title,
+          author: 'Downloaded',
+          songCount: `${downloadedPlaylist.songs.length} songs`,
+          thumbnail: downloadedPlaylist.thumbnail
+        },
+        songs: downloadedPlaylist.songs
+      });
+      setLoading(false);
+      return;
+    }
+    
+    // Check if it's a local playlist
     const localPlaylist = playlists.find(p => p.id === playlistId && p.isLocal);
     
     if (localPlaylist) {
@@ -121,25 +160,19 @@ export default function PlaylistScreen({ route, navigation }: any) {
       return;
     }
     
-    // Check authentication for remote playlists
-    const cookies = await AsyncStorage.getItem('ytm_cookies');
-    const isAuthenticated = !!cookies;
-    
-    // Load remote playlist (including empty YTM playlists)
+    // Load remote playlist
     try {
       const result = await InnerTube.getPlaylist(playlistId, videoId);
       
       if (result) {
         setData(result);
         
-        // Auto-load more songs if continuation exists
         if (result?.continuation && result?.isMix) {
           loadAllSongs(result.continuation, result.songs, true);
         } else if (result?.continuation && !result?.isMix) {
           loadAllSongs(result.continuation, result.songs, false);
         }
       } else {
-        // Fallback for empty playlists
         const playlistInfo = playlists.find(p => p.id === playlistId);
         
         setData({
@@ -154,7 +187,6 @@ export default function PlaylistScreen({ route, navigation }: any) {
         });
       }
     } catch (error) {
-      // Handle error case
       const playlistInfo = playlists.find(p => p.id === playlistId);
       
       setData({
@@ -214,61 +246,88 @@ export default function PlaylistScreen({ route, navigation }: any) {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <Animated.Text 
-          style={[
-            styles.headerTitle,
-            {
-              opacity: scrollY.interpolate({
-                inputRange: [150, 200],
-                outputRange: [0, 1],
-                extrapolate: 'clamp',
-              }),
-            },
-          ]}
-          numberOfLines={1}
-          ellipsizeMode="tail"
-        >
-          {data?.playlist?.title}
-        </Animated.Text>
-      </View>
-
-      <Animated.FlatList
-        data={data.songs}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        getItemLayout={getItemLayout}
-        ListHeaderComponent={headerComponent}
-        contentContainerStyle={{ paddingBottom: 80, paddingTop: 82 }}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: true }
-        )}
-        scrollEventThrottle={16}
-        removeClippedSubviews
-        maxToRenderPerBatch={6}
-        windowSize={6}
-        initialNumToRender={8}
-        updateCellsBatchingPeriod={50}
-      />
+    <View style={styles.container}>
+      <ImageBackground 
+        source={data?.playlist?.thumbnail ? { uri: data.playlist.thumbnail } : undefined}
+        style={StyleSheet.absoluteFillObject}
+        blurRadius={50}
+      >
+        <LinearGradient
+          colors={data?.playlist?.thumbnail ? 
+            ['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.8)', '#000'] : 
+            ['rgba(29,185,84,0.3)', 'rgba(0,0,0,0.8)', '#000']
+          }
+          locations={[0, 0.4, 0.7]}
+          style={StyleSheet.absoluteFillObject}
+        />
+      </ImageBackground>
       
-      <SongOptionsModal
-        visible={modalVisible}
-        onClose={hideOptions}
-        song={selectedSong}
-        navigation={navigation}
-      />
-    </SafeAreaView>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <Animated.View style={[
+          styles.header,
+          { backgroundColor: showHeaderBg ? 'rgba(0,0,0,0.9)' : 'transparent' }
+        ]}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          <Animated.Text 
+            style={[
+              styles.headerTitle,
+              {
+                opacity: scrollY.interpolate({
+                  inputRange: [150, 200],
+                  outputRange: [0, 1],
+                  extrapolate: 'clamp',
+                }),
+              },
+            ]}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {data?.playlist?.title}
+          </Animated.Text>
+        </Animated.View>
+
+        <Animated.FlatList
+          data={data.songs}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          getItemLayout={getItemLayout}
+          ListHeaderComponent={headerComponent}
+          contentContainerStyle={{ paddingBottom: 80, paddingTop: 82 }}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+            { 
+              useNativeDriver: true,
+              listener: (event: any) => {
+                const scrollY = event.nativeEvent.contentOffset.y;
+                setShowHeaderBg(scrollY > 180);
+              }
+            }
+          )}
+          scrollEventThrottle={16}
+          removeClippedSubviews
+          maxToRenderPerBatch={6}
+          windowSize={6}
+          initialNumToRender={8}
+          updateCellsBatchingPeriod={50}
+        />
+        
+        <SongOptionsModal
+          visible={modalVisible}
+          onClose={hideOptions}
+          song={selectedSong}
+          navigation={navigation}
+        />
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
-  header: { padding: 16, paddingTop: 50, flexDirection: 'row', alignItems: 'center', position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1, backgroundColor: '#000' },
+  container: { flex: 1 },
+  safeArea: { flex: 1 },
+  header: { padding: 16, paddingTop: 50, flexDirection: 'row', alignItems: 'center', position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1 },
   headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff', marginLeft: 16, flex: 1 },
   playlistHeader: { alignItems: 'center', padding: 16 },
   playlistArt: { width: 200, height: 200, borderRadius: 8, marginBottom: 16 },
@@ -278,6 +337,11 @@ const styles = StyleSheet.create({
   playButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1db954', paddingHorizontal: 32, paddingVertical: 12, borderRadius: 24, gap: 8 },
   playButtonText: { color: '#000', fontSize: 16, fontWeight: 'bold' },
   shuffleButton: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: '#333', borderRadius: 24 },
+  downloadSection: { marginTop: 16, alignItems: 'center' },
+  downloadProgress: { marginTop: 12, width: '100%', paddingHorizontal: 20 },
+  progressContainer: { height: 4, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 2, marginBottom: 6 },
+  progressFill: { height: 4, backgroundColor: '#1db954', borderRadius: 2 },
+  downloadText: { color: 'rgba(255,255,255,0.8)', fontSize: 12, textAlign: 'center' },
   songItem: { flexDirection: 'row', alignItems: 'center', padding: 12 },
   thumbnail: { width: 48, height: 48, borderRadius: 4 },
   songInfo: { flex: 1, marginLeft: 12 },

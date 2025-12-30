@@ -45,6 +45,14 @@ export default function SettingsScreen({ navigation }: any) {
       iconColor: '#1db954'
     },
     {
+      id: 'animations',
+      icon: 'flash-outline',
+      title: 'Animations',
+      subtitle: 'Control app animations',
+      onPress: () => navigation.navigate('AnimationSettings'),
+      iconColor: '#ff6b6b'
+    },
+    {
       id: 'about',
       icon: 'information-circle-outline',
       title: 'About',
@@ -136,7 +144,7 @@ const styles = StyleSheet.create({
   accountName: { fontSize: 18, fontWeight: '600', color: '#fff', marginBottom: 2 },
   accountEmail: { fontSize: 14, color: '#aaa' },
   logoutButton: { padding: 8 },
-  settingsGrid: { paddingHorizontal: 20, gap: 12 },
+  settingsGrid: { paddingHorizontal: 20, gap: 12, paddingBottom: 100 },
   settingCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#121212', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#282828' },
   disabledCard: { opacity: 0.6 },
   iconContainer: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 16 },

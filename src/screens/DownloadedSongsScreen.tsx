@@ -90,18 +90,14 @@ export default function DownloadedSongsScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
+      <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Downloaded Songs</Text>
+        <Animated.Text style={[styles.headerTitle, { opacity: headerOpacity }]}>
+          Downloaded Songs
+        </Animated.Text>
         <View style={{ width: 24 }} />
-      </Animated.View>
-
-      <View style={styles.fixedHeader}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
       </View>
 
       <FlatList
@@ -156,25 +152,15 @@ export default function DownloadedSongsScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   header: { 
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
     flexDirection: 'row', 
     alignItems: 'center', 
     paddingHorizontal: 20, 
     paddingVertical: 16,
     backgroundColor: '#000',
-    zIndex: 10,
-  },
-  fixedHeader: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    zIndex: 5,
   },
   backButton: { padding: 4 },
   headerTitle: { fontSize: 20, fontWeight: '600', color: '#fff', flex: 1, textAlign: 'center' },
-  playlistHeader: { paddingHorizontal: 20, paddingBottom: 20, paddingTop: 80 },
+  playlistHeader: { paddingHorizontal: 20, paddingBottom: 20, paddingTop: 20 },
   playlistInfo: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
   playlistIcon: { width: 60, height: 60, borderRadius: 8, backgroundColor: '#1db954' + '20', alignItems: 'center', justifyContent: 'center', marginRight: 16 },
   playlistDetails: { flex: 1 },

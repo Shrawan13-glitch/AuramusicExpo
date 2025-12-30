@@ -17,7 +17,7 @@ const categories = ['Playlists', 'Songs', 'Artists'];
 
 export default function LibraryScreen({ navigation }: any) {
   const { likedSongs, playlists, syncPlaylists, loadPlaylistSongs } = useLibrary();
-  const { downloadedSongs } = useDownload();
+  const { downloadedSongs, downloadedPlaylists, playlistProgress, getPlaylistProgress } = useDownload();
   const { playSong } = usePlayer();
   const { modalVisible, selectedSong, showOptions, hideOptions } = useSongOptions();
   const [selectedCategory, setSelectedCategory] = useState('Playlists');
@@ -187,6 +187,41 @@ export default function LibraryScreen({ navigation }: any) {
             onPress: () => navigation.navigate('Playlist', { playlistId: playlist.id })
           });
         });
+      
+      // Downloaded Playlists (below API results)
+      if (downloadedPlaylists.length > 0) {
+        downloadedPlaylists.forEach(playlist => {
+          items.push({
+            id: `downloaded_${playlist.id}`,
+            title: playlist.title,
+            subtitle: `Downloaded • ${playlist.songs.length} songs`,
+            type: 'downloaded_playlist',
+            thumbnail: playlist.thumbnail,
+            isOffline: true,
+            onPress: () => navigation.navigate('Playlist', { playlistId: playlist.id })
+          });
+        });
+      }
+      
+      // Partially Downloaded Playlists
+      Object.values(playlistProgress).forEach(progress => {
+        if (!downloadedPlaylists.find(p => p.id === progress.playlistId)) {
+          const playlist = playlists.find(p => p.id === progress.playlistId);
+          if (playlist) {
+            items.push({
+              id: `partial_${progress.playlistId}`,
+              title: playlist.title,
+              subtitle: `${Math.round(progress.progress * 100)}% • ${progress.downloadedSongs}/${progress.totalSongs} songs`,
+              type: 'partial_playlist',
+              thumbnail: playlist.thumbnailUrl,
+              isPartial: true,
+              progress: progress.progress,
+              status: progress.status,
+              onPress: () => navigation.navigate('Playlist', { playlistId: progress.playlistId })
+            });
+          }
+        }
+      });
     }
     
     return items;
@@ -253,8 +288,22 @@ export default function LibraryScreen({ navigation }: any) {
               <Text style={styles.itemTitle} numberOfLines={2}>{item.title}</Text>
               <View style={styles.subtitleRow}>
                 {item.isPinned && <Ionicons name="pin" size={12} color="#aaa" style={styles.pinIcon} />}
+                {item.isOffline && <Ionicons name="download" size={12} color="#1db954" style={styles.pinIcon} />}
+                {item.isPartial && (
+                  <Ionicons 
+                    name={item.status === 'paused' ? 'pause' : 'download'} 
+                    size={12} 
+                    color={item.status === 'paused' ? '#ff9500' : '#1db954'} 
+                    style={styles.pinIcon} 
+                  />
+                )}
                 <Text style={styles.itemSubtitle} numberOfLines={1}>{item.subtitle}</Text>
               </View>
+              {item.isPartial && (
+                <View style={styles.progressBar}>
+                  <View style={[styles.progressFill, { width: `${item.progress * 100}%` }]} />
+                </View>
+              )}
             </View>
           </>
         )}
@@ -378,6 +427,8 @@ const styles = StyleSheet.create({
   subtitleRow: { flexDirection: 'row', alignItems: 'center' },
   pinIcon: { marginRight: 4 },
   itemSubtitle: { color: '#aaa', fontSize: 12, flex: 1 },
+  progressBar: { height: 2, backgroundColor: '#333', borderRadius: 1, marginTop: 4 },
+  progressFill: { height: 2, backgroundColor: '#1db954', borderRadius: 1 },
   // List layout (songs)
   listContainer: { paddingHorizontal: 16, paddingBottom: 140 },
   songItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, marginBottom: 4 },

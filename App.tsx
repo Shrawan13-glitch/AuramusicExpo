@@ -10,6 +10,7 @@ import { LibraryProvider } from './src/store/LibraryContext';
 import { AuthProvider } from './src/store/AuthContext';
 import { DownloadProvider } from './src/store/DownloadContext';
 import { NotificationProvider } from './src/store/NotificationContext';
+import { AnimationProvider } from './src/store/AnimationContext';
 import MiniPlayer from './src/components/MiniPlayer';
 import { checkForUpdates } from './src/utils/updateChecker';
 
@@ -53,24 +54,26 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <NotificationProvider>
-          <AuthProvider>
-            <LibraryProvider>
-              <DownloadProvider>
-                <PlayerProvider>
-                  <NavigationContainer
-                    ref={navigationRef}
-                    onReady={() => {
-                      // Navigation ready
-                    }}
-                  >
-                    <AppNavigator />
-                  </NavigationContainer>
-                </PlayerProvider>
-              </DownloadProvider>
-            </LibraryProvider>
-          </AuthProvider>
-        </NotificationProvider>
+        <AnimationProvider>
+          <NotificationProvider>
+            <AuthProvider>
+              <LibraryProvider>
+                <DownloadProvider>
+                  <PlayerProvider>
+                    <NavigationContainer
+                      ref={navigationRef}
+                      onReady={() => {
+                        // Navigation ready
+                      }}
+                    >
+                      <AppNavigator />
+                    </NavigationContainer>
+                  </PlayerProvider>
+                </DownloadProvider>
+              </LibraryProvider>
+            </AuthProvider>
+          </NotificationProvider>
+        </AnimationProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

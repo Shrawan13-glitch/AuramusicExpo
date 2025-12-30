@@ -13,19 +13,47 @@ interface DownloadedSong {
   size: number;
 }
 
+interface DownloadedPlaylist {
+  id: string;
+  title: string;
+  thumbnail: string;
+  songs: DownloadedSong[];
+  downloadedAt: number;
+  totalSize: number;
+}
+
 interface DownloadProgress {
   songId: string;
   progress: number;
-  status: 'downloading' | 'completed' | 'failed';
+  status: 'downloading' | 'completed' | 'failed' | 'paused';
+}
+
+interface PlaylistDownloadProgress {
+  playlistId: string;
+  totalSongs: number;
+  downloadedSongs: number;
+  currentSong?: string;
+  status: 'downloading' | 'paused' | 'completed' | 'failed';
+  progress: number; // 0-1
 }
 
 interface DownloadContextType {
   downloadedSongs: DownloadedSong[];
+  downloadedPlaylists: DownloadedPlaylist[];
   downloadProgress: { [key: string]: DownloadProgress };
+  playlistProgress: { [key: string]: PlaylistDownloadProgress };
   downloadSong: (song: any) => Promise<void>;
+  downloadPlaylist: (playlist: any, songs: any[]) => Promise<void>;
+  pausePlaylistDownload: (playlistId: string) => void;
+  resumePlaylistDownload: (playlistId: string) => void;
   deleteSong: (songId: string) => Promise<void>;
+  deletePlaylist: (playlistId: string) => Promise<void>;
   isDownloaded: (songId: string) => boolean;
+  isPlaylistDownloaded: (playlistId: string) => boolean;
+  isPlaylistPartiallyDownloaded: (playlistId: string) => boolean;
   getDownloadedSong: (songId: string) => DownloadedSong | null;
+  getDownloadedPlaylist: (playlistId: string) => DownloadedPlaylist | null;
+  getPlaylistProgress: (playlistId: string) => PlaylistDownloadProgress | null;
   getTotalDownloadSize: () => number;
   clearAllDownloads: () => Promise<void>;
 }
@@ -42,10 +70,13 @@ export const useDownload = () => {
 
 export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [downloadedSongs, setDownloadedSongs] = useState<DownloadedSong[]>([]);
+  const [downloadedPlaylists, setDownloadedPlaylists] = useState<DownloadedPlaylist[]>([]);
   const [downloadProgress, setDownloadProgress] = useState<{ [key: string]: DownloadProgress }>({});
+  const [playlistProgress, setPlaylistProgress] = useState<{ [key: string]: PlaylistDownloadProgress }>({});
 
   useEffect(() => {
     loadDownloadedSongs();
+    loadDownloadedPlaylists();
   }, []);
 
   const loadDownloadedSongs = async () => {
@@ -68,6 +99,85 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setDownloadedSongs(songs);
     } catch (error) {
       // Error saving downloaded songs handled silently
+    }
+  };
+
+  const addSongToDatabase = async (song: DownloadedSong) => {
+    try {
+      setDownloadedSongs(prev => {
+        const existing = prev.find(s => s.id === song.id);
+        if (!existing) {
+          const updated = [...prev, song];
+          // Save to storage in background
+          const filePath = FileSystem.documentDirectory + 'downloads.json';
+          FileSystem.writeAsStringAsync(filePath, JSON.stringify(updated)).catch(() => {});
+          return updated;
+        }
+        return prev;
+      });
+    } catch (error) {
+      // Error adding song handled silently
+    }
+  };
+
+  const addSongToPlaylistDatabase = async (playlistId: string, song: DownloadedSong) => {
+    try {
+      console.log('Adding song to playlist database:', playlistId, song.title);
+      const currentPlaylists = [...downloadedPlaylists];
+      const playlistIndex = currentPlaylists.findIndex(p => p.id === playlistId);
+      
+      if (playlistIndex >= 0) {
+        // Update existing playlist
+        const playlist = currentPlaylists[playlistIndex];
+        const updatedSongs = [...playlist.songs.filter(s => s.id !== song.id), song];
+        const updatedPlaylist = { 
+          ...playlist, 
+          songs: updatedSongs, 
+          totalSize: updatedSongs.reduce((sum, s) => sum + s.size, 0) 
+        };
+        currentPlaylists[playlistIndex] = updatedPlaylist;
+        console.log('Updated existing playlist, now has', updatedSongs.length, 'songs');
+      } else {
+        // Create new playlist entry
+        const newPlaylist: DownloadedPlaylist = {
+          id: playlistId,
+          title: 'Downloading...',
+          thumbnail: song.thumbnailUrl,
+          songs: [song],
+          downloadedAt: Date.now(),
+          totalSize: song.size
+        };
+        currentPlaylists.push(newPlaylist);
+        console.log('Created new playlist with first song');
+      }
+      
+      await saveDownloadedPlaylists(currentPlaylists);
+      console.log('Saved playlist to database');
+    } catch (error) {
+      console.error('Error adding song to playlist:', error);
+    }
+  };
+
+  const loadDownloadedPlaylists = async () => {
+    try {
+      const filePath = FileSystem.documentDirectory + 'downloaded_playlists.json';
+      const fileInfo = await FileSystem.getInfoAsync(filePath);
+      if (fileInfo.exists) {
+        const data = await FileSystem.readAsStringAsync(filePath);
+        setDownloadedPlaylists(JSON.parse(data));
+      }
+    } catch (error) {
+      // Error loading downloaded playlists handled silently
+    }
+  };
+
+  const saveDownloadedPlaylists = async (playlists: DownloadedPlaylist[]) => {
+    try {
+      const filePath = FileSystem.documentDirectory + 'downloaded_playlists.json';
+      await FileSystem.writeAsStringAsync(filePath, JSON.stringify(playlists));
+      setDownloadedPlaylists(playlists);
+    } catch (error) {
+      // Error saving downloaded playlists handled silently
     }
   };
 
@@ -169,8 +279,7 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         [songId]: { songId, progress: 1, status: 'completed' }
       }));
 
-      const updatedSongs = [...downloadedSongs, downloadedSong];
-      await saveDownloadedSongs(updatedSongs);
+      await addSongToDatabase(downloadedSong);
       console.log('Download completed successfully for:', song.title);
 
       setTimeout(() => {
@@ -219,6 +328,111 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return downloadedSongs.reduce((total, song) => total + song.size, 0);
   }, [downloadedSongs]);
 
+  const downloadPlaylist = useCallback(async (playlist: any, songs: any[]) => {
+    const playlistId = playlist.id;
+    
+    setPlaylistProgress(prev => ({
+      ...prev,
+      [playlistId]: {
+        playlistId,
+        totalSongs: songs.length,
+        downloadedSongs: 0,
+        status: 'downloading',
+        progress: 0
+      }
+    }));
+
+    for (let i = 0; i < songs.length; i++) {
+      const song = songs[i];
+      
+      const currentState = playlistProgress[playlistId];
+      if (currentState?.status === 'paused') {
+        break;
+      }
+
+      setPlaylistProgress(prev => ({
+        ...prev,
+        [playlistId]: {
+          ...prev[playlistId],
+          currentSong: song.title,
+          progress: i / songs.length
+        }
+      }));
+
+      try {
+        if (!isDownloaded(song.id)) {
+          await downloadSong(song);
+        }
+
+        setPlaylistProgress(prev => ({
+          ...prev,
+          [playlistId]: {
+            ...prev[playlistId],
+            downloadedSongs: i + 1,
+            progress: (i + 1) / songs.length
+          }
+        }));
+      } catch (error) {
+        console.log(`Failed to download ${song.title}:`, error);
+      }
+    }
+
+    setPlaylistProgress(prev => {
+      const { [playlistId]: removed, ...rest } = prev;
+      return rest;
+    });
+  }, [downloadSong, isDownloaded, playlistProgress]);
+
+  const deletePlaylist = useCallback(async (playlistId: string) => {
+    const playlist = downloadedPlaylists.find(p => p.id === playlistId);
+    if (playlist) {
+      for (const song of playlist.songs) {
+        await deleteSong(song.id);
+      }
+      
+      const updatedPlaylists = downloadedPlaylists.filter(p => p.id !== playlistId);
+      await saveDownloadedPlaylists(updatedPlaylists);
+    }
+  }, [downloadedPlaylists, deleteSong]);
+
+  const isPlaylistDownloaded = useCallback((playlistId: string) => {
+    const playlist = downloadedPlaylists.find(p => p.id === playlistId);
+    console.log('Checking if playlist downloaded:', playlistId, !!playlist, playlist?.songs?.length || 0);
+    return !!playlist && playlist.songs && playlist.songs.length > 0;
+  }, [downloadedPlaylists]);
+
+  const isPlaylistPartiallyDownloaded = useCallback((playlistId: string) => {
+    return !!playlistProgress[playlistId] || downloadedPlaylists.some(p => p.id === playlistId);
+  }, [playlistProgress, downloadedPlaylists]);
+
+  const getPlaylistProgress = useCallback((playlistId: string) => {
+    return playlistProgress[playlistId] || null;
+  }, [playlistProgress]);
+
+  const getDownloadedPlaylist = useCallback((playlistId: string) => {
+    return downloadedPlaylists.find(playlist => playlist.id === playlistId) || null;
+  }, [downloadedPlaylists]);
+
+  const pausePlaylistDownload = useCallback((playlistId: string) => {
+    setPlaylistProgress(prev => ({
+      ...prev,
+      [playlistId]: {
+        ...prev[playlistId],
+        status: 'paused'
+      }
+    }));
+  }, []);
+
+  const resumePlaylistDownload = useCallback((playlistId: string) => {
+    setPlaylistProgress(prev => ({
+      ...prev,
+      [playlistId]: {
+        ...prev[playlistId],
+        status: 'downloading'
+      }
+    }));
+  }, []);
+
   const clearAllDownloads = useCallback(async () => {
     try {
       for (const song of downloadedSongs) {
@@ -236,11 +450,21 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   return (
     <DownloadContext.Provider value={{
       downloadedSongs,
+      downloadedPlaylists,
       downloadProgress,
+      playlistProgress,
       downloadSong,
+      downloadPlaylist,
+      pausePlaylistDownload,
+      resumePlaylistDownload,
       deleteSong,
+      deletePlaylist,
       isDownloaded,
+      isPlaylistDownloaded,
+      isPlaylistPartiallyDownloaded,
       getDownloadedSong,
+      getDownloadedPlaylist,
+      getPlaylistProgress,
       getTotalDownloadSize,
       clearAllDownloads,
     }}>

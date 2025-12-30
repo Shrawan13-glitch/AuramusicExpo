@@ -4,6 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAnimation } from '../store/AnimationContext';
 import HomeScreen from '../screens/HomeScreen';
 import SearchScreen from '../screens/SearchScreen';
 import LibraryScreen from '../screens/LibraryScreen';
@@ -25,12 +26,14 @@ import DownloadedSongsScreen from '../screens/DownloadedSongsScreen';
 import QualitySettingsScreen from '../screens/QualitySettingsScreen';
 import MiniPlayer from '../components/MiniPlayer';
 import MessageDetailScreen from '../screens/MessageDetailScreen';
+import AnimationSettingsScreen from '../screens/AnimationSettingsScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
 const TabNavigator = React.memo(({ onTabBarLayout }: { onTabBarLayout: (height: number) => void }) => {
   const insets = useSafeAreaInsets();
+  const { settings } = useAnimation();
   const tabBarHeight = 49 + insets.bottom;
   
   React.useEffect(() => {
@@ -44,7 +47,7 @@ const TabNavigator = React.memo(({ onTabBarLayout }: { onTabBarLayout: (height: 
     headerStyle: { backgroundColor: '#000' },
     headerTintColor: '#fff',
     headerShown: false,
-    animation: 'shift',
+    animation: settings.enabled ? 'shift' : 'none',
   };
   
   return (
@@ -112,13 +115,29 @@ const MainScreen = React.memo(() => {
 });
 
 export default function AppNavigator() {
+  const { settings } = useAnimation();
+  
+  const getAnimationConfig = () => {
+    if (!settings.enabled) {
+      return {
+        animationEnabled: false,
+        cardStyleInterpolator: CardStyleInterpolators.forNoAnimation,
+      };
+    }
+    
+    return {
+      animationEnabled: true,
+      cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
+    };
+  };
+
   return (
     <Stack.Navigator 
       screenOptions={{ 
         headerShown: false, 
         presentation: 'card',
-        cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
         cardStyle: { backgroundColor: '#000' },
+        ...getAnimationConfig(),
       }}
     >
       <Stack.Screen name="Main" component={MainScreen} />
@@ -218,9 +237,31 @@ export default function AppNavigator() {
           </View>
         )}
       </Stack.Screen>
-      <Stack.Screen name="Settings" component={SettingsScreen} options={{ animationEnabled: false }} />
+      <Stack.Screen name="Settings">
+        {(props) => (
+          <View style={styles.container}>
+            <View style={{ flex: 1 }}>
+              <SettingsScreen {...props} />
+            </View>
+            <View style={styles.miniPlayerBottom}>
+              <MiniPlayer />
+            </View>
+          </View>
+        )}
+      </Stack.Screen>
 
-      <Stack.Screen name="PlayerSettings" component={PlayerSettingsScreen} options={{ animationEnabled: false }} />
+      <Stack.Screen name="PlayerSettings">
+        {(props) => (
+          <View style={styles.container}>
+            <View style={{ flex: 1 }}>
+              <PlayerSettingsScreen {...props} />
+            </View>
+            <View style={styles.miniPlayerBottom}>
+              <MiniPlayer />
+            </View>
+          </View>
+        )}
+      </Stack.Screen>
       <Stack.Screen name="About" component={AboutScreen} options={{ animationEnabled: false }} />
       <Stack.Screen name="DownloadedSongs">
         {(props) => (
@@ -235,6 +276,7 @@ export default function AppNavigator() {
         )}
       </Stack.Screen>
       <Stack.Screen name="QualitySettings" component={QualitySettingsScreen} />
+      <Stack.Screen name="AnimationSettings" component={AnimationSettingsScreen} />
 
       <Stack.Screen name="MessageDetail" component={MessageDetailScreen} />
 

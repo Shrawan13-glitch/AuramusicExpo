@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Text, Image, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, Image, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, ImageBackground } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { InnerTube } from '../api/innertube';
 import { usePlayer } from '../store/PlayerContext';
 
@@ -126,31 +127,49 @@ export default function AlbumScreen({ route, navigation }: any) {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-        <Ionicons name="arrow-back" size={24} color="#fff" />
-      </TouchableOpacity>
+    <View style={styles.container}>
+      <ImageBackground 
+        source={data?.album?.thumbnail ? { uri: data.album.thumbnail } : undefined}
+        style={StyleSheet.absoluteFillObject}
+        blurRadius={50}
+      >
+        <LinearGradient
+          colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.8)', '#000']}
+          locations={[0, 0.4, 0.7]}
+          style={StyleSheet.absoluteFillObject}
+        />
+      </ImageBackground>
+      
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <View style={styles.backButtonContainer}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
 
-      <FlatList
-        data={data.songs}
-        keyExtractor={keyExtractor}
-        renderItem={renderSongItem}
-        getItemLayout={getItemLayout}
-        ListHeaderComponent={headerComponent}
-        contentContainerStyle={{ paddingBottom: 80 }}
-        removeClippedSubviews
-        maxToRenderPerBatch={8}
-        windowSize={8}
-        initialNumToRender={12}
-        updateCellsBatchingPeriod={50}
-      />
-    </SafeAreaView>
+        <FlatList
+          data={data.songs}
+          keyExtractor={keyExtractor}
+          renderItem={renderSongItem}
+          getItemLayout={getItemLayout}
+          ListHeaderComponent={headerComponent}
+          contentContainerStyle={{ paddingBottom: 80 }}
+          removeClippedSubviews
+          maxToRenderPerBatch={8}
+          windowSize={8}
+          initialNumToRender={12}
+          updateCellsBatchingPeriod={50}
+        />
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
-  backButton: { position: 'absolute', top: 50, left: 16, zIndex: 10, padding: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 },
+  container: { flex: 1 },
+  safeArea: { flex: 1 },
+  backButtonContainer: { position: 'absolute', top: 50, left: 16, zIndex: 10 },
+  backButton: { padding: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 },
   albumHeader: { alignItems: 'center', padding: 16, paddingTop: 60 },
   albumArt: { width: 200, height: 200, borderRadius: 8, marginBottom: 16 },
   albumType: { fontSize: 12, color: '#aaa', textTransform: 'uppercase', marginBottom: 4, textAlign: 'center' },
