@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Text, Image, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, ImageBackground } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, ActivityIndicator, ImageBackground } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -50,10 +51,13 @@ export default function AlbumScreen({ route, navigation }: any) {
   const { albumId } = route.params;
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [showContent, setShowContent] = useState(false);
   const { playSong } = usePlayer();
 
   useEffect(() => {
     loadAlbum();
+    const timer = setTimeout(() => setShowContent(true), 300);
+    return () => clearTimeout(timer);
   }, [albumId]);
 
   const loadAlbum = useCallback(async () => {
@@ -147,18 +151,13 @@ export default function AlbumScreen({ route, navigation }: any) {
           </TouchableOpacity>
         </View>
 
-        <FlatList
-          data={data.songs}
+        <FlashList
+          data={showContent ? data.songs : []}
           keyExtractor={keyExtractor}
           renderItem={renderSongItem}
-          getItemLayout={getItemLayout}
+          estimatedItemSize={60}
           ListHeaderComponent={headerComponent}
           contentContainerStyle={{ paddingBottom: 80 }}
-          removeClippedSubviews
-          maxToRenderPerBatch={8}
-          windowSize={8}
-          initialNumToRender={12}
-          updateCellsBatchingPeriod={50}
         />
       </SafeAreaView>
     </View>

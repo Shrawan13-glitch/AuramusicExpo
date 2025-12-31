@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, FlatList } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { usePlayer } from '../store/PlayerContext';
@@ -35,9 +36,10 @@ export default function QueueScreen({ onClose }: { onClose: () => void }) {
 
       <View style={styles.upNextSection}>
         <Text style={styles.sectionTitle}>Up Next ({queue.length})</Text>
-        <FlatList
+        <FlashList
           data={queue}
           keyExtractor={(item, index) => `${item.id}-${index}`}
+          estimatedItemSize={66}
           showsVerticalScrollIndicator={false}
           renderItem={({ item, index }) => (
             <View style={styles.queueItem}>

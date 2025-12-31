@@ -47,7 +47,7 @@ const TabNavigator = React.memo(({ onTabBarLayout }: { onTabBarLayout: (height: 
     headerStyle: { backgroundColor: '#000' },
     headerTintColor: '#fff',
     headerShown: false,
-    animation: settings.enabled ? 'shift' : 'none',
+    animation: 'shift',
   };
   
   return (
@@ -118,16 +118,21 @@ export default function AppNavigator() {
   const { settings } = useAnimation();
   
   const getAnimationConfig = () => {
-    if (!settings.enabled) {
-      return {
-        animationEnabled: false,
-        cardStyleInterpolator: CardStyleInterpolators.forNoAnimation,
-      };
-    }
+    const speedDurations = {
+      fast: 200,
+      normal: 300,
+      slow: 500
+    };
+    
+    const duration = speedDurations[settings.speed];
     
     return {
       animationEnabled: true,
       cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
+      transitionSpec: {
+        open: { animation: 'timing', config: { duration } },
+        close: { animation: 'timing', config: { duration } },
+      },
     };
   };
 
@@ -137,6 +142,7 @@ export default function AppNavigator() {
         headerShown: false, 
         presentation: 'card',
         cardStyle: { backgroundColor: '#000' },
+        cardOverlayEnabled: false,
         ...getAnimationConfig(),
       }}
     >
@@ -250,19 +256,22 @@ export default function AppNavigator() {
         )}
       </Stack.Screen>
 
-      <Stack.Screen name="PlayerSettings">
-        {(props) => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <PlayerSettingsScreen {...props} />
-            </View>
-            <View style={styles.miniPlayerBottom}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
+      <Stack.Screen 
+        name="PlayerSettings"
+        options={{
+          cardStyleInterpolator: CardStyleInterpolators.forRevealFromBottomAndroid,
+        }}
+      >
+        {(props) => <PlayerSettingsScreen {...props} />}
       </Stack.Screen>
-      <Stack.Screen name="About" component={AboutScreen} options={{ animationEnabled: false }} />
+      <Stack.Screen 
+        name="About"
+        options={{
+          cardStyleInterpolator: CardStyleInterpolators.forRevealFromBottomAndroid,
+        }}
+      >
+        {(props) => <AboutScreen {...props} />}
+      </Stack.Screen>
       <Stack.Screen name="DownloadedSongs">
         {(props) => (
           <View style={styles.container}>
@@ -275,8 +284,26 @@ export default function AppNavigator() {
           </View>
         )}
       </Stack.Screen>
-      <Stack.Screen name="QualitySettings" component={QualitySettingsScreen} />
-      <Stack.Screen name="AnimationSettings" component={AnimationSettingsScreen} />
+      <Stack.Screen name="QualitySettings">
+        {(props) => (
+          <View style={styles.container}>
+            <View style={{ flex: 1 }}>
+              <QualitySettingsScreen {...props} />
+            </View>
+            <View style={styles.miniPlayerBottom}>
+              <MiniPlayer />
+            </View>
+          </View>
+        )}
+      </Stack.Screen>
+      <Stack.Screen 
+        name="AnimationSettings"
+        options={{
+          cardStyleInterpolator: CardStyleInterpolators.forRevealFromBottomAndroid,
+        }}
+      >
+        {(props) => <AnimationSettingsScreen {...props} />}
+      </Stack.Screen>
 
       <Stack.Screen name="MessageDetail" component={MessageDetailScreen} />
 

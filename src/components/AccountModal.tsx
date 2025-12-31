@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, Animated, Dimensions, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useAnimation } from '../store/AnimationContext';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -23,6 +24,7 @@ export default function AccountModal({
   onSettings, 
   onSignOut 
 }: AccountModalProps) {
+  const { settings } = useAnimation();
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT * 0.5)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -151,7 +153,8 @@ export default function AccountModal({
                 subtitle="App preferences"
                 onPress={() => {
                   onClose();
-                  setTimeout(onSettings, 100);
+                  const speedDelays = { fast: 150, normal: 200, slow: 300 };
+                  setTimeout(onSettings, speedDelays[settings.speed]);
                 }}
               />
             </View>

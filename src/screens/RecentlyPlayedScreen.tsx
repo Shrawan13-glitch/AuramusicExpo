@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLibrary } from '../store/LibraryContext';
@@ -90,7 +91,7 @@ export default function RecentlyPlayedScreen({ navigation }: any) {
         </TouchableOpacity>
       </View>
 
-      <FlatList
+      <FlashList
         data={data}
         keyExtractor={(item, index) => `${item.id}-${index}`}
         contentContainerStyle={{ paddingBottom: 80 }}

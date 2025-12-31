@@ -1,11 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { AudioPro, useAudioPro } from 'react-native-audio-pro';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Song, PlayerState } from '../types';
 import { InnerTube } from '../api/innertube';
 import { useLibrary } from './LibraryContext';
 import { useDownload } from './DownloadContext';
-import { setAudioModeAsync } from 'expo-audio';
 
 interface PlayerContextType extends PlayerState {
   shuffle: boolean;
@@ -30,6 +29,8 @@ const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
 export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const library = useLibrary();
   const downloadContext = useDownload();
+  const audioState = useAudioPro();
+  
   const [state, setState] = useState<PlayerState>({
     currentSong: null,
     queue: [],
@@ -43,123 +44,183 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [radioContinuation, setRadioContinuation] = useState<string | null>(null);
   const [previousSongs, setPreviousSongs] = useState<Song[]>([]);
   const [intendedPlaying, setIntendedPlaying] = useState(false);
+  const [isChangingSong, setIsChangingSong] = useState(false);
   const [sleepTimerRemaining, setSleepTimerRemaining] = useState<number | null>(null);
   const sleepTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const player = useAudioPlayer('');
-  const status = useAudioPlayerStatus(player);
   const hasTriggeredNext = useRef(false);
   const skipNextRef = useRef<() => Promise<void>>();
   const lastUpdateRef = useRef<number>(0);
+  const positionUpdateRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    setupAudio();
+    setupPlayer();
+    return () => {
+      if (positionUpdateRef.current) clearInterval(positionUpdateRef.current);
+      if (sleepTimerRef.current) clearInterval(sleepTimerRef.current);
+    };
   }, []);
 
-  const setupAudio = async () => {
-    try {
-      await setAudioModeAsync({
-        playsInSilentMode: true,
-        staysActiveInBackground: true,
-        shouldPlayInBackground: true,
-      });
+  useEffect(() => {
+    const currentPosition = audioState.position || 0;
+    const currentDuration = audioState.duration || 0;
+    
+    // Only update app state to reflect AudioPro's current state
+    setState(prev => {
+      const newState = { ...prev };
+      
+      if (audioState.state === 'PLAYING') {
+        newState.isPlaying = true;
+      } else if (audioState.state === 'PAUSED') {
+        newState.isPlaying = false;
+      }
+      
+      newState.position = currentPosition;
+      newState.duration = currentDuration;
+      
+      return newState;
+    });
+    
+    // Disable autoplay - let AudioPro handle it completely
+    // if (currentDuration > 0 && currentPosition >= currentDuration - 1000 && audioState.state !== 'PLAYING') {
+    //   if (!hasTriggeredNext.current) {
+    //     console.log('AUTOPLAY: Song ended, triggering next');
+    //     hasTriggeredNext.current = true;
+    //     setTimeout(() => {
+    //       skipNext();
+    //       hasTriggeredNext.current = false;
+    //     }, 500);
+    //   }
+    // }
 
-    } catch (error) {
-    }
+  }, [audioState.state, audioState.position, audioState.duration, intendedPlaying, skipNext]);
+
+  const setupPlayer = async () => {
+    AudioPro.configure({ 
+      contentType: 'music',
+      showNextPrevControls: true,
+      showSkipControls: false
+    });
+    
+    AudioPro.addEventListener((event) => {
+      switch (event.type) {
+        case 'REMOTE_NEXT':
+          if (skipNextRef.current) {
+            skipNextRef.current();
+          }
+          break;
+        case 'REMOTE_PREV':
+          if (skipPreviousRef.current) {
+            skipPreviousRef.current();
+          }
+          break;
+        case 'PLAYBACK_TRACK_ENDED':
+        case 'TRACK_ENDED':
+          console.log('AUTOPLAY: Track ended in background');
+          if (skipNextRef.current) {
+            skipNextRef.current();
+          }
+          break;
+      }
+    });
+    
+
+    
+    // Start position update interval
+    positionUpdateRef.current = setInterval(async () => {
+      if (audioState.state === 'playing') {
+        try {
+          const position = await AudioPro.getPosition();
+          const duration = await AudioPro.getDuration();
+          setState(prev => ({
+            ...prev,
+            position: position || 0,
+            duration: duration || 0,
+          }));
+        } catch (error) {
+          // Position update error
+        }
+      }
+    }, 1000);
   };
 
-  // Update state from player status with throttling
-  useEffect(() => {
-    if (!status) return;
-    
-    const position = Math.floor(status.currentTime * 1000);
-    const duration = Math.floor(status.duration * 1000);
-    
-    // Throttle updates to prevent lag - 2 updates per second
-    const now = Date.now();
-    if (now - (lastUpdateRef.current || 0) < 500) return;
-    lastUpdateRef.current = now;
-    
-    setState(prev => {
-      // Only update if position changed by 1+ seconds or other properties changed
-      if (Math.abs(prev.position - position) < 1000 && prev.duration === duration && prev.isPlaying === intendedPlaying) {
-        return prev;
-      }
-      return {
-        ...prev,
-        position,
-        duration,
-        isPlaying: intendedPlaying,
-      };
-    });
-  }, [status?.currentTime, status?.duration, intendedPlaying]);
-
-  // Separate effect for song end detection
-  useEffect(() => {
-    if (!status || !skipNextRef.current) return;
-    
-    const position = Math.floor(status.currentTime * 1000);
-    const duration = Math.floor(status.duration * 1000);
-    
-    if (duration > 0 && position >= duration - 100 && !hasTriggeredNext.current) {
-      hasTriggeredNext.current = true;
-      skipNextRef.current();
-    }
-  }, [status?.currentTime, status?.duration]);
-
   const playSong = useCallback(async (song: Song, queue?: Song[], generateRadio = true) => {
+    if (isChangingSong) return;
+    setIsChangingSong(true);
+    
     try {
-      // Check if song is downloaded first
       const downloadedSong = downloadContext?.getDownloadedSong(song.id);
       let audioSource;
       
       if (downloadedSong) {
-        // Use local file for downloaded songs
         audioSource = downloadedSong.localPath;
       } else {
-        // Try to get stream URL for online playback
         const streamUrl = await InnerTube.getStreamUrl(song.id);
         if (!streamUrl) {
-          // No stream URL found and song not downloaded
+          console.log('No stream URL found for song:', song.title);
           return;
         }
         audioSource = streamUrl;
       }
 
+      // Validate URL format
+      if (!audioSource || (!audioSource.startsWith('http') && !audioSource.startsWith('file://'))) {
+        console.log('Invalid audio source:', audioSource);
+        return;
+      }
+
+      // Decode HTML entities in URL
+      audioSource = audioSource.replace(/&amp;/g, '&');
+
       hasTriggeredNext.current = false;
       setIntendedPlaying(true);
       
-      player.replace(audioSource);
-      player.play();
+      console.log('Playing song:', song.title);
       
-      // Update state in single batch
-      setState(prev => ({ ...prev, currentSong: song, isPlaying: true }));
+      const track = {
+        id: song.id,
+        url: audioSource,
+        title: song.title || 'Unknown Title',
+        artist: song.artists?.[0]?.name || song.artist || 'Unknown Artist',
+        artwork: song.thumbnail || song.thumbnailUrl,
+        onEnd: () => {
+          console.log('AUTOPLAY: Track ended callback');
+          if (!hasTriggeredNext.current) {
+            hasTriggeredNext.current = true;
+            setTimeout(() => {
+              skipNext();
+              hasTriggeredNext.current = false;
+            }, 100);
+          }
+        }
+      };
       
-      // Add to recently played after 3 seconds
+      await AudioPro.play(track);
+      
+      // Update app state to match AudioPro
+      setState(prev => ({ ...prev, currentSong: song }));
+      
       const startTime = Date.now();
       setTimeout(() => {
         const elapsed = Date.now() - startTime;
         library.addToRecentlyPlayed(song, elapsed);
       }, 3000);
       
-      // Cache the song for offline-like experience
       AsyncStorage.getItem('cached_songs').then(cached => {
         const cachedSongs = cached ? JSON.parse(cached) : [];
         const exists = cachedSongs.find((s: any) => s.id === song.id);
         if (!exists) {
-          const updatedCache = [song, ...cachedSongs].slice(0, 100); // Keep last 100 songs
+          const updatedCache = [song, ...cachedSongs].slice(0, 100);
           AsyncStorage.setItem('cached_songs', JSON.stringify(updatedCache)).catch(() => {});
         }
       }).catch(() => {});
       
       if (queue) {
-        // Use provided queue (for playlists/albums)
         setRadioContinuation(null);
         setOriginalQueue(queue);
         const finalQueue = shuffle ? shuffleArray([...queue]) : queue;
         setState(prev => ({ ...prev, queue: finalQueue }));
       } else if (generateRadio) {
-        // Generate radio queue
         const { songs, continuation } = await InnerTube.next(song.id);
         const radioQueue = songs.filter(s => s.id !== song.id);
         setRadioContinuation(continuation);
@@ -168,26 +229,33 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setState(prev => ({ ...prev, queue: finalQueue }));
       }
     } catch (error) {
-      // Error playing song handled silently
+      console.log('Error playing song:', error);
+    } finally {
+      setIsChangingSong(false);
     }
-  }, [player, library, shuffle, downloadContext]);
+  }, [library, shuffle, downloadContext, isChangingSong]);
 
-  const pause = useCallback(() => {
+  const pause = useCallback(async () => {
     setIntendedPlaying(false);
-    player.pause();
+    await AudioPro.pause();
     setState(prev => ({ ...prev, isPlaying: false }));
-  }, [player]);
+  }, []);
 
-  const resume = useCallback(() => {
+  const resume = useCallback(async () => {
     setIntendedPlaying(true);
-    player.play();
+    await AudioPro.resume();
     setState(prev => ({ ...prev, isPlaying: true }));
-  }, [player]);
+  }, []);
 
-  const seek = useCallback((position: number) => {
+  const seek = useCallback(async (position: number) => {
     setIntendedPlaying(true);
-    player.seekTo(position / 1000);
-  }, [player]);
+    try {
+      await AudioPro.seekTo(position); // AudioPro expects milliseconds
+      setState(prev => ({ ...prev, position }));
+    } catch (error) {
+      console.log('Seek error:', error);
+    }
+  }, []);
 
   const addToQueue = useCallback((song: Song) => {
     setState(prev => ({ ...prev, queue: [...prev.queue, song] }));
@@ -198,6 +266,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, []);
 
   const skipNext = useCallback(async () => {
+    if (isChangingSong) return;
+    
     const currentState = state;
     const { currentSong, queue } = currentState;
     
@@ -236,27 +306,29 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [state, repeat, radioContinuation, shuffle, originalQueue, playSong]);
 
+  const skipPreviousRef = useRef<() => Promise<void>>();
+
   useEffect(() => {
     skipNextRef.current = skipNext;
-  }, [skipNext]);
+    skipPreviousRef.current = skipPrevious;
+  }, [skipNext, skipPrevious]);
 
   const skipPrevious = useCallback(async () => {
-    if (state.position > 3000) {
-      // Restart current song if more than 3 seconds in
-      player.seekTo(0);
-    } else if (previousSongs.length > 0) {
-      // Play previous song from history
+    if (isChangingSong) return;
+    
+    if (previousSongs.length > 0) {
       const prevSong = previousSongs[previousSongs.length - 1];
       setPreviousSongs(prev => prev.slice(0, -1));
       if (state.currentSong) {
         setState(prev => ({ ...prev, queue: [state.currentSong!, ...prev.queue] }));
       }
       await playSong(prevSong, undefined, false);
+    } else if (state.position > 3000) {
+      await AudioPro.seekTo(0);
     } else if (state.currentSong) {
-      // Restart current song
-      player.seekTo(0);
+      await AudioPro.seekTo(0);
     }
-  }, [state.position, state.currentSong, previousSongs, player, playSong]);
+  }, [state.position, state.currentSong, previousSongs, playSong]);
 
   const toggleShuffle = useCallback(() => {
     const newShuffle = !shuffle;

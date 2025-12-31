@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLibrary } from '../store/LibraryContext';
@@ -29,6 +30,12 @@ export default function LikedSongsScreen({ navigation }: any) {
   const { isAuthenticated } = useAuth();
   const { modalVisible, selectedSong, showOptions, hideOptions } = useSongOptions();
   const [syncing, setSyncing] = useState(false);
+  const [showContent, setShowContent] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowContent(true), 300);
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleSync = async () => {
     if (!isAuthenticated) return;
@@ -80,26 +87,24 @@ export default function LikedSongsScreen({ navigation }: any) {
         )}
       </View>
 
-      <FlatList
-        data={likedSongs}
+      <FlashList
+        data={showContent ? likedSongs : []}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
-        getItemLayout={getItemLayout}
-        removeClippedSubviews
-        maxToRenderPerBatch={10}
-        windowSize={10}
-        initialNumToRender={15}
+        estimatedItemSize={80}
         contentContainerStyle={{ paddingBottom: 80 }}
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="heart-outline" size={64} color="#666" />
-            <Text style={styles.emptyText}>No liked songs yet</Text>
-            {isAuthenticated && (
-              <TouchableOpacity style={styles.syncButton} onPress={handleSync}>
-                <Text style={styles.syncButtonText}>Sync with YouTube Music</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          showContent ? (
+            <View style={styles.empty}>
+              <Ionicons name="heart-outline" size={64} color="#666" />
+              <Text style={styles.emptyText}>No liked songs yet</Text>
+              {isAuthenticated && (
+                <TouchableOpacity style={styles.syncButton} onPress={handleSync}>
+                  <Text style={styles.syncButtonText}>Sync with YouTube Music</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : null
         }
       />
       

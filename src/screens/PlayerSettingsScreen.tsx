@@ -3,20 +3,38 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 're
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAnimation } from '../store/AnimationContext';
 import SettingsModal from '../components/SettingsModal';
 
 export default function PlayerSettingsScreen({ navigation }: any) {
+  const { settings } = useAnimation();
   const [backgroundStyle, setBackgroundStyle] = useState('blur');
   const [skipDuration, setSkipDuration] = useState(10);
   const [skipEnabled, setSkipEnabled] = useState(true);
   const [showSkipModal, setShowSkipModal] = useState(false);
   const [showBackgroundModal, setShowBackgroundModal] = useState(false);
+  const [showContent, setShowContent] = useState(false);
 
   useEffect(() => {
-    loadBackgroundStyle();
-    loadSkipDuration();
-    loadSkipEnabled();
-  }, []);
+    if (showContent) {
+      loadBackgroundStyle();
+      loadSkipDuration();
+      loadSkipEnabled();
+    }
+  }, [showContent]);
+
+  useEffect(() => {
+    const loadInitialSettings = async () => {
+      await Promise.all([
+        loadBackgroundStyle(),
+        loadSkipDuration(), 
+        loadSkipEnabled()
+      ]);
+      const speedDelays = { fast: 250, normal: 350, slow: 550 };
+      setTimeout(() => setShowContent(true), speedDelays[settings.speed]);
+    };
+    loadInitialSettings();
+  }, [settings.speed]);
 
   const loadSkipDuration = async () => {
     try {
@@ -95,41 +113,45 @@ export default function PlayerSettingsScreen({ navigation }: any) {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <View style={styles.section}>
-          <Text style={styles.sectionHeader}>PLAYBACK</Text>
-          
-          <View style={styles.settingItem}>
-            <Text style={styles.settingTitle}>Skip Controls</Text>
-            <Switch
-              value={skipEnabled}
-              onValueChange={saveSkipEnabled}
-              trackColor={{ false: '#333', true: '#1db954' }}
-              thumbColor="#fff"
-            />
-          </View>
-          
-          {skipEnabled && (
-            <TouchableOpacity style={styles.settingItem} onPress={() => setShowSkipModal(true)}>
-              <View style={styles.settingContent}>
-                <Text style={styles.settingTitle}>Skip Duration</Text>
-                <Text style={styles.settingSubtitle}>{skipDuration} seconds</Text>
+        {showContent && (
+          <>
+            <View style={styles.section}>
+              <Text style={styles.sectionHeader}>PLAYBACK</Text>
+              
+              <View style={styles.settingItem}>
+                <Text style={styles.settingTitle}>Skip Controls</Text>
+                <Switch
+                  value={skipEnabled}
+                  onValueChange={saveSkipEnabled}
+                  trackColor={{ false: '#333', true: '#1db954' }}
+                  thumbColor="#fff"
+                />
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#666" />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionHeader}>APPEARANCE</Text>
-          
-          <TouchableOpacity style={styles.settingItem} onPress={() => setShowBackgroundModal(true)}>
-            <View style={styles.settingContent}>
-              <Text style={styles.settingTitle}>Background Style</Text>
-              <Text style={styles.settingSubtitle}>{backgroundOptions.find(o => o.key === backgroundStyle)?.label}</Text>
+              
+              {skipEnabled && (
+                <TouchableOpacity style={styles.settingItem} onPress={() => setShowSkipModal(true)}>
+                  <View style={styles.settingContent}>
+                    <Text style={styles.settingTitle}>Skip Duration</Text>
+                    <Text style={styles.settingSubtitle}>{skipDuration} seconds</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#666" />
+                </TouchableOpacity>
+              )}
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#666" />
-          </TouchableOpacity>
-        </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionHeader}>APPEARANCE</Text>
+              
+              <TouchableOpacity style={styles.settingItem} onPress={() => setShowBackgroundModal(true)}>
+                <View style={styles.settingContent}>
+                  <Text style={styles.settingTitle}>Background Style</Text>
+                  <Text style={styles.settingSubtitle}>{backgroundOptions.find(o => o.key === backgroundStyle)?.label}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#666" />
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
       </ScrollView>
       
       <SettingsModal

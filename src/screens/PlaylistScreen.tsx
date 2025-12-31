@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { View, Text, Image, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Animated, ImageBackground } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, ActivityIndicator, Animated, ImageBackground } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -66,6 +67,7 @@ export default function PlaylistScreen({ route, navigation }: any) {
   const { playlistId, videoId } = route.params;
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [showContent, setShowContent] = useState(false);
   const [showHeaderBg, setShowHeaderBg] = useState(false);
   const { playSong } = usePlayer();
   const { playlists } = useLibrary();
@@ -77,6 +79,9 @@ export default function PlaylistScreen({ route, navigation }: any) {
 
   useEffect(() => {
     loadPlaylist();
+    // Delay content loading for smooth animation
+    const timer = setTimeout(() => setShowContent(true), 300);
+    return () => clearTimeout(timer);
   }, [playlistId, playlists]);
 
   const renderItem = useCallback(({ item, index }: any) => (
@@ -288,29 +293,13 @@ export default function PlaylistScreen({ route, navigation }: any) {
           </Animated.Text>
         </Animated.View>
 
-        <Animated.FlatList
-          data={data.songs}
+        <FlashList
+          data={showContent ? data.songs : []}
           keyExtractor={keyExtractor}
           renderItem={renderItem}
-          getItemLayout={getItemLayout}
+          estimatedItemSize={72}
           ListHeaderComponent={headerComponent}
           contentContainerStyle={{ paddingBottom: 80, paddingTop: 82 }}
-          onScroll={Animated.event(
-            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-            { 
-              useNativeDriver: true,
-              listener: (event: any) => {
-                const scrollY = event.nativeEvent.contentOffset.y;
-                setShowHeaderBg(scrollY > 180);
-              }
-            }
-          )}
-          scrollEventThrottle={16}
-          removeClippedSubviews
-          maxToRenderPerBatch={6}
-          windowSize={6}
-          initialNumToRender={8}
-          updateCellsBatchingPeriod={50}
         />
         
         <SongOptionsModal

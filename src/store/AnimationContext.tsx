@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface AnimationSettings {
   enabled: boolean;
+  speed: 'fast' | 'normal' | 'slow';
 }
 
 interface AnimationContextType {
@@ -15,6 +16,7 @@ const AnimationContext = createContext<AnimationContextType | undefined>(undefin
 const STORAGE_KEY = 'animation_settings';
 const DEFAULT_SETTINGS: AnimationSettings = {
   enabled: true,
+  speed: 'fast',
 };
 
 export const AnimationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

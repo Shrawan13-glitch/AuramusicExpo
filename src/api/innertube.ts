@@ -1467,10 +1467,13 @@ export const InnerTube = {
     const cached = getCachedData(cacheKey);
     if (cached) return cached;
     
+    console.log('Fetching stream URL for videoId:', videoId);
+    
     const clients = [CLIENTS.ANDROID, CLIENTS.IOS, CLIENTS.WEB_REMIX];
     
     for (const client of clients) {
       try {
+        console.log('Trying client:', client.clientName);
         const response = await axios.post(
           `${BASE_URL}/player?key=${API_KEY}`,
           {
@@ -1480,8 +1483,12 @@ export const InnerTube = {
           { timeout: 3000 }
         );
 
+        console.log('Response status:', response.data?.playabilityStatus?.status);
+        
         const formats = response.data?.streamingData?.adaptiveFormats || [];
         const audioFormats = formats.filter((f: any) => f.mimeType?.includes('audio') && f.url);
+        
+        console.log('Found audio formats:', audioFormats.length);
         
         if (audioFormats.length === 0) continue;
         
@@ -1490,26 +1497,24 @@ export const InnerTube = {
         
         let selectedFormat;
         if (quality === 'low') {
-          // Select lowest bitrate (fastest download)
           selectedFormat = audioFormats[0];
         } else if (quality === 'medium') {
-          // Select middle bitrate
           selectedFormat = audioFormats[Math.floor(audioFormats.length / 2)];
         } else {
-          // Select highest bitrate
           selectedFormat = audioFormats[audioFormats.length - 1];
         }
         
         if (selectedFormat?.url) {
-          // Cache stream URLs for shorter duration (30 seconds)
+          console.log('Stream URL found:', selectedFormat.url.substring(0, 50) + '...');
           cache.set(cacheKey, { data: selectedFormat.url, timestamp: Date.now() - (CACHE_DURATION - 30000) });
           return selectedFormat.url;
         }
       } catch (error) {
-        // Stream error handled silently
+        console.log('Client error:', client.clientName, error.message);
       }
     }
 
+    console.log('No stream URL found for videoId:', videoId);
     return null;
   },
 

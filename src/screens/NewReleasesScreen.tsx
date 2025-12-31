@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
 import { InnerTube } from '../api/innertube';
 
@@ -34,7 +35,7 @@ export default function NewReleasesScreen({ navigation }: any) {
         <Text style={styles.headerTitle}>New Releases</Text>
       </View>
 
-      <FlatList
+      <FlashList
         data={albums}
         keyExtractor={(item) => item.id}
         numColumns={2}

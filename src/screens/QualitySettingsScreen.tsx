@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -81,7 +82,7 @@ export default function QualitySettingsScreen({ navigation }: any) {
           Choose your preferred download quality. Higher quality means larger file sizes and longer download times.
         </Text>
 
-        <FlatList
+        <FlashList
           data={qualityOptions}
           keyExtractor={keyExtractor}
           renderItem={renderItem}

@@ -16,9 +16,11 @@ import SleepTimerModal from '../components/SleepTimerModal';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const formatTime = (ms: number) => {
-  const seconds = Math.floor(ms / 1000);
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
+  if (!ms || ms < 0 || !isFinite(ms) || isNaN(ms)) return '0:00';
+  const totalSeconds = Math.floor(ms / 1000);
+  if (totalSeconds < 0 || !isFinite(totalSeconds)) return '0:00';
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 
@@ -31,6 +33,8 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
   const [backgroundStyle, setBackgroundStyle] = useState('blur');
   const [showSleepTimer, setShowSleepTimer] = useState(false);
   const [skipDuration, setSkipDuration] = useState(10);
+  const [sliderValue, setSliderValue] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
   const [skipEnabled, setSkipEnabled] = useState(true);
 
   useEffect(() => {
@@ -38,6 +42,12 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
     loadSkipDuration();
     loadSkipEnabled();
   }, []);
+
+  useEffect(() => {
+    if (!isDragging) {
+      setSliderValue(position || 0);
+    }
+  }, [position, isDragging]);
 
   const loadBackgroundStyle = async () => {
     try {
@@ -167,16 +177,25 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
           <Slider
             style={styles.slider}
             minimumValue={0}
-            maximumValue={duration || 1}
-            value={position}
-            onSlidingComplete={seek}
+            maximumValue={Math.max(duration || 1, 1)}
+            value={sliderValue}
+            onSlidingStart={() => {
+              setIsDragging(true);
+            }}
+            onValueChange={(value) => {
+              setSliderValue(value);
+            }}
+            onSlidingComplete={(value) => {
+              seek(value);
+              setIsDragging(false);
+            }}
             minimumTrackTintColor="#1db954"
             maximumTrackTintColor="#333"
             thumbTintColor="#fff"
           />
           <View style={styles.timeRow}>
-            <Text style={styles.time}>{formatTime(position)}</Text>
-            <Text style={styles.time}>{formatTime(duration)}</Text>
+            <Text style={styles.time}>{formatTime(isDragging ? sliderValue : (position || 0))}</Text>
+            <Text style={styles.time}>{formatTime(duration || 0)}</Text>
           </View>
         </View>
 

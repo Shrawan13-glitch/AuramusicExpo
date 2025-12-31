@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -243,71 +244,73 @@ export default function LibraryScreen({ navigation }: any) {
     const isSong = item.type === 'song';
     
     return (
-      <TouchableOpacity 
-        style={isSong ? styles.songItem : styles.gridItem} 
-        onPress={item.onPress}
-        onLongPress={isSong ? () => showOptions(allSongs.find(s => s.id === item.id)) : undefined}
-      >
-        {isSong ? (
-          // Song layout (list item)
-          <>
-            <View style={styles.songThumbnail}>
-              {item.thumbnail ? (
-                <Image source={{ uri: item.thumbnail }} style={styles.songThumbnailImage} />
-              ) : (
-                <View style={styles.placeholderSongThumbnail}>
-                  <Ionicons name="musical-note" size={20} color="#666" />
-                </View>
-              )}
-            </View>
-            <View style={styles.songInfo}>
-              <Text style={styles.songTitle} numberOfLines={1}>{item.title}</Text>
-              <Text style={styles.songSubtitle} numberOfLines={1}>{item.subtitle}</Text>
-            </View>
-            <TouchableOpacity style={styles.songMenu} onPress={() => showOptions(allSongs.find(s => s.id === item.id))}>
-              <Ionicons name="ellipsis-vertical" size={20} color="#aaa" />
-            </TouchableOpacity>
-          </>
-        ) : (
-          // Playlist layout (grid item)
-          <>
-            <View style={item.isCircular ? styles.circularThumbnail : styles.thumbnail}>
-              {isLiked ? (
-                <View style={styles.likedGradient}>
-                  <Ionicons name="heart" size={32} color="#fff" />
-                </View>
-              ) : item.thumbnail ? (
-                <Image source={{ uri: item.thumbnail }} style={item.isCircular ? styles.circularThumbnailImage : styles.thumbnailImage} />
-              ) : (
-                <View style={styles.placeholderThumbnail}>
-                  <Ionicons name={item.type === 'artist' ? "person" : "musical-notes"} size={24} color="#666" />
-                </View>
-              )}
-            </View>
-            <View style={styles.itemInfo}>
-              <Text style={styles.itemTitle} numberOfLines={2}>{item.title}</Text>
-              <View style={styles.subtitleRow}>
-                {item.isPinned && <Ionicons name="pin" size={12} color="#aaa" style={styles.pinIcon} />}
-                {item.isOffline && <Ionicons name="download" size={12} color="#1db954" style={styles.pinIcon} />}
-                {item.isPartial && (
-                  <Ionicons 
-                    name={item.status === 'paused' ? 'pause' : 'download'} 
-                    size={12} 
-                    color={item.status === 'paused' ? '#ff9500' : '#1db954'} 
-                    style={styles.pinIcon} 
-                  />
+      <View style={isSong ? styles.songItem : styles.gridItem}>
+        <TouchableOpacity 
+          style={isSong ? styles.songContent : styles.gridContent} 
+          onPress={item.onPress}
+          onLongPress={isSong ? () => showOptions(allSongs.find(s => s.id === item.id)) : undefined}
+        >
+          {isSong ? (
+            // Song layout (list item)
+            <>
+              <View style={styles.songThumbnail}>
+                {item.thumbnail ? (
+                  <Image source={{ uri: item.thumbnail }} style={styles.songThumbnailImage} />
+                ) : (
+                  <View style={styles.placeholderSongThumbnail}>
+                    <Ionicons name="musical-note" size={20} color="#666" />
+                  </View>
                 )}
-                <Text style={styles.itemSubtitle} numberOfLines={1}>{item.subtitle}</Text>
               </View>
-              {item.isPartial && (
-                <View style={styles.progressBar}>
-                  <View style={[styles.progressFill, { width: `${item.progress * 100}%` }]} />
+              <View style={styles.songInfo}>
+                <Text style={styles.songTitle} numberOfLines={1}>{item.title}</Text>
+                <Text style={styles.songSubtitle} numberOfLines={1}>{item.subtitle}</Text>
+              </View>
+              <TouchableOpacity style={styles.songMenu} onPress={() => showOptions(allSongs.find(s => s.id === item.id))}>
+                <Ionicons name="ellipsis-vertical" size={20} color="#aaa" />
+              </TouchableOpacity>
+            </>
+          ) : (
+            // Playlist layout (grid item)
+            <>
+              <View style={item.isCircular ? styles.circularThumbnail : styles.thumbnail}>
+                {isLiked ? (
+                  <View style={styles.likedGradient}>
+                    <Ionicons name="heart" size={32} color="#fff" />
+                  </View>
+                ) : item.thumbnail ? (
+                  <Image source={{ uri: item.thumbnail }} style={item.isCircular ? styles.circularThumbnailImage : styles.thumbnailImage} />
+                ) : (
+                  <View style={styles.placeholderThumbnail}>
+                    <Ionicons name={item.type === 'artist' ? "person" : "musical-notes"} size={24} color="#666" />
+                  </View>
+                )}
+              </View>
+              <View style={styles.itemInfo}>
+                <Text style={styles.itemTitle} numberOfLines={2}>{item.title}</Text>
+                <View style={styles.subtitleRow}>
+                  {item.isPinned && <Ionicons name="pin" size={12} color="#aaa" style={styles.pinIcon} />}
+                  {item.isOffline && <Ionicons name="download" size={12} color="#1db954" style={styles.pinIcon} />}
+                  {item.isPartial && (
+                    <Ionicons 
+                      name={item.status === 'paused' ? 'pause' : 'download'} 
+                      size={12} 
+                      color={item.status === 'paused' ? '#ff9500' : '#1db954'} 
+                      style={styles.pinIcon} 
+                    />
+                  )}
+                  <Text style={styles.itemSubtitle} numberOfLines={1}>{item.subtitle}</Text>
                 </View>
-              )}
-            </View>
-          </>
-        )}
-      </TouchableOpacity>
+                {item.isPartial && (
+                  <View style={styles.progressBar}>
+                    <View style={[styles.progressFill, { width: `${item.progress * 100}%` }]} />
+                  </View>
+                )}
+              </View>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
     );
   };
 
@@ -317,11 +320,12 @@ export default function LibraryScreen({ navigation }: any) {
       
       {/* Category Navigation */}
       <View style={styles.categorySection}>
-        <FlatList
+        <FlashList
           horizontal
           data={categories}
           renderItem={renderCategoryChip}
           keyExtractor={(item) => item}
+          estimatedItemSize={100}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.categoryList}
         />
@@ -366,15 +370,42 @@ export default function LibraryScreen({ navigation }: any) {
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Loading songs...</Text>
         </View>
-      ) : (
-        <FlatList
+      ) : selectedCategory === 'Songs' ? (
+        <FlashList
           data={libraryItems}
           renderItem={renderLibraryItem}
           keyExtractor={(item) => item.id}
-          numColumns={selectedCategory === 'Songs' ? 1 : 2}
-          key={selectedCategory} // Force re-render when category changes
-          contentContainerStyle={selectedCategory === 'Songs' ? styles.listContainer : styles.gridContainer}
-          columnWrapperStyle={selectedCategory === 'Songs' ? undefined : styles.gridRow}
+          estimatedItemSize={64}
+          contentContainerStyle={styles.listContainer}
+        />
+      ) : (
+        <FlashList
+          data={libraryItems}
+          renderItem={({ item, index }) => {
+            // Create pairs of items for 2-column layout
+            const pairs = [];
+            for (let i = 0; i < libraryItems.length; i += 2) {
+              pairs.push({
+                left: libraryItems[i],
+                right: libraryItems[i + 1] || null,
+                index: i
+              });
+            }
+            
+            const pair = pairs[index];
+            if (!pair) return null;
+            
+            return (
+              <View style={styles.gridRow}>
+                {renderLibraryItem({ item: pair.left })}
+                {pair.right && renderLibraryItem({ item: pair.right })}
+              </View>
+            );
+          }}
+          data={Array.from({ length: Math.ceil(libraryItems.length / 2) }, (_, i) => i)}
+          keyExtractor={(index) => `row-${index}`}
+          estimatedItemSize={150}
+          contentContainerStyle={styles.gridContainer}
         />
       )}
       
@@ -414,8 +445,9 @@ const styles = StyleSheet.create({
   loadingText: { color: '#aaa', fontSize: 16 },
   // Grid layout (playlists)
   gridContainer: { paddingHorizontal: 8, paddingBottom: 140 },
-  gridRow: { justifyContent: 'space-between', paddingHorizontal: 8 },
-  gridItem: { width: '48%', marginBottom: 24 },
+  gridRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 8, marginBottom: 24 },
+  gridItem: { width: '48%' },
+  gridContent: { width: '100%' },
   thumbnail: { width: '100%', aspectRatio: 1, borderRadius: 8, marginBottom: 8, overflow: 'hidden' },
   circularThumbnail: { width: '100%', aspectRatio: 1, borderRadius: 1000, marginBottom: 8, overflow: 'hidden' },
   likedGradient: { flex: 1, backgroundColor: '#e74c3c', alignItems: 'center', justifyContent: 'center' },
@@ -431,7 +463,8 @@ const styles = StyleSheet.create({
   progressFill: { height: 2, backgroundColor: '#1db954', borderRadius: 1 },
   // List layout (songs)
   listContainer: { paddingHorizontal: 16, paddingBottom: 140 },
-  songItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, marginBottom: 4 },
+  songItem: { width: '100%', marginBottom: 4 },
+  songContent: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
   songThumbnail: { width: 48, height: 48, borderRadius: 4, marginRight: 12, overflow: 'hidden' },
   songThumbnailImage: { width: '100%', height: '100%' },
   placeholderSongThumbnail: { flex: 1, backgroundColor: '#202020', alignItems: 'center', justifyContent: 'center' },

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, Animated } from 'react-native';
+import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Animated } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { InnerTube } from '../api/innertube';
@@ -212,7 +213,7 @@ export default function ArtistScreen({ route, navigation }: any) {
               />
             ))
           ) : (
-            <FlatList
+            <FlashList
               horizontal
               data={section.items}
               keyExtractor={keyExtractor}

@@ -1,11 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useAnimation } from '../store/AnimationContext';
 import { checkForUpdates, getCurrentVersion } from '../utils/updateChecker';
 
 export default function AboutScreen({ navigation }: any) {
+  const { settings } = useAnimation();
   const [checking, setChecking] = useState(false);
+  const [showContent, setShowContent] = useState(false);
+
+  useEffect(() => {
+    const speedDelays = { fast: 250, normal: 350, slow: 550 };
+    const timer = setTimeout(() => setShowContent(true), speedDelays[settings.speed]);
+    return () => clearTimeout(timer);
+  }, [settings.speed]);
 
   const handleCheckUpdates = async () => {
     setChecking(true);
@@ -42,65 +51,69 @@ export default function AboutScreen({ navigation }: any) {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.appSection}>
-          <View style={styles.appIcon}>
-            <Ionicons name="musical-notes" size={40} color="#1db954" />
-          </View>
-          <Text style={styles.appName}>AuraMusic</Text>
-          <Text style={styles.appDescription}>Your ultimate music streaming companion</Text>
-        </View>
-
-        <View style={styles.section}>
-          <InfoCard
-            icon="information-circle-outline"
-            title="Version"
-            subtitle={getCurrentVersion()}
-            iconColor="#3742fa"
-          />
-          
-          <TouchableOpacity style={styles.updateCard} onPress={handleCheckUpdates} disabled={checking}>
-            <View style={[styles.iconContainer, { backgroundColor: '#1db954' + '20' }]}>
-              {checking ? (
-                <ActivityIndicator size="small" color="#1db954" />
-              ) : (
-                <Ionicons name="cloud-download-outline" size={24} color="#1db954" />
-              )}
+        {showContent && (
+          <>
+            <View style={styles.appSection}>
+              <View style={styles.appIcon}>
+                <Ionicons name="musical-notes" size={40} color="#1db954" />
+              </View>
+              <Text style={styles.appName}>AuraMusic</Text>
+              <Text style={styles.appDescription}>Your ultimate music streaming companion</Text>
             </View>
-            <View style={styles.cardContent}>
-              <Text style={styles.cardTitle}>Check for Updates</Text>
-              <Text style={styles.cardSubtitle}>Get the latest features and fixes</Text>
+
+            <View style={styles.section}>
+              <InfoCard
+                icon="information-circle-outline"
+                title="Version"
+                subtitle={getCurrentVersion()}
+                iconColor="#3742fa"
+              />
+              
+              <TouchableOpacity style={styles.updateCard} onPress={handleCheckUpdates} disabled={checking}>
+                <View style={[styles.iconContainer, { backgroundColor: '#1db954' + '20' }]}>
+                  {checking ? (
+                    <ActivityIndicator size="small" color="#1db954" />
+                  ) : (
+                    <Ionicons name="cloud-download-outline" size={24} color="#1db954" />
+                  )}
+                </View>
+                <View style={styles.cardContent}>
+                  <Text style={styles.cardTitle}>Check for Updates</Text>
+                  <Text style={styles.cardSubtitle}>Get the latest features and fixes</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#666" />
+              </TouchableOpacity>
+
+              <InfoCard
+                icon="code-slash-outline"
+                title="Developer"
+                subtitle="ShryneX - Built with React Native & Expo"
+                iconColor="#ff6b6b"
+              />
+
+              <InfoCard
+                icon="shield-checkmark-outline"
+                title="Privacy Policy"
+                subtitle="How we protect your data"
+                onPress={() => Linking.openURL('https://shrynex.pages.dev/auramusic/privacy-policy')}
+                iconColor="#ffa502"
+              />
+
+              <InfoCard
+                icon="document-text-outline"
+                title="Terms of Service"
+                subtitle="Usage terms and conditions"
+                onPress={() => Linking.openURL('https://shrynex.pages.dev/auramusic/terms')}
+                iconColor="#747d8c"
+              />
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#666" />
-          </TouchableOpacity>
 
-          <InfoCard
-            icon="code-slash-outline"
-            title="Developer"
-            subtitle="ShryneX - Built with React Native & Expo"
-            iconColor="#ff6b6b"
-          />
-
-          <InfoCard
-            icon="shield-checkmark-outline"
-            title="Privacy Policy"
-            subtitle="How we protect your data"
-            onPress={() => Linking.openURL('https://shrynex.pages.dev/auramusic/privacy-policy')}
-            iconColor="#ffa502"
-          />
-
-          <InfoCard
-            icon="document-text-outline"
-            title="Terms of Service"
-            subtitle="Usage terms and conditions"
-            onPress={() => Linking.openURL('https://shrynex.pages.dev/auramusic/terms')}
-            iconColor="#747d8c"
-          />
-        </View>
-
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Made with ❤️ for music lovers</Text>
-          <Text style={styles.copyright}>© 2024 AuraMusic by ShryneX. All rights reserved.</Text>
-        </View>
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>Made with ❤️ for music lovers</Text>
+              <Text style={styles.copyright}>© 2024 AuraMusic by ShryneX. All rights reserved.</Text>
+            </View>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

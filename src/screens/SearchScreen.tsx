@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, TextInput, FlatList, TouchableOpacity, Image, Text, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
+import { View, TextInput, TouchableOpacity, Image, Text, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { InnerTube } from '../api/innertube';
@@ -165,9 +166,8 @@ export default function SearchScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <TabHeader title="Search" navigation={navigation} />
       <View style={styles.searchBar}>
-        <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
+        <Ionicons name="search" size={22} color="#1db954" style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search songs, artists, albums..."
@@ -198,7 +198,7 @@ export default function SearchScreen({ navigation }: any) {
             setSelectedFilter(null);
             setShowSuggestions(true);
           }}>
-            <Ionicons name="close-circle" size={20} color="#666" />
+            <Ionicons name="close-circle" size={22} color="#666" />
           </TouchableOpacity>
         )}
       </View>
@@ -246,12 +246,10 @@ export default function SearchScreen({ navigation }: any) {
           </View>
         </ScrollView>
       ) : showSuggestions && suggestions.length > 0 ? (
-        <FlatList
+        <FlashList
           data={suggestions}
           keyExtractor={(item, index) => `suggestion-${index}`}
-          removeClippedSubviews={true}
-          maxToRenderPerBatch={5}
-          windowSize={5}
+          estimatedItemSize={60}
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.suggestionItem}
@@ -307,14 +305,11 @@ export default function SearchScreen({ navigation }: any) {
             </View>
           )}
           {selectedFilter ? (
-            <FlatList
+            <FlashList
               data={filteredItems}
               renderItem={renderItem}
               keyExtractor={(item, index) => `${item.type}-${item.id}-${index}`}
-              removeClippedSubviews={true}
-              maxToRenderPerBatch={10}
-              windowSize={10}
-              initialNumToRender={15}
+              estimatedItemSize={80}
               ListEmptyComponent={
                 query.length >= 2 && !loading && filteredItems.length === 0 ? (
                   <Text style={styles.emptyText}>No results found</Text>
@@ -322,9 +317,10 @@ export default function SearchScreen({ navigation }: any) {
               }
             />
           ) : (
-            <FlatList
+            <FlashList
               data={sections}
               keyExtractor={(section, index) => `section-${index}`}
+              estimatedItemSize={200}
               renderItem={({ item: section }) => (
                 <View style={styles.section}>
                   <Text style={styles.sectionTitle}>{section.title}</Text>
@@ -362,23 +358,28 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#242424',
-    margin: 16,
+    backgroundColor: '#1a1a1a',
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 16,
     paddingHorizontal: 16,
-    borderRadius: 25,
+    borderRadius: 28,
+    borderWidth: 2,
+    borderColor: '#333',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   searchIcon: { marginRight: 12, opacity: 0.7 },
   searchInput: { 
     flex: 1, 
     color: '#fff', 
-    padding: 14, 
-    fontSize: 16,
+    paddingVertical: 16, 
+    fontSize: 17,
     fontWeight: '500',
+    letterSpacing: 0.3,
   },
   section: { marginTop: 24, paddingHorizontal: 16 },
   sectionHeaderContainer: {

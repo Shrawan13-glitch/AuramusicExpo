@@ -1,5 +1,6 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Animated } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Animated } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDownload } from '../store/DownloadContext';
@@ -11,7 +12,13 @@ export default function DownloadedSongsScreen({ navigation }: any) {
   const { downloadedSongs } = useDownload();
   const { playSong } = usePlayer();
   const { modalVisible, selectedSong, showOptions, hideOptions } = useSongOptions();
+  const [showContent, setShowContent] = useState(false);
   const scrollY = new Animated.Value(0);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowContent(true), 300);
+    return () => clearTimeout(timer);
+  }, []);
 
   const handlePlayAll = () => {
     if (downloadedSongs.length > 0) {
@@ -100,15 +107,16 @@ export default function DownloadedSongsScreen({ navigation }: any) {
         <View style={{ width: 24 }} />
       </View>
 
-      <FlatList
-        data={downloadedSongs}
+      <FlashList
+        data={showContent ? downloadedSongs : []}
         renderItem={renderSong}
         keyExtractor={(item) => item.id}
+        estimatedItemSize={72}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        ListEmptyComponent={EmptyState}
+        ListEmptyComponent={showContent ? EmptyState : null}
         ListHeaderComponent={
-          downloadedSongs.length > 0 ? (
+          showContent && downloadedSongs.length > 0 ? (
             <View style={styles.playlistHeader}>
               <View style={styles.playlistInfo}>
                 <View style={styles.playlistIcon}>

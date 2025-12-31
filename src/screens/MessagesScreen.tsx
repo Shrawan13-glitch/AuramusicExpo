@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, RefreshControl, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, RefreshControl, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import TabHeader from '../components/TabHeader';
@@ -119,7 +120,7 @@ export default function MessagesScreen({ navigation }: any) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <TabHeader title="Messages" navigation={navigation} />
-        <FlatList
+        <FlashList
           data={[]}
           renderItem={() => null}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
@@ -140,7 +141,7 @@ export default function MessagesScreen({ navigation }: any) {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <TabHeader title="Messages" navigation={navigation} />
-      <FlatList
+      <FlashList
         data={messages}
         keyExtractor={keyExtractor}
         renderItem={renderItem}

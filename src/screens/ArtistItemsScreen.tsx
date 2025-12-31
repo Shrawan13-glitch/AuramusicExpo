@@ -1,8 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Image } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Image, Dimensions } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { InnerTube } from '../api/innertube';
 import { usePlayer } from '../store/PlayerContext';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const ITEM_WIDTH = (SCREEN_WIDTH - 48) / 2;
 
 const SongItem = React.memo(({ item, onPress }: any) => (
   <TouchableOpacity style={styles.songItem} onPress={onPress}>
@@ -17,10 +22,12 @@ const SongItem = React.memo(({ item, onPress }: any) => (
 ));
 
 const GridItem = React.memo(({ item, onPress }: any) => (
-  <TouchableOpacity style={styles.gridItem} onPress={onPress}>
-    <Image source={{ uri: item.thumbnailUrl }} style={[styles.gridThumbnail, item.type === 'artist' && { borderRadius: 70 }]} />
-    <Text style={styles.gridTitle} numberOfLines={2}>{item.title || item.name}</Text>
-    {item.subtitle && <Text style={styles.gridSubtitle} numberOfLines={1}>{item.subtitle}</Text>}
+  <TouchableOpacity style={[styles.gridItem, { width: ITEM_WIDTH }]} onPress={onPress}>
+    <Image source={{ uri: item.thumbnailUrl }} style={[styles.gridThumbnail, item.type === 'artist' && { borderRadius: ITEM_WIDTH / 2 }]} />
+    <View style={styles.cardContent}>
+      <Text style={styles.gridTitle} numberOfLines={2}>{item.title || item.name}</Text>
+      {item.subtitle && <Text style={styles.gridSubtitle} numberOfLines={1}>{item.subtitle}</Text>}
+    </View>
   </TouchableOpacity>
 ));
 
@@ -66,17 +73,19 @@ export default function ArtistItemsScreen({ route, navigation }: any) {
 
   const keyExtractor = useCallback((item: any, index: number) => `${item.id}-${index}`, []);
 
-  const getItemLayout = useCallback((data: any, index: number) => ({
-    length: isSongList ? 64 : 200,
-    offset: (isSongList ? 64 : 200) * index,
-    index,
-  }), [isSongList]);
-
   if (loading) {
     return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#fff" style={{ marginTop: 100 }} />
-      </View>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Loading...</Text>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#1db954" />
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -88,10 +97,10 @@ export default function ArtistItemsScreen({ route, navigation }: any) {
     );
   }
 
-  const isSongList = data.items[0]?.type === 'song' && data.title?.toLowerCase().includes('song');
+  const isSongList = data.items[0]?.type === 'song' && data.title?.toLowerCase().includes('song') && data.items.length > 10;
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -99,35 +108,83 @@ export default function ArtistItemsScreen({ route, navigation }: any) {
         <Text style={styles.headerTitle}>{data.title}</Text>
       </View>
 
-      <FlatList
+      <FlashList
         data={data.items}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
-        getItemLayout={getItemLayout}
+        estimatedItemSize={isSongList ? 64 : ITEM_WIDTH + 80}
         numColumns={isSongList ? 1 : 2}
-        key={isSongList ? 'list' : 'grid'}
         removeClippedSubviews
-        maxToRenderPerBatch={8}
-        windowSize={8}
-        initialNumToRender={12}
-        contentContainerStyle={{ paddingBottom: 80, paddingTop: 16 }}
+        maxToRenderPerBatch={6}
+        windowSize={5}
+        contentContainerStyle={styles.listContent}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 16, paddingTop: 50, gap: 16 },
-  headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff', flex: 1 },
+  header: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    padding: 16, 
+    paddingBottom: 12,
+    gap: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1a1a1a'
+  },
+  headerTitle: { 
+    fontSize: 20, 
+    fontWeight: '700', 
+    color: '#fff', 
+    flex: 1,
+    letterSpacing: 0.3
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  listContent: { 
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 100
+  },
   songItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 16 },
   songThumbnail: { width: 48, height: 48, borderRadius: 4 },
   songInfo: { flex: 1, marginLeft: 12 },
   songTitle: { fontSize: 16, color: '#fff', fontWeight: '500' },
   songArtist: { fontSize: 14, color: '#aaa', marginTop: 2 },
-  gridItem: { flex: 1, margin: 8, maxWidth: '45%' },
-  gridThumbnail: { width: '100%', aspectRatio: 1, borderRadius: 4 },
-  gridTitle: { fontSize: 14, color: '#fff', marginTop: 8, fontWeight: '500' },
+  gridItem: { 
+    marginBottom: 20,
+    marginHorizontal: 8,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  gridThumbnail: { 
+    width: '100%', 
+    height: ITEM_WIDTH,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  cardContent: {
+    padding: 12,
+    height: 60,
+    justifyContent: 'center',
+  },
+  gridTitle: { 
+    fontSize: 16, 
+    color: '#fff', 
+    fontWeight: '600',
+    lineHeight: 20,
+  },
   gridSubtitle: { fontSize: 12, color: '#aaa', marginTop: 2 },
   errorText: { color: '#fff', textAlign: 'center', marginTop: 100, fontSize: 16 },
 });
