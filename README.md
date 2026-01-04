@@ -1,48 +1,93 @@
-# AuraMusic Expo
+# 🎧 AuraMusic
 
-YouTube Music client built with React Native and Expo.
+A modern YouTube Music client built with React Native and Expo (Development Build),
+focused on reliable background playback, playback notifications, and a smooth
+listening experience.
 
-## Features
+AuraMusic is designed as a performant, native-first music application rather than
+a limited Expo Go demo.
 
-- ✅ YouTube Music streaming via InnerTube API
-- ✅ Search songs, albums, artists, playlists
-- ✅ Music player with queue management
-- ✅ Background audio playback
-- ✅ Library management
-- ✅ Dark theme UI
+---
 
-## Installation
+## ✨ Features
 
-```bash
-npm install
-```
+- YouTube Music streaming via InnerTube API
+- Search songs, albums, artists, and playlists
+- Music player with proper queue management
+- Playback notifications (lock screen & notification controls)
+- Reliable background and foreground audio playback
+- Library management
+- Dark theme UI optimized for long listening sessions
 
-## Run
+---
 
-```bash
-# Start Expo Go
-npm start
+## 🔊 Audio & Playback
 
-# Run on Android
-npm run android
+AuraMusic uses a custom Expo development build with native audio capabilities.
 
-# Run on iOS
-npm run ios
-```
+- Native-backed audio playback
+- Media session integration
+- Stable background playback
+- Notification controls (play / pause / next / previous)
 
-## Limitations in Expo Go
+This setup removes Expo Go limitations and enables advanced audio features.
 
-- Media notifications require custom dev build
-- Advanced audio features require native modules
+---
 
-**Note:** Background playback is now supported! The app will continue playing music when in the background.
-
-## Tech Stack
+## 🧱 Tech Stack
 
 - React Native
-- Expo
+- Expo (Development Build)
 - TypeScript
 - React Navigation
-- expo-audio
-- Axios (HTTP client)
+- react-native-audio-pro
+- Axios
 - InnerTube API (YouTube Music)
+
+---
+
+## 📦 Installation
+
+    npm install
+
+---
+
+## ▶️ Running the App
+
+    # Start Metro
+    npm start
+
+    # Run on Android (Development Build)
+    npm run android
+
+Expo Go is not supported.
+A custom development client is required for native audio and notifications.
+
+---
+
+## 📱 Platform Support
+
+- Android (primary and fully supported)
+- iOS (experimental / not fully tested)
+
+---
+
+## ⚠️ Disclaimer
+
+AuraMusic is an open-source, experimental YouTube Music client.
+All content is fetched from publicly available endpoints.
+No media is hosted or redistributed by the application.
+
+---
+
+## 👤 Author
+
+Team AuraMusic
+
+---
+
+## 📌 Notes
+
+- Uses native audio via development build
+- Designed for performance and reliability
+- Not intended as a Play Store release (currently)
