@@ -936,9 +936,12 @@ export const InnerTube = {
       const playlist = {
         id: playlistId,
         title: header?.title?.runs?.[0]?.text || editableHeader?.header?.musicResponsiveHeaderRenderer?.title?.runs?.[0]?.text || 'Playlist',
+        description: header?.description?.runs?.[0]?.text || editableHeader?.header?.musicResponsiveHeaderRenderer?.description?.runs?.[0]?.text || '',
         thumbnail: parseThumbnail(header?.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails || header?.thumbnail?.croppedSquareThumbnailRenderer?.thumbnail?.thumbnails || editableHeader?.header?.musicResponsiveHeaderRenderer?.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails) || songs[0]?.thumbnailUrl || 'https://via.placeholder.com/200',
         author: header?.straplineTextOne?.runs?.[0]?.text || header?.subtitle?.runs?.[0]?.text || editableHeader?.header?.musicResponsiveHeaderRenderer?.subtitle?.runs?.[0]?.text || 'Unknown',
         songCount: `${songs.length} songs`,
+        privacy: 'PUBLIC', // Default for remote playlists
+        isLocal: false
       };
 
       return { playlist, songs, continuation };
@@ -1635,6 +1638,71 @@ export const InnerTube = {
             removedVideoId: videoId,
             setVideoId: setVideoId,
           }],
+        },
+        { headers }
+      );
+      return response.status === 200;
+    } catch (error) {
+      return false;
+    }
+  },
+
+  async editPlaylist(playlistId: string, title?: string, description?: string, privacy?: string): Promise<boolean> {
+    try {
+      const headers = await getHeaders(true);
+      const actions: any[] = [];
+      
+      if (title !== undefined) {
+        actions.push({
+          action: 'ACTION_SET_PLAYLIST_NAME',
+          playlistName: title,
+        });
+      }
+      
+      if (description !== undefined) {
+        actions.push({
+          action: 'ACTION_SET_PLAYLIST_DESCRIPTION',
+          playlistDescription: description,
+        });
+      }
+      
+      if (privacy !== undefined) {
+        // Map our privacy values to YouTube's expected values
+        const privacyMap: { [key: string]: string } = {
+          'PUBLIC': 'PUBLIC',
+          'PRIVATE': 'PRIVATE', 
+          'UNLISTED': 'UNLISTED'
+        };
+        
+        actions.push({
+          action: 'ACTION_SET_PLAYLIST_PRIVACY',
+          playlistPrivacy: privacyMap[privacy] || 'PRIVATE',
+        });
+      }
+      
+      const response = await axios.post(
+        `${BASE_URL}/browse/edit_playlist?key=${API_KEY}`,
+        {
+          context: createContext(),
+          playlistId,
+          actions,
+        },
+        { headers }
+      );
+      return response.status === 200;
+    } catch (error) {
+      return false;
+    }
+  },
+
+  async deletePlaylist(playlistId: string): Promise<boolean> {
+    try {
+      const headers = await getHeaders(true);
+      const response = await axios.post(
+        `${BASE_URL}/playlist/delete?key=${API_KEY}`,
+        {
+          context: createContext(),
+          playlistId,
         },
         { headers }
       );

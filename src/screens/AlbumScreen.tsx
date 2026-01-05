@@ -7,6 +7,17 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { InnerTube } from '../api/innertube';
 import { usePlayer } from '../store/PlayerContext';
 
+// Add hashCode method for color generation
+String.prototype.hashCode = function() {
+  let hash = 0;
+  for (let i = 0; i < this.length; i++) {
+    const char = this.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return hash;
+};
+
 const ITEM_HEIGHT = 60;
 
 const SongItem = React.memo(({ item, index, onPress }: any) => (
@@ -22,17 +33,39 @@ const SongItem = React.memo(({ item, index, onPress }: any) => (
   </TouchableOpacity>
 ));
 
-const AlbumHeader = React.memo(({ data, onPlay, onShuffle }: any) => (
-  <View style={styles.albumHeader}>
-    {data.album.thumbnail ? (
-      <Image source={{ uri: data.album.thumbnail }} style={styles.albumArt} />
-    ) : (
-      <View style={[styles.albumArt, { backgroundColor: '#333' }]} />
-    )}
-    <Text style={styles.albumType}>{data.album.type || 'Album'}</Text>
-    <Text style={styles.albumTitle}>{data.album.title || 'Unknown Album'}</Text>
-    <Text style={styles.albumArtist}>{data.album.artist || 'Unknown Artist'}</Text>
-    <Text style={styles.albumYear}>{data.album.year || ''} {data.album.year && '•'} {data.songs?.length || 0} songs</Text>
+const AlbumHeader = React.memo(({ data, onPlay, onShuffle }: any) => {
+  // Generate artwork if no thumbnail
+  const generateArtwork = () => {
+    if (data.album.thumbnail) return null;
+    
+    const colors = [`hsl(${(Math.abs(data.album.id?.hashCode() || 0) * 137) % 360}, 80%, 55%)`, `hsl(${(Math.abs(data.album.id?.hashCode() || 0) * 137 + 120) % 360}, 80%, 35%)`];
+    const patterns = ['▲', '●', '■', '♦', '★', '▼', '◆', '♪'];
+    const pattern = patterns[Math.abs(data.album.id?.hashCode() || 0) % patterns.length];
+    
+    return (
+      <View style={[styles.generatedArtwork, { backgroundColor: colors[0] }]}>
+        <View style={[styles.artworkPattern, { backgroundColor: colors[1] }]}>
+          <Text style={styles.patternText}>{pattern}</Text>
+        </View>
+        <View style={[styles.artworkOverlay, { backgroundColor: colors[1] }]} />
+        <View style={styles.artworkTitle}>
+          <Text style={styles.artworkTitleText} numberOfLines={2}>{data.album.title}</Text>
+        </View>
+      </View>
+    );
+  };
+  
+  return (
+    <View style={styles.albumHeader}>
+      {data.album.thumbnail ? (
+        <Image source={{ uri: data.album.thumbnail }} style={styles.albumArt} />
+      ) : (
+        generateArtwork()
+      )}
+      <Text style={styles.albumType}>{data.album.type || 'Album'}</Text>
+      <Text style={styles.albumTitle}>{data.album.title || 'Unknown Album'}</Text>
+      <Text style={styles.albumArtist}>{data.album.artist || 'Unknown Artist'}</Text>
+      <Text style={styles.albumYear}>{data.album.year || ''} {data.album.year && '•'} {data.songs?.length || 0} songs</Text>
     
     <View style={styles.buttonRow}>
       <TouchableOpacity style={styles.playButton} onPress={onPlay}>
@@ -45,7 +78,8 @@ const AlbumHeader = React.memo(({ data, onPlay, onShuffle }: any) => (
       </TouchableOpacity>
     </View>
   </View>
-));
+  );
+});
 
 export default function AlbumScreen({ route, navigation }: any) {
   const { albumId } = route.params;
@@ -171,6 +205,56 @@ const styles = StyleSheet.create({
   backButton: { padding: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 },
   albumHeader: { alignItems: 'center', padding: 16, paddingTop: 60 },
   albumArt: { width: 200, height: 200, borderRadius: 8, marginBottom: 16 },
+  generatedArtwork: {
+    width: 200,
+    height: 200,
+    borderRadius: 8,
+    marginBottom: 16,
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  artworkPattern: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    opacity: 0.8,
+  },
+  patternText: {
+    fontSize: 20,
+    color: '#fff',
+    fontWeight: '900',
+  },
+  artworkOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 60,
+    opacity: 0.4,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+  },
+  artworkTitle: {
+    position: 'absolute',
+    bottom: 10,
+    left: 10,
+    right: 10,
+  },
+  artworkTitleText: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: '700',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
   albumType: { fontSize: 12, color: '#aaa', textTransform: 'uppercase', marginBottom: 4, textAlign: 'center' },
   albumTitle: { fontSize: 24, fontWeight: 'bold', color: '#fff', textAlign: 'center', marginBottom: 8 },
   albumArtist: { fontSize: 16, color: '#fff', marginBottom: 4, textAlign: 'center' },

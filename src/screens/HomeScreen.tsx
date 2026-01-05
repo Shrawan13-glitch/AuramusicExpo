@@ -152,17 +152,29 @@ export default function HomeScreen({ navigation }: any) {
             if (item.type === 'song') {
               playSong(item);
             } else if (item.type === 'playlist') {
-              navigation.getParent()?.navigate('Playlist', { playlistId: item.id, videoId: item.videoId });
+              navigation.navigate('Playlist', { playlistId: item.id, videoId: item.videoId });
             }
           }}
           onLongPress={item.type === 'song' ? () => showOptions(item) : undefined}
         >
           <View style={[styles.trendingGlowBorder, { borderColor: trendingColors[0], shadowColor: trendingColors[0] }]}>
-            <Image 
-              source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : require('../../assets/icon.png')} 
-              style={styles.trendingImage}
-              resizeMode="cover"
-            />
+            {item.thumbnailUrl ? (
+              <Image 
+                source={{ uri: item.thumbnailUrl }} 
+                style={styles.trendingImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={[styles.generatedArtwork, { backgroundColor: trendingColors[0] }]}>
+                <View style={[styles.artworkPattern, { backgroundColor: trendingColors[1] }]}>
+                  <Text style={styles.patternText}>{['▲', '●', '■', '♦', '★'][Math.abs(item.id?.hashCode() || 0) % 5]}</Text>
+                </View>
+                <View style={[styles.artworkOverlay, { backgroundColor: trendingColors[1] }]} />
+                <View style={styles.artworkTitle}>
+                  <Text style={styles.artworkTitleText} numberOfLines={2}>{displayTitle}</Text>
+                </View>
+              </View>
+            )}
             <View style={[styles.trendingHologram, { backgroundColor: trendingColors[1] }]} />
             <View style={styles.trendingBadge}>
               <Ionicons name="flame" size={14} color="#fff" />
@@ -196,16 +208,28 @@ export default function HomeScreen({ navigation }: any) {
           style={styles.myPlaylistCard} 
           onPress={() => {
             if (item.type === 'playlist') {
-              navigation.getParent()?.navigate('Playlist', { playlistId: item.id, videoId: item.videoId });
+              navigation.navigate('Playlist', { playlistId: item.id, videoId: item.videoId });
             }
           }}
         >
           <View style={styles.myPlaylistFrame}>
-            <Image 
-              source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : require('../../assets/icon.png')} 
-              style={styles.myPlaylistImage}
-              resizeMode="cover"
-            />
+            {item.thumbnailUrl ? (
+              <Image 
+                source={{ uri: item.thumbnailUrl }} 
+                style={styles.myPlaylistImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={[styles.generatedArtwork, { backgroundColor: '#e91e63', width: '100%', height: '100%' }]}>
+                <View style={[styles.artworkPattern, { backgroundColor: '#ad1457' }]}>
+                  <Text style={styles.patternText}>♪</Text>
+                </View>
+                <View style={[styles.artworkOverlay, { backgroundColor: '#ad1457' }]} />
+                <View style={styles.artworkTitle}>
+                  <Text style={styles.artworkTitleText} numberOfLines={2}>{displayTitle}</Text>
+                </View>
+              </View>
+            )}
             <View style={styles.myPlaylistGlow} />
             <View style={styles.myPlaylistBadge}>
               <Ionicons name="library" size={12} color="#fff" />
@@ -229,16 +253,28 @@ export default function HomeScreen({ navigation }: any) {
           style={styles.communityPlaylistCard} 
           onPress={() => {
             if (item.type === 'playlist') {
-              navigation.getParent()?.navigate('Playlist', { playlistId: item.id, videoId: item.videoId });
+              navigation.navigate('Playlist', { playlistId: item.id, videoId: item.videoId });
             }
           }}
         >
           <View style={styles.communityPlaylistFrame}>
-            <Image 
-              source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : require('../../assets/icon.png')} 
-              style={styles.communityPlaylistImage}
-              resizeMode="cover"
-            />
+            {item.thumbnailUrl ? (
+              <Image 
+                source={{ uri: item.thumbnailUrl }} 
+                style={styles.communityPlaylistImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={[styles.generatedArtwork, { backgroundColor: '#3498db', width: '100%', height: '100%' }]}>
+                <View style={[styles.artworkPattern, { backgroundColor: '#2980b9' }]}>
+                  <Text style={styles.patternText}>◆</Text>
+                </View>
+                <View style={[styles.artworkOverlay, { backgroundColor: '#2980b9' }]} />
+                <View style={styles.artworkTitle}>
+                  <Text style={styles.artworkTitleText} numberOfLines={2}>{displayTitle}</Text>
+                </View>
+              </View>
+            )}
             <View style={styles.communityPlaylistPattern} />
             <View style={styles.communityPlaylistBadge}>
               <Ionicons name="globe" size={12} color="#fff" />
@@ -263,11 +299,23 @@ export default function HomeScreen({ navigation }: any) {
     if (sectionType === 'newReleases') {
       return (
         <TouchableOpacity style={styles.newReleaseCard} onPress={() => {
-          if (item.type === 'album') navigation.getParent()?.navigate('Album', { albumId: item.id });
-          else if (item.type === 'playlist') navigation.getParent()?.navigate('Playlist', { playlistId: item.id });
+          if (item.type === 'album') navigation.navigate('Album', { albumId: item.id });
+          else if (item.type === 'playlist') navigation.navigate('Playlist', { playlistId: item.id });
         }}>
           <View style={styles.newReleaseFrame}>
-            <Image source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : require('../../assets/icon.png')} style={styles.newReleaseImage} resizeMode="cover" />
+            {item.thumbnailUrl ? (
+              <Image source={{ uri: item.thumbnailUrl }} style={styles.newReleaseImage} resizeMode="cover" />
+            ) : (
+              <View style={[styles.generatedArtwork, { backgroundColor: '#f39c12', width: '100%', height: '100%' }]}>
+                <View style={[styles.artworkPattern, { backgroundColor: '#e67e22' }]}>
+                  <Text style={styles.patternText}>★</Text>
+                </View>
+                <View style={[styles.artworkOverlay, { backgroundColor: '#e67e22' }]} />
+                <View style={styles.artworkTitle}>
+                  <Text style={styles.artworkTitleText} numberOfLines={2}>{displayTitle}</Text>
+                </View>
+              </View>
+            )}
             <View style={styles.newReleaseBurst}><Ionicons name="star" size={16} color="#fff" /></View>
             <View style={styles.newReleaseGradient} />
           </View>
@@ -281,10 +329,22 @@ export default function HomeScreen({ navigation }: any) {
       return (
         <TouchableOpacity style={styles.chartCard} onPress={() => {
           if (item.type === 'song') playSong(item);
-          else if (item.type === 'playlist') navigation.getParent()?.navigate('Playlist', { playlistId: item.id });
+          else if (item.type === 'playlist') navigation.navigate('Playlist', { playlistId: item.id });
         }}>
           <View style={styles.chartFrame}>
-            <Image source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : require('../../assets/icon.png')} style={styles.chartImage} resizeMode="cover" />
+            {item.thumbnailUrl ? (
+              <Image source={{ uri: item.thumbnailUrl }} style={styles.chartImage} resizeMode="cover" />
+            ) : (
+              <View style={[styles.generatedArtwork, { backgroundColor: '#ff4757', width: '100%', height: '100%' }]}>
+                <View style={[styles.artworkPattern, { backgroundColor: '#c44569' }]}>
+                  <Text style={styles.patternText}>★</Text>
+                </View>
+                <View style={[styles.artworkOverlay, { backgroundColor: '#c44569' }]} />
+                <View style={styles.artworkTitle}>
+                  <Text style={styles.artworkTitleText} numberOfLines={2}>{displayTitle}</Text>
+                </View>
+              </View>
+            )}
             <View style={styles.chartRank}><Text style={styles.chartRankText}>#1</Text></View>
             <View style={styles.chartFire}><Ionicons name="flame" size={14} color="#ff4757" /></View>
           </View>
@@ -297,10 +357,22 @@ export default function HomeScreen({ navigation }: any) {
     if (sectionType === 'albumsForYou') {
       return (
         <TouchableOpacity style={styles.albumForYouCard} onPress={() => {
-          if (item.type === 'album') navigation.getParent()?.navigate('Album', { albumId: item.id });
+          if (item.type === 'album') navigation.navigate('Album', { albumId: item.id });
         }}>
           <View style={styles.albumForYouFrame}>
-            <Image source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : require('../../assets/icon.png')} style={styles.albumForYouImage} resizeMode="cover" />
+            {item.thumbnailUrl ? (
+              <Image source={{ uri: item.thumbnailUrl }} style={styles.albumForYouImage} resizeMode="cover" />
+            ) : (
+              <View style={[styles.generatedArtwork, { backgroundColor: '#ff6b6b', width: '100%', height: '100%' }]}>
+                <View style={[styles.artworkPattern, { backgroundColor: '#ee5a52' }]}>
+                  <Text style={styles.patternText}>♥</Text>
+                </View>
+                <View style={[styles.artworkOverlay, { backgroundColor: '#ee5a52' }]} />
+                <View style={styles.artworkTitle}>
+                  <Text style={styles.artworkTitleText} numberOfLines={2}>{displayTitle}</Text>
+                </View>
+              </View>
+            )}
             <View style={styles.albumForYouHeart}><Ionicons name="heart" size={12} color="#ff6b6b" /></View>
             <View style={styles.albumForYouShine} />
           </View>
@@ -314,7 +386,7 @@ export default function HomeScreen({ navigation }: any) {
     if (sectionType === 'longListens') {
       return (
         <TouchableOpacity style={styles.longListenCard} onPress={() => {
-          if (item.type === 'playlist') navigation.getParent()?.navigate('Playlist', { playlistId: item.id });
+          if (item.type === 'playlist') navigation.navigate('Playlist', { playlistId: item.id });
         }}>
           <View style={styles.longListenFrame}>
             <Image source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : require('../../assets/icon.png')} style={styles.longListenImage} resizeMode="cover" />
@@ -410,7 +482,7 @@ export default function HomeScreen({ navigation }: any) {
     if (sectionType === 'musicChannels') {
       return (
         <TouchableOpacity style={styles.channelCard} onPress={() => {
-          if (item.type === 'playlist') navigation.getParent()?.navigate('Playlist', { playlistId: item.id });
+          if (item.type === 'playlist') navigation.navigate('Playlist', { playlistId: item.id });
         }}>
           <View style={styles.channelFrame}>
             <Image source={item.thumbnailUrl ? { uri: item.thumbnailUrl } : require('../../assets/icon.png')} style={styles.channelImage} resizeMode="cover" />
@@ -465,7 +537,7 @@ export default function HomeScreen({ navigation }: any) {
           style={styles.mixCard} 
           onPress={() => {
             if (item.type === 'playlist') {
-              navigation.getParent()?.navigate('Playlist', { playlistId: item.id, videoId: item.videoId });
+              navigation.navigate('Playlist', { playlistId: item.id, videoId: item.videoId });
             }
           }}
         >
@@ -518,11 +590,11 @@ export default function HomeScreen({ navigation }: any) {
           if (item.type === 'song') {
             playSong(item);
           } else if (item.type === 'artist') {
-            navigation.getParent()?.navigate('Artist', { artistId: item.id });
+            navigation.navigate('Artist', { artistId: item.id });
           } else if (item.type === 'album') {
-            navigation.getParent()?.navigate('Album', { albumId: item.id });
+            navigation.navigate('Album', { albumId: item.id });
           } else if (item.type === 'playlist') {
-            navigation.getParent()?.navigate('Playlist', { playlistId: item.id, videoId: item.videoId });
+            navigation.navigate('Playlist', { playlistId: item.id, videoId: item.videoId });
           } else if (item.type === 'video') {
             playSong(item);
           }
@@ -788,9 +860,9 @@ export default function HomeScreen({ navigation }: any) {
                       style={styles.vinylCard}
                       onPress={() => {
                         if (item.type === 'album') {
-                          navigation.getParent()?.navigate('Album', { albumId: item.id });
+                          navigation.navigate('Album', { albumId: item.id });
                         } else if (item.type === 'playlist') {
-                          navigation.getParent()?.navigate('Playlist', { playlistId: item.id });
+                          navigation.navigate('Playlist', { playlistId: item.id });
                         }
                       }}
                     >
@@ -846,7 +918,7 @@ export default function HomeScreen({ navigation }: any) {
                       style={styles.holoCard}
                       onPress={() => {
                         if (item.type === 'artist') {
-                          navigation.getParent()?.navigate('Artist', { artistId: item.id });
+                          navigation.navigate('Artist', { artistId: item.id });
                         }
                       }}
                     >
@@ -926,7 +998,7 @@ export default function HomeScreen({ navigation }: any) {
                       style={styles.godMixedCard} 
                       onPress={() => {
                         if (item.type === 'playlist') {
-                          navigation.getParent()?.navigate('Playlist', { playlistId: item.id, videoId: item.videoId });
+                          navigation.navigate('Playlist', { playlistId: item.id, videoId: item.videoId });
                         }
                       }}
                     >
@@ -1070,7 +1142,7 @@ export default function HomeScreen({ navigation }: any) {
                       style={[styles.godMixCard, { transform: [{ rotate: `${Math.sin(itemIndex) * 4}deg` }] }]} 
                       onPress={() => {
                         if (item.type === 'playlist') {
-                          navigation.getParent()?.navigate('Playlist', { playlistId: item.id, videoId: item.videoId });
+                          navigation.navigate('Playlist', { playlistId: item.id, videoId: item.videoId });
                         }
                       }}
                     >
@@ -1124,12 +1196,10 @@ export default function HomeScreen({ navigation }: any) {
         return (
           <View key={index} style={styles.section}>
             <View style={styles.sectionHeader}>
-              <TouchableOpacity onPress={() => console.log('Section clicked:', section.title, 'Type:', getSectionType(section))}>
-                <Text style={styles.sectionTitle}>{section.title}</Text>
-                {section.subtitle && (
-                  <Text style={styles.sectionSubtitle}>{section.subtitle}</Text>
-                )}
-              </TouchableOpacity>
+              <Text style={styles.sectionTitle}>{section.title}</Text>
+              {section.subtitle && (
+                <Text style={styles.sectionSubtitle}>{section.subtitle}</Text>
+              )}
             </View>
             <FlashList
               horizontal
@@ -1142,7 +1212,6 @@ export default function HomeScreen({ navigation }: any) {
             />
           </View>
         );
-        return null;
       }}
     />
 
@@ -1151,7 +1220,7 @@ export default function HomeScreen({ navigation }: any) {
       onClose={hideOptions}
       song={selectedSong}
       showDeleteOption={false}
-      navigation={navigation.getParent()}
+      navigation={navigation}
     />
     </SafeAreaView>
   );
@@ -1268,6 +1337,53 @@ const styles = StyleSheet.create({
   trendingCard: { width: 190, marginRight: 12, borderRadius: 16, overflow: 'hidden', backgroundColor: '#1a1a1a', position: 'relative' },
   trendingImageContainer: { position: 'relative' },
   trendingImage: { width: '100%', height: 120 },
+  generatedArtwork: {
+    width: '100%',
+    height: 120,
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 17,
+  },
+  artworkPattern: {
+    position: 'absolute',
+    top: 15,
+    right: 15,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+    opacity: 0.8,
+  },
+  patternText: {
+    fontSize: 16,
+    color: '#fff',
+    fontWeight: '900',
+  },
+  artworkOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 40,
+    opacity: 0.4,
+  },
+  artworkTitle: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    right: 8,
+  },
+  artworkTitleText: {
+    fontSize: 12,
+    color: '#fff',
+    fontWeight: '700',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
   trendingBadge: { position: 'absolute', top: 8, left: 8, backgroundColor: '#ff6b35', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4 },
   trendingGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 40, backgroundColor: 'rgba(255,107,53,0.2)' },
   trendingContent: { padding: 12 },

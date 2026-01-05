@@ -42,8 +42,13 @@ export interface Album {
 export interface Playlist {
   id: string;
   title: string;
+  description?: string;
   thumbnailUrl?: string;
   songCount?: number;
+  author?: string;
+  isLocal?: boolean;
+  privacy?: 'PUBLIC' | 'PRIVATE' | 'UNLISTED';
+  songs?: Song[];
 }
 
 export interface PlayerState {

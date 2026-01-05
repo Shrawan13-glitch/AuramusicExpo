@@ -10,8 +10,20 @@ import { usePlayer } from '../store/PlayerContext';
 import { useLibrary } from '../store/LibraryContext';
 import { useDownload } from '../store/DownloadContext';
 import SongOptionsModal from '../components/SongOptionsModal';
+import PlaylistSettingsModal from '../components/PlaylistSettingsModal';
 import PlaylistDownloadButton from '../components/PlaylistDownloadButton';
 import { useSongOptions } from '../hooks/useSongOptions';
+
+// Add hashCode method for color generation
+String.prototype.hashCode = function() {
+  let hash = 0;
+  for (let i = 0; i < this.length; i++) {
+    const char = this.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return hash;
+};
 
 const ITEM_HEIGHT = 72;
 
@@ -30,11 +42,47 @@ const SongItem = React.memo(({ item, index, onPress, onLongPress, onMenuPress }:
   </TouchableOpacity>
 ));
 
-const PlaylistHeader = React.memo(({ data, onPlay, onShuffle, playlistProgress }: any) => (
-  <View style={styles.playlistHeader}>
-    <Image source={{ uri: data.playlist.thumbnail }} style={styles.playlistArt} />
-    <Text style={styles.playlistTitle}>{data.playlist.title}</Text>
-    <Text style={styles.playlistInfo}>{data.playlist.author} • {data.playlist.songCount}</Text>
+const PlaylistHeader = React.memo(({ data, onPlay, onShuffle, onPlaylistOptions, playlistProgress }: any) => {
+  // Generate artwork if no thumbnail
+  const generateArtwork = () => {
+    const colors = [`hsl(${(Math.abs(data.playlist.id?.hashCode() || 0) * 137) % 360}, 80%, 55%)`, `hsl(${(Math.abs(data.playlist.id?.hashCode() || 0) * 137 + 120) % 360}, 80%, 35%)`];
+    const patterns = ['▲', '●', '■', '♦', '★', '▼', '◆', '♪'];
+    const pattern = patterns[Math.abs(data.playlist.id?.hashCode() || 0) % patterns.length];
+    
+    return (
+      <View style={[styles.generatedArtwork, { backgroundColor: colors[0] }]}>
+        <View style={[styles.artworkPattern, { backgroundColor: colors[1] }]}>
+          <Text style={styles.patternText}>{pattern}</Text>
+        </View>
+        <View style={[styles.artworkOverlay, { backgroundColor: colors[1] }]} />
+        <View style={styles.artworkTitle}>
+          <Text style={styles.artworkTitleText} numberOfLines={2}>{data.playlist.title}</Text>
+        </View>
+      </View>
+    );
+  };
+  
+  const [imageError, setImageError] = useState(false);
+
+  const shouldShowGeneratedArt = !data?.playlist?.thumbnail || 
+    data.playlist.thumbnail.includes('placeholder') || 
+    data.playlist.thumbnail.includes('via.placeholder') ||
+    data.playlist.thumbnail === 'https://via.placeholder.com/200' ||
+    imageError;
+
+  return (
+    <View style={styles.playlistHeader}>
+      {!shouldShowGeneratedArt ? (
+        <Image 
+          source={{ uri: data.playlist.thumbnail }} 
+          style={styles.playlistArt}
+          onError={() => setImageError(true)}
+        />
+      ) : (
+        generateArtwork()
+      )}
+      <Text style={styles.playlistTitle}>{data.playlist.title}</Text>
+      <Text style={styles.playlistInfo}>{data.playlist.author} • {data.playlist.songCount}</Text>
     
     <View style={styles.buttonRow}>
       <TouchableOpacity style={styles.playButton} onPress={onPlay}>
@@ -44,6 +92,10 @@ const PlaylistHeader = React.memo(({ data, onPlay, onShuffle, playlistProgress }
       
       <TouchableOpacity style={styles.shuffleButton} onPress={onShuffle}>
         <Ionicons name="shuffle" size={20} color="#fff" />
+      </TouchableOpacity>
+      
+      <TouchableOpacity style={styles.optionsButton} onPress={onPlaylistOptions}>
+        <Ionicons name="ellipsis-horizontal" size={20} color="#fff" />
       </TouchableOpacity>
     </View>
     
@@ -61,7 +113,8 @@ const PlaylistHeader = React.memo(({ data, onPlay, onShuffle, playlistProgress }
       )}
     </View>
   </View>
-));
+  );
+});
 
 export default function PlaylistScreen({ route, navigation }: any) {
   const { playlistId, videoId } = route.params;
@@ -69,6 +122,7 @@ export default function PlaylistScreen({ route, navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [showContent, setShowContent] = useState(false);
   const [showHeaderBg, setShowHeaderBg] = useState(false);
+  const [showPlaylistOptions, setShowPlaylistOptions] = useState(false);
   const { playSong } = usePlayer();
   const { playlists } = useLibrary();
   const { getPlaylistProgress, getDownloadedPlaylist, isPlaylistDownloaded } = useDownload();
@@ -76,6 +130,11 @@ export default function PlaylistScreen({ route, navigation }: any) {
   const scrollY = useRef(new Animated.Value(0)).current;
 
   const playlistProgress = getPlaylistProgress(playlistId);
+  
+  // Get current playlist from context for real-time updates
+  const currentPlaylist = useMemo(() => {
+    return playlists.find(p => p.id === playlistId) || data?.playlist;
+  }, [playlists, playlistId, data?.playlist]);
 
   useEffect(() => {
     loadPlaylist();
@@ -83,6 +142,23 @@ export default function PlaylistScreen({ route, navigation }: any) {
     const timer = setTimeout(() => setShowContent(true), 300);
     return () => clearTimeout(timer);
   }, [playlistId, playlists]);
+
+  // Update data when currentPlaylist changes (for song removal)
+  useEffect(() => {
+    if (currentPlaylist && currentPlaylist.songs && data) {
+      setData(prevData => ({
+        ...prevData,
+        songs: currentPlaylist.songs,
+        playlist: {
+          ...prevData.playlist,
+          title: currentPlaylist.title,
+          description: currentPlaylist.description,
+          privacy: currentPlaylist.privacy,
+          songCount: `${currentPlaylist.songs.length} songs`
+        }
+      }));
+    }
+  }, [currentPlaylist?.songs?.length, currentPlaylist?.title, currentPlaylist?.description, currentPlaylist?.privacy]);
 
   const renderItem = useCallback(({ item, index }: any) => (
     <SongItem
@@ -107,7 +183,15 @@ export default function PlaylistScreen({ route, navigation }: any) {
 
   const headerComponent = useMemo(() => data ? (
     <PlaylistHeader
-      data={data}
+      data={{
+        ...data,
+        playlist: {
+          ...data.playlist,
+          title: currentPlaylist?.title || data.playlist.title,
+          description: currentPlaylist?.description || data.playlist.description,
+          privacy: currentPlaylist?.privacy || data.playlist.privacy
+        }
+      }}
       playlistProgress={playlistProgress}
       onPlay={() => {
         if (data.songs.length > 0) {
@@ -122,8 +206,9 @@ export default function PlaylistScreen({ route, navigation }: any) {
           playSong(shuffled[0], queue, false);
         }
       }}
+      onPlaylistOptions={() => setShowPlaylistOptions(true)}
     />
-  ) : null, [data, playSong, playlistProgress]);
+  ) : null, [data, playSong, playlistProgress, currentPlaylist]);
 
 
 
@@ -155,9 +240,12 @@ export default function PlaylistScreen({ route, navigation }: any) {
         playlist: {
           id: localPlaylist.id,
           title: localPlaylist.title,
+          description: localPlaylist.description,
           author: 'You',
           songCount: `${localPlaylist.songs?.length || 0} songs`,
-          thumbnail: localPlaylist.songs?.[0]?.thumbnailUrl || localPlaylist.thumbnailUrl || 'https://via.placeholder.com/200'
+          thumbnail: localPlaylist.songs?.[0]?.thumbnailUrl || localPlaylist.thumbnailUrl,
+          privacy: localPlaylist.privacy || 'PRIVATE',
+          isLocal: true
         },
         songs: localPlaylist.songs || []
       });
@@ -186,7 +274,7 @@ export default function PlaylistScreen({ route, navigation }: any) {
             title: playlistInfo?.title || 'Playlist',
             author: playlistInfo?.subtitle || 'Unknown',
             songCount: '0 songs',
-            thumbnail: playlistInfo?.thumbnailUrl || 'https://via.placeholder.com/200'
+            thumbnail: playlistInfo?.thumbnailUrl
           },
           songs: []
         });
@@ -200,7 +288,7 @@ export default function PlaylistScreen({ route, navigation }: any) {
           title: playlistInfo?.title || 'Playlist',
           author: playlistInfo?.subtitle || 'Unknown',
           songCount: '0 songs',
-          thumbnail: playlistInfo?.thumbnailUrl || 'https://via.placeholder.com/200'
+          thumbnail: playlistInfo?.thumbnailUrl
         },
         songs: []
       });
@@ -250,17 +338,33 @@ export default function PlaylistScreen({ route, navigation }: any) {
     );
   }
 
+  // Generate colors for background when no thumbnail
+  const getBackgroundColors = () => {
+    const colors = [`hsl(${(Math.abs(data?.playlist?.id?.hashCode() || 0) * 137) % 360}, 80%, 55%)`, `hsl(${(Math.abs(data?.playlist?.id?.hashCode() || 0) * 137 + 120) % 360}, 80%, 35%)`];
+    return colors;
+  };
+
+  const backgroundColors = getBackgroundColors();
+  const hasValidThumbnail = data?.playlist?.thumbnail && 
+    !data.playlist.thumbnail.includes('placeholder') && 
+    !data.playlist.thumbnail.includes('via.placeholder') &&
+    data.playlist.thumbnail !== 'https://via.placeholder.com/200';
+
   return (
     <View style={styles.container}>
       <ImageBackground 
-        source={data?.playlist?.thumbnail ? { uri: data.playlist.thumbnail } : undefined}
+        source={hasValidThumbnail ? { uri: data.playlist.thumbnail } : undefined}
         style={StyleSheet.absoluteFillObject}
         blurRadius={50}
       >
         <LinearGradient
-          colors={data?.playlist?.thumbnail ? 
+          colors={hasValidThumbnail ? 
             ['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.8)', '#000'] : 
-            ['rgba(29,185,84,0.3)', 'rgba(0,0,0,0.8)', '#000']
+            [
+              `${backgroundColors[0].replace('hsl', 'hsla').replace(')', ', 0.3)')}`,
+              `${backgroundColors[1].replace('hsl', 'hsla').replace(')', ', 0.8)')}`,
+              '#000'
+            ]
           }
           locations={[0, 0.4, 0.7]}
           style={StyleSheet.absoluteFillObject}
@@ -306,6 +410,17 @@ export default function PlaylistScreen({ route, navigation }: any) {
           visible={modalVisible}
           onClose={hideOptions}
           song={selectedSong}
+          playlistId={playlistId}
+          navigation={navigation}
+        />
+        
+        <PlaylistSettingsModal
+          visible={showPlaylistOptions}
+          playlist={currentPlaylist}
+          onClose={() => {
+            setShowPlaylistOptions(false);
+            hideOptions();
+          }}
           navigation={navigation}
         />
       </SafeAreaView>
@@ -320,12 +435,63 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#fff', marginLeft: 16, flex: 1 },
   playlistHeader: { alignItems: 'center', padding: 16 },
   playlistArt: { width: 200, height: 200, borderRadius: 8, marginBottom: 16 },
+  generatedArtwork: {
+    width: 200,
+    height: 200,
+    borderRadius: 8,
+    marginBottom: 16,
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  artworkPattern: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    opacity: 0.8,
+  },
+  patternText: {
+    fontSize: 20,
+    color: '#fff',
+    fontWeight: '900',
+  },
+  artworkOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 60,
+    opacity: 0.4,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+  },
+  artworkTitle: {
+    position: 'absolute',
+    bottom: 10,
+    left: 10,
+    right: 10,
+  },
+  artworkTitleText: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: '700',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
   playlistTitle: { fontSize: 24, fontWeight: 'bold', color: '#fff', textAlign: 'center', marginBottom: 8 },
   playlistInfo: { fontSize: 14, color: '#fff', marginBottom: 24 },
   buttonRow: { flexDirection: 'row', gap: 12 },
   playButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1db954', paddingHorizontal: 32, paddingVertical: 12, borderRadius: 24, gap: 8 },
   playButtonText: { color: '#000', fontSize: 16, fontWeight: 'bold' },
   shuffleButton: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: '#333', borderRadius: 24 },
+  optionsButton: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: '#333', borderRadius: 24 },
   downloadSection: { marginTop: 16, alignItems: 'center' },
   downloadProgress: { marginTop: 12, width: '100%', paddingHorizontal: 20 },
   progressContainer: { height: 4, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 2, marginBottom: 6 },

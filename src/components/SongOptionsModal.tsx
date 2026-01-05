@@ -18,12 +18,13 @@ interface SongOptionsModalProps {
   onClose: () => void;
   song: any;
   showDeleteOption?: boolean;
+  playlistId?: string;
   navigation?: any;
 }
 
-export default function SongOptionsModal({ visible, onClose, song, showDeleteOption = false, navigation }: SongOptionsModalProps) {
+export default function SongOptionsModal({ visible, onClose, song, showDeleteOption = false, playlistId, navigation }: SongOptionsModalProps) {
   const { deleteSong } = useDownload();
-  const { isLiked, addLikedSong, removeLikedSong, playlists, addToPlaylist } = useLibrary();
+  const { isLiked, addLikedSong, removeLikedSong, playlists, addToPlaylist, removeFromPlaylist } = useLibrary();
   const { showToast } = useNotification();
   const [showCreatePlaylist, setShowCreatePlaylist] = useState(false);
   const [showPlaylistPicker, setShowPlaylistPicker] = useState(false);
@@ -94,8 +95,43 @@ export default function SongOptionsModal({ visible, onClose, song, showDeleteOpt
     onClose();
   };
 
+  const handleRemoveFromPlaylist = async () => {
+    if (!playlistId) return;
+    
+    const playlist = playlists.find(p => p.id === playlistId);
+    if (!playlist) return;
+    
+    onClose();
+    
+    const result = await removeFromPlaylist(playlistId, song.id);
+    
+    if (result) {
+      showToast(`Removed from ${playlist.title}`);
+      // Force refresh of the playlist screen by triggering a re-render
+      setTimeout(() => {
+        if (navigation && navigation.getState) {
+          const currentRoute = navigation.getState().routes[navigation.getState().index];
+          if (currentRoute.name === 'Playlist') {
+            navigation.replace('Playlist', { playlistId, videoId: currentRoute.params?.videoId });
+          }
+        }
+      }, 100);
+    } else {
+      showToast(`Failed to remove from ${playlist.title}`);
+    }
+  };
+
   const liked = isLiked(song?.id);
   const userPlaylists = useMemo(() => playlists.filter(p => p.type === 'playlist' || !p.type), [playlists]);
+  const currentPlaylist = playlistId ? playlists.find(p => p.id === playlistId) : null;
+  
+  // Check if we can remove from playlist - more permissive check
+  const canRemoveFromPlaylist = playlistId && currentPlaylist && (
+    currentPlaylist.isLocal === true || 
+    currentPlaylist.author === 'You' ||
+    currentPlaylist.author === 'you' ||
+    !currentPlaylist.author // Local playlists might not have author set
+  );
   
   const renderOption = useCallback(({ item }: any) => <OptionItem option={item} />, []);
   const keyExtractor = useCallback((item: any) => item.id, []);
@@ -105,13 +141,48 @@ export default function SongOptionsModal({ visible, onClose, song, showDeleteOpt
       icon: liked ? 'heart' : 'heart-outline', 
       label: liked ? 'Remove from Liked Songs' : 'Add to Liked Songs', 
       onPress: handleLike,
-      color: liked ? '#1db954' : '#fff'
+      color: liked ? '#1db954' : '#fff',
+      id: 'like'
     },
-    { icon: 'add-outline', label: 'Add to Playlist', onPress: () => setShowPlaylistPicker(true), color: '#fff' },
-    { icon: 'share-outline', label: 'Share', onPress: handleShare, color: '#fff' },
-    { icon: 'person-outline', label: 'Go to Artist', onPress: handleGoToArtist, color: '#fff' },
-    { icon: 'disc-outline', label: 'Go to Album', onPress: handleGoToAlbum, color: '#fff' },
+    { 
+      icon: 'add-outline', 
+      label: 'Add to Playlist', 
+      onPress: () => setShowPlaylistPicker(true), 
+      color: '#fff',
+      id: 'add-playlist'
+    },
+    { 
+      icon: 'share-outline', 
+      label: 'Share', 
+      onPress: handleShare, 
+      color: '#fff',
+      id: 'share'
+    },
+    { 
+      icon: 'person-outline', 
+      label: 'Go to Artist', 
+      onPress: handleGoToArtist, 
+      color: '#fff',
+      id: 'artist'
+    },
+    { 
+      icon: 'disc-outline', 
+      label: 'Go to Album', 
+      onPress: handleGoToAlbum, 
+      color: '#fff',
+      id: 'album'
+    },
   ];
+
+  if (canRemoveFromPlaylist) {
+    options.splice(1, 0, { 
+      icon: 'remove-circle-outline', 
+      label: `Remove from ${currentPlaylist.title}`, 
+      onPress: handleRemoveFromPlaylist, 
+      color: '#ff6b6b',
+      id: 'remove-playlist'
+    });
+  }
 
   if (showDeleteOption) {
     options.push({ icon: 'trash-outline', label: 'Delete Download', onPress: handleDelete, color: '#ff4757' });

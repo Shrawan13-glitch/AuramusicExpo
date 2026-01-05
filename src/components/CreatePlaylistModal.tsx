@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TextInput, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, Modal, TextInput, TouchableOpacity, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLibrary } from '../store/LibraryContext';
 
@@ -41,52 +41,57 @@ export default function CreatePlaylistModal({ visible, onClose, onPlaylistCreate
 
   return (
     <Modal visible={visible} transparent animationType="slide">
-      <TouchableOpacity style={styles.overlay} onPress={onClose} activeOpacity={1}>
-        <View style={styles.modal}>
-          <View style={styles.handle} />
-          
-          <View style={styles.header}>
-            <Text style={styles.title}>Create Playlist</Text>
-          </View>
+      <KeyboardAvoidingView 
+        style={styles.overlay} 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <TouchableOpacity style={styles.overlay} onPress={onClose} activeOpacity={1}>
+          <View style={styles.modal}>
+            <View style={styles.handle} />
+            
+            <View style={styles.header}>
+              <Text style={styles.title}>Create Playlist</Text>
+            </View>
 
-          <View style={styles.content}>
-            <TextInput
-              style={styles.input}
-              placeholder="Playlist title"
-              placeholderTextColor="#666"
-              value={title}
-              onChangeText={setTitle}
-              maxLength={100}
-              autoFocus
-            />
+            <View style={styles.content}>
+              <TextInput
+                style={styles.input}
+                placeholder="Playlist title"
+                placeholderTextColor="#666"
+                value={title}
+                onChangeText={setTitle}
+                maxLength={100}
+                autoFocus
+              />
 
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              placeholder="Description (optional)"
-              placeholderTextColor="#666"
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              maxLength={500}
-            />
-          </View>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                placeholder="Description (optional)"
+                placeholderTextColor="#666"
+                value={description}
+                onChangeText={setDescription}
+                multiline
+                maxLength={500}
+              />
+            </View>
 
-          <View style={styles.buttons}>
-            <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.createButton, creating && styles.disabled]} 
-              onPress={handleCreate}
-              disabled={creating}
-            >
-              <Text style={styles.createText}>
-                {creating ? 'Creating...' : 'Create'}
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.buttons}>
+              <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.createButton, creating && styles.disabled]} 
+                onPress={handleCreate}
+                disabled={creating}
+              >
+                <Text style={styles.createText}>
+                  {creating ? 'Creating...' : 'Create'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      </TouchableOpacity>
+        </TouchableOpacity>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

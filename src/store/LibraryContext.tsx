@@ -17,6 +17,8 @@ interface LibraryContextType {
   createPlaylist: (title: string, description?: string) => Promise<string | null>;
   addToPlaylist: (playlistId: string, song: Song) => Promise<boolean>;
   removeFromPlaylist: (playlistId: string, songId: string) => Promise<boolean>;
+  editPlaylist: (playlistId: string, title?: string, description?: string, privacy?: string) => Promise<boolean>;
+  deletePlaylist: (playlistId: string) => Promise<boolean>;
   syncPlaylists: () => Promise<void>;
   loadPlaylistSongs: (playlistId: string) => Promise<Song[]>;
 }
@@ -263,27 +265,34 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const playlist = playlists.find(p => p.id === playlistId);
     if (!playlist) return false;
 
+    // Update locally first
+    const updatedSongs = (playlist.songs || []).filter((s: Song) => s.id !== songId);
+    const updatedPlaylist = { ...playlist, songs: updatedSongs };
+    const updated = playlists.map(p => p.id === playlistId ? updatedPlaylist : p);
+    
+    setPlaylists(updated);
+    await AsyncStorage.setItem('playlists', JSON.stringify(updated));
+
     const cookies = await AsyncStorage.getItem('ytm_cookies');
     
     if (!playlist.isLocal && cookies) {
-      const success = await InnerTube.removeFromPlaylist(playlistId, songId);
-      if (success) {
-        const updated = playlists.map(p => 
-          p.id === playlistId ? { ...p, songs: p.songs.filter((s: Song) => s.id !== songId) } : p
-        );
-        setPlaylists(updated);
-        await AsyncStorage.setItem('playlists', JSON.stringify(updated));
-        return true;
+      try {
+        const success = await InnerTube.removeFromPlaylist(playlistId, songId);
+        if (!success) {
+          // Revert on failure
+          setPlaylists(playlists);
+          await AsyncStorage.setItem('playlists', JSON.stringify(playlists));
+          return false;
+        }
+      } catch (error) {
+        // Revert on failure
+        setPlaylists(playlists);
+        await AsyncStorage.setItem('playlists', JSON.stringify(playlists));
+        return false;
       }
-    } else {
-      const updated = playlists.map(p => 
-        p.id === playlistId ? { ...p, songs: p.songs.filter((s: Song) => s.id !== songId) } : p
-      );
-      setPlaylists(updated);
-      await AsyncStorage.setItem('playlists', JSON.stringify(updated));
-      return true;
     }
-    return false;
+    
+    return true;
   }, [playlists]);
 
   const syncPlaylists = useCallback(async () => {
@@ -341,6 +350,92 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, []);
 
+  const editPlaylist = useCallback(async (playlistId: string, title?: string, description?: string, privacy?: string): Promise<boolean> => {
+    try {
+      const playlist = playlists.find(p => p.id === playlistId);
+      if (!playlist) {
+        // If playlist not found in context, try to find it by creating a basic entry
+        const basicPlaylist = {
+          id: playlistId,
+          title: title || 'Playlist',
+          description: description || '',
+          privacy: privacy || 'PRIVATE',
+          isLocal: false,
+          type: 'playlist'
+        };
+        const updated = [...playlists, basicPlaylist];
+        setPlaylists(updated);
+        await AsyncStorage.setItem('playlists', JSON.stringify(updated));
+      }
+
+      // Update locally first
+      const updatedPlaylist = { ...(playlist || { id: playlistId, type: 'playlist' }) };
+      if (title !== undefined) updatedPlaylist.title = title;
+      if (description !== undefined) updatedPlaylist.description = description;
+      if (privacy !== undefined) updatedPlaylist.privacy = privacy;
+      
+      const updated = playlists.map(p => p.id === playlistId ? updatedPlaylist : p);
+      if (!playlist) {
+        updated.push(updatedPlaylist);
+      }
+      
+      setPlaylists(updated);
+      await AsyncStorage.setItem('playlists', JSON.stringify(updated));
+
+      // Try to sync with YouTube Music if authenticated and not local
+      const cookies = await AsyncStorage.getItem('ytm_cookies');
+      if (!updatedPlaylist.isLocal && cookies) {
+        try {
+          const syncResult = await InnerTube.editPlaylist(playlistId, title, description, privacy);
+          if (!syncResult) {
+            // Revert on failure
+            setPlaylists(playlists);
+            await AsyncStorage.setItem('playlists', JSON.stringify(playlists));
+            return false;
+          }
+        } catch (syncError) {
+          // Revert on failure
+          setPlaylists(playlists);
+          await AsyncStorage.setItem('playlists', JSON.stringify(playlists));
+          return false;
+        }
+      }
+      
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }, [playlists]);
+
+  const deletePlaylist = useCallback(async (playlistId: string): Promise<boolean> => {
+    try {
+      const playlist = playlists.find(p => p.id === playlistId);
+      if (!playlist) return false;
+
+      // Try to delete from YouTube Music first if not local
+      const cookies = await AsyncStorage.getItem('ytm_cookies');
+      if (!playlist.isLocal && cookies) {
+        try {
+          const syncResult = await InnerTube.deletePlaylist(playlistId);
+          if (!syncResult) {
+            return false;
+          }
+        } catch (syncError) {
+          return false;
+        }
+      }
+
+      // Remove locally
+      const updated = playlists.filter(p => p.id !== playlistId);
+      setPlaylists(updated);
+      await AsyncStorage.setItem('playlists', JSON.stringify(updated));
+      
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }, [playlists]);
+
   const loadPlaylistSongs = useCallback(async (playlistId: string): Promise<Song[]> => {
     try {
       const playlistData = await InnerTube.getPlaylist(playlistId);
@@ -363,9 +458,11 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     createPlaylist,
     addToPlaylist,
     removeFromPlaylist,
+    editPlaylist,
+    deletePlaylist,
     syncPlaylists,
     loadPlaylistSongs
-  }), [likedSongs, recentlyPlayed, playlists, addLikedSong, removeLikedSong, isLiked, addToRecentlyPlayed, loadMoreHistory, syncLikedSongs, createPlaylist, addToPlaylist, removeFromPlaylist, syncPlaylists, loadPlaylistSongs]);
+  }), [likedSongs, recentlyPlayed, playlists, addLikedSong, removeLikedSong, isLiked, addToRecentlyPlayed, loadMoreHistory, syncLikedSongs, createPlaylist, addToPlaylist, removeFromPlaylist, editPlaylist, deletePlaylist, syncPlaylists, loadPlaylistSongs]);
 
   return (
     <LibraryContext.Provider value={contextValue}>
