@@ -14,13 +14,17 @@ interface PlaylistSettingsModalProps {
 }
 
 export default function PlaylistSettingsModal({ visible, playlist, onClose, navigation }: PlaylistSettingsModalProps) {
-  const { editPlaylist, deletePlaylist } = useLibrary();
+  const { editPlaylist, deletePlaylist, playlists } = useLibrary();
   const { showToast } = useNotification();
+  
+  // Get updated playlist from context
+  const currentPlaylist = playlists.find(p => p.id === playlist?.id) || playlist;
+  
   const [showVisibilityModal, setShowVisibilityModal] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [editingDescription, setEditingDescription] = useState(false);
-  const [title, setTitle] = useState(playlist?.title || '');
-  const [description, setDescription] = useState(playlist?.description || '');
+  const [title, setTitle] = useState(currentPlaylist?.title || '');
+  const [description, setDescription] = useState(currentPlaylist?.description || '');
   const [updating, setUpdating] = useState(false);
 
   const handleSaveTitle = async () => {
@@ -127,12 +131,13 @@ export default function PlaylistSettingsModal({ visible, playlist, onClose, navi
             <View style={styles.artworkSection}>
               <View style={styles.artworkContainer}>
                 <Image 
-                  source={{ uri: playlist?.thumbnail || playlist?.thumbnailUrl || 'https://via.placeholder.com/120' }} 
+                  key={currentPlaylist?.thumbnailUrl || currentPlaylist?.thumbnail || 'default'}
+                  source={{ uri: currentPlaylist?.thumbnailUrl || currentPlaylist?.thumbnail || 'https://via.placeholder.com/120' }} 
                   style={styles.artwork} 
                   defaultSource={{ uri: 'https://via.placeholder.com/120' }}
                 />
                 <TouchableOpacity style={styles.editArtworkButton} onPress={() => {
-                  Alert.alert('Change Artwork', 'Artwork customization requires a custom development build.');
+                  Alert.alert('Change Artwork', 'Artwork customization is not available in this version.');
                 }}>
                   <Ionicons name="pencil" size={16} color="#fff" />
                 </TouchableOpacity>

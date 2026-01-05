@@ -17,7 +17,7 @@ interface LibraryContextType {
   createPlaylist: (title: string, description?: string) => Promise<string | null>;
   addToPlaylist: (playlistId: string, song: Song) => Promise<boolean>;
   removeFromPlaylist: (playlistId: string, songId: string) => Promise<boolean>;
-  editPlaylist: (playlistId: string, title?: string, description?: string, privacy?: string) => Promise<boolean>;
+  editPlaylist: (playlistId: string, title?: string, description?: string, privacy?: string, thumbnailUrl?: string) => Promise<boolean>;
   deletePlaylist: (playlistId: string) => Promise<boolean>;
   syncPlaylists: () => Promise<void>;
   loadPlaylistSongs: (playlistId: string) => Promise<Song[]>;
@@ -350,7 +350,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, []);
 
-  const editPlaylist = useCallback(async (playlistId: string, title?: string, description?: string, privacy?: string): Promise<boolean> => {
+  const editPlaylist = useCallback(async (playlistId: string, title?: string, description?: string, privacy?: string, thumbnailUrl?: string): Promise<boolean> => {
     try {
       const playlist = playlists.find(p => p.id === playlistId);
       if (!playlist) {
@@ -373,6 +373,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (title !== undefined) updatedPlaylist.title = title;
       if (description !== undefined) updatedPlaylist.description = description;
       if (privacy !== undefined) updatedPlaylist.privacy = privacy;
+      if (thumbnailUrl !== undefined) updatedPlaylist.thumbnailUrl = thumbnailUrl;
       
       const updated = playlists.map(p => p.id === playlistId ? updatedPlaylist : p);
       if (!playlist) {
