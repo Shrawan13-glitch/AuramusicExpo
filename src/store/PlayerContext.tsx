@@ -169,13 +169,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         return;
       }
 
-      // Decode HTML entities in URL
-      audioSource = audioSource.replace(/&amp;/g, '&');
-
       hasTriggeredNext.current = false;
       setIntendedPlaying(true);
-      
-      console.log('Playing song:', song.title);
       
       const track = {
         id: song.id,
@@ -184,7 +179,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         artist: song.artists?.[0]?.name || song.artist || 'Unknown Artist',
         artwork: song.thumbnail || song.thumbnailUrl,
         onEnd: () => {
-          console.log('AUTOPLAY: Track ended callback');
           if (!hasTriggeredNext.current) {
             hasTriggeredNext.current = true;
             setTimeout(() => {

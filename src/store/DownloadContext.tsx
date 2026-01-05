@@ -122,7 +122,6 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const addSongToPlaylistDatabase = async (playlistId: string, song: DownloadedSong) => {
     try {
-      console.log('Adding song to playlist database:', playlistId, song.title);
       const currentPlaylists = [...downloadedPlaylists];
       const playlistIndex = currentPlaylists.findIndex(p => p.id === playlistId);
       
@@ -136,7 +135,6 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           totalSize: updatedSongs.reduce((sum, s) => sum + s.size, 0) 
         };
         currentPlaylists[playlistIndex] = updatedPlaylist;
-        console.log('Updated existing playlist, now has', updatedSongs.length, 'songs');
       } else {
         // Create new playlist entry
         const newPlaylist: DownloadedPlaylist = {
@@ -148,13 +146,11 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           totalSize: song.size
         };
         currentPlaylists.push(newPlaylist);
-        console.log('Created new playlist with first song');
       }
       
       await saveDownloadedPlaylists(currentPlaylists);
-      console.log('Saved playlist to database');
     } catch (error) {
-      console.error('Error adding song to playlist:', error);
+      // Error adding song to playlist handled silently
     }
   };
 
@@ -183,10 +179,8 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const downloadSong = useCallback(async (song: any) => {
     const songId = song.id;
-    console.log('Starting download for:', song.title, songId);
     
     if (isDownloaded(songId)) {
-      console.log('Song already downloaded:', songId);
       return;
     }
 
@@ -196,49 +190,16 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }));
 
     try {
-      console.log('Getting stream URL for:', songId);
-      const urlStartTime = Date.now();
-      
-      // Force low quality for fastest downloads
       const quality = 'low';
-      console.log('Using quality:', quality);
-      
-      // Get actual stream URL with quality preference
       const streamUrl = await InnerTube.getStreamUrl(songId, quality);
       if (!streamUrl) {
-        console.error('No stream URL found for:', songId);
         throw new Error('No stream URL found');
       }
-      const urlTime = Date.now() - urlStartTime;
-      console.log(`Got stream URL in ${urlTime}ms:`, streamUrl.substring(0, 50) + '...');
       
-      // Test URL speed with a small range request
-      const testStart = Date.now();
-      try {
-        const testResponse = await fetch(streamUrl, {
-          method: 'HEAD',
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 11; SM-G991B) AppleWebKit/537.36',
-          },
-        });
-        const testTime = Date.now() - testStart;
-        console.log(`URL test response in ${testTime}ms, status:`, testResponse.status);
-        console.log('Content-Length:', testResponse.headers.get('content-length'));
-      } catch (error) {
-        console.log('URL test failed:', error.message);
-      }
-
       const fileName = `${song.title.replace(/[^a-zA-Z0-9]/g, '_')}_${songId}.mp3`;
       const filePath = FileSystem.documentDirectory + fileName;
-      console.log('Creating file:', fileName);
-      console.log('File path:', filePath);
       
-      console.log('=== METROLIST-STYLE DOWNLOAD ===');
-      const downloadStartTime = Date.now();
-      
-      // Add range parameter like Metrolist does
       const rangedUrl = `${streamUrl}&range=0-10000000`;
-      console.log('Using ranged URL for download');
       
       const downloadResult = await FileSystem.downloadAsync(
         rangedUrl,
@@ -252,17 +213,11 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
       );
       
-      const totalTime = Date.now() - downloadStartTime;
-      console.log(`Download completed in ${totalTime}ms, status: ${downloadResult.status}`);
-      
       if (downloadResult.status !== 200 && downloadResult.status !== 206) {
-        console.error('Download failed with status:', downloadResult.status);
         throw new Error(`Download failed: ${downloadResult.status}`);
       }
       
       const fileInfo = await FileSystem.getInfoAsync(filePath);
-      const speed = fileInfo.size > 0 ? (fileInfo.size / 1024 / (totalTime / 1000)).toFixed(1) : 'unknown';
-      console.log(`🎉 SUCCESS: ${fileInfo.size} bytes in ${totalTime}ms (${speed} KB/s)`);
       
       const downloadedSong: DownloadedSong = {
         id: songId,
@@ -280,7 +235,6 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }));
 
       await addSongToDatabase(downloadedSong);
-      console.log('Download completed successfully for:', song.title);
 
       setTimeout(() => {
         setDownloadProgress(prev => {
@@ -290,7 +244,6 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }, 1000);
       
     } catch (error) {
-      console.error('Download failed for:', song.title, error);
       setDownloadProgress(prev => ({
         ...prev,
         [songId]: { songId, progress: 0, status: 'failed' }
@@ -373,7 +326,7 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           }
         }));
       } catch (error) {
-        console.log(`Failed to download ${song.title}:`, error);
+        // Download error handled silently
       }
     }
 
@@ -397,7 +350,6 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const isPlaylistDownloaded = useCallback((playlistId: string) => {
     const playlist = downloadedPlaylists.find(p => p.id === playlistId);
-    console.log('Checking if playlist downloaded:', playlistId, !!playlist, playlist?.songs?.length || 0);
     return !!playlist && playlist.songs && playlist.songs.length > 0;
   }, [downloadedPlaylists]);
 

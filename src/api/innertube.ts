@@ -1470,13 +1470,10 @@ export const InnerTube = {
     const cached = getCachedData(cacheKey);
     if (cached) return cached;
     
-    console.log('Fetching stream URL for videoId:', videoId);
-    
     const clients = [CLIENTS.ANDROID, CLIENTS.IOS, CLIENTS.WEB_REMIX];
     
     for (const client of clients) {
       try {
-        console.log('Trying client:', client.clientName);
         const response = await axios.post(
           `${BASE_URL}/player?key=${API_KEY}`,
           {
@@ -1485,13 +1482,9 @@ export const InnerTube = {
           },
           { timeout: 3000 }
         );
-
-        console.log('Response status:', response.data?.playabilityStatus?.status);
         
         const formats = response.data?.streamingData?.adaptiveFormats || [];
         const audioFormats = formats.filter((f: any) => f.mimeType?.includes('audio') && f.url);
-        
-        console.log('Found audio formats:', audioFormats.length);
         
         if (audioFormats.length === 0) continue;
         
@@ -1508,16 +1501,31 @@ export const InnerTube = {
         }
         
         if (selectedFormat?.url) {
-          console.log('Stream URL found:', selectedFormat.url.substring(0, 50) + '...');
-          cache.set(cacheKey, { data: selectedFormat.url, timestamp: Date.now() - (CACHE_DURATION - 30000) });
-          return selectedFormat.url;
+          // Decode HTML entities in the URL immediately
+          let decodedUrl = selectedFormat.url;
+          
+          // Multiple passes to handle nested encoding
+          for (let i = 0; i < 3; i++) {
+            const beforeDecode = decodedUrl;
+            decodedUrl = decodedUrl
+              .replace(/&amp;/g, '&')
+              .replace(/&lt;/g, '<')
+              .replace(/&gt;/g, '>')
+              .replace(/&quot;/g, '"')
+              .replace(/&#39;/g, "'");
+            
+            // If no changes, we're done
+            if (beforeDecode === decodedUrl) break;
+          }
+          
+          cache.set(cacheKey, { data: decodedUrl, timestamp: Date.now() - (CACHE_DURATION - 30000) });
+          return decodedUrl;
         }
       } catch (error) {
-        console.log('Client error:', client.clientName, error.message);
+        // Continue to next client
       }
     }
 
-    console.log('No stream URL found for videoId:', videoId);
     return null;
   },
 

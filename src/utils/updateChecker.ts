@@ -2,7 +2,7 @@ import axios from 'axios';
 import { Linking } from 'react-native';
 
 const UPDATE_URL = 'https://shrawan13-glitch.github.io/AuraMusic-updates/version.json';
-const CURRENT_VERSION = '2.0.0';
+const CURRENT_VERSION = '2.0.1';
 
 export interface UpdateInfo {
   latestVersion: string;

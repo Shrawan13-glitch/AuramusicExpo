@@ -24,6 +24,7 @@ import PlayerSettingsScreen from '../screens/PlayerSettingsScreen';
 import AboutScreen from '../screens/AboutScreen';
 import DownloadedSongsScreen from '../screens/DownloadedSongsScreen';
 import QualitySettingsScreen from '../screens/QualitySettingsScreen';
+import SectionView from '../screens/SectionView';
 import MiniPlayer from '../components/MiniPlayer';
 import MessageDetailScreen from '../screens/MessageDetailScreen';
 import AnimationSettingsScreen from '../screens/AnimationSettingsScreen';
@@ -289,6 +290,18 @@ export default function AppNavigator() {
           <View style={styles.container}>
             <View style={{ flex: 1 }}>
               <QualitySettingsScreen {...props} />
+            </View>
+            <View style={styles.miniPlayerBottom}>
+              <MiniPlayer />
+            </View>
+          </View>
+        )}
+      </Stack.Screen>
+      <Stack.Screen name="SectionView">
+        {(props) => (
+          <View style={styles.container}>
+            <View style={{ flex: 1 }}>
+              <SectionView {...props} />
             </View>
             <View style={styles.miniPlayerBottom}>
               <MiniPlayer />
