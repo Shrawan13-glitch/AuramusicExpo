@@ -2,7 +2,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
 import { launchImageLibrary, launchCamera, MediaType } from 'react-native-image-crop-picker';
-import DocumentPickerRN from 'react-native-document-picker';
+import DocumentPickerRN from 'expo-document-picker';
 import { Platform, Alert } from 'react-native';
 
 export interface FilePickerResult {
@@ -177,21 +177,34 @@ class FilePickerService {
   // Pick audio files
   async pickAudioFiles(options: FilePickerOptions = {}): Promise<FilePickerResult[]> {
     try {
-      const result = await DocumentPickerRN.pick({
-        type: [DocumentPickerRN.types.audio],
-        allowMultiSelection: options.allowMultiple || false,
-        copyTo: 'cachesDirectory',
+      const result = await DocumentPickerRN.getDocumentAsync({
+        type: 'audio/*',
+        multiple: options.allowMultiple || false,
+        copyToCacheDirectory: true,
       });
 
-      return result.map(file => ({
-        uri: file.fileCopyUri || file.uri,
-        name: file.name,
-        size: file.size,
-        type: 'audio',
-        mimeType: file.type,
-      }));
+      if (!result.canceled) {
+        if (Array.isArray(result.assets)) {
+          return result.assets.map(asset => ({
+            uri: asset.uri,
+            name: asset.name,
+            size: asset.size,
+            type: 'audio',
+            mimeType: asset.mimeType,
+          }));
+        } else {
+          return [{
+            uri: result.assets.uri,
+            name: result.assets.name,
+            size: result.assets.size,
+            type: 'audio',
+            mimeType: result.assets.mimeType,
+          }];
+        }
+      }
+      return [];
     } catch (error) {
-      if (!DocumentPickerRN.isCancel(error)) {
+      if (!result.canceled) {
         console.log('Audio picker error:', error);
       }
       return [];

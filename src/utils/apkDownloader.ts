@@ -1,6 +1,6 @@
 import RNFS from 'react-native-fs';
 import { Platform, PermissionsAndroid, Alert, Linking } from 'react-native';
-import RNApkInstaller from 'react-native-apk-installer';
+import RNApkInstaller from '@dominicvonk/react-native-apk-installer';
 
 export interface DownloadProgress {
   bytesWritten: number;

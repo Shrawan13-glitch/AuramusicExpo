@@ -9,6 +9,7 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@dominicvonk/react-native-apk-installer": "^2.2.2",
     "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/slider": "5.0.1",
@@ -32,12 +33,9 @@
     "expo-notifications": "~0.32.15",
     "expo-sharing": "^14.0.8",
     "expo-status-bar": "~3.0.9",
-    "expo-updates": "~0.27.29",
     "react": "19.1.0",
     "react-native": "0.81.5",
     "react-native-audio-pro": "^10.1.2",
-    "react-native-document-picker": "^9.3.0",
-    "react-native-apk-installer": "^1.1.0",
     "react-native-fs": "^2.20.0",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-image-crop-picker": "^0.41.2",
