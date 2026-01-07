@@ -29,7 +29,8 @@
         "INTERNET",
         "ACCESS_NETWORK_STATE",
         "FOREGROUND_SERVICE",
-        "WAKE_LOCK"
+        "WAKE_LOCK",
+        "RECORD_AUDIO"
       ],
       "usesCleartextTraffic": true
     },
@@ -42,7 +43,8 @@
           "defaultChannel": "default"
         }
       ],
-      "expo-dev-client"
+      "expo-dev-client",
+      "expo-speech-recognition"
     ],
     "extra": {
       "eas": {

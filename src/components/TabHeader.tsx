@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../store/AuthContext';
 import LightAccountModal from './LightAccountModal';
+import AssistantScreen from '../screens/AssistantScreen';
 
 interface TabHeaderProps {
   title: string;
@@ -12,12 +13,16 @@ interface TabHeaderProps {
 export default function TabHeader({ title, navigation }: TabHeaderProps) {
   const { isAuthenticated, accountInfo, logout } = useAuth();
   const [showAccountModal, setShowAccountModal] = useState(false);
+  const [showAssistant, setShowAssistant] = useState(false);
 
   return (
     <>
       <View style={styles.header}>
         <Text style={styles.title}>{title}</Text>
         <View style={styles.headerRight}>
+          <TouchableOpacity onPress={() => setShowAssistant(true)} style={styles.assistantButton}>
+            <Ionicons name="mic" size={24} color="#1db954" />
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('RecentlyPlayed')} style={styles.recentButton}>
             <Ionicons name="time" size={24} color="#fff" />
           </TouchableOpacity>
@@ -42,6 +47,10 @@ export default function TabHeader({ title, navigation }: TabHeaderProps) {
         onSettings={() => navigation.navigate('Settings')}
         onSignOut={() => { setShowAccountModal(false); logout(); }}
       />
+
+      <Modal visible={showAssistant} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setShowAssistant(false)}>
+        <AssistantScreen onClose={() => setShowAssistant(false)} navigation={navigation} />
+      </Modal>
     </>
   );
 }
@@ -65,6 +74,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  assistantButton: {
+    padding: 4,
   },
   recentButton: {
     padding: 4,
