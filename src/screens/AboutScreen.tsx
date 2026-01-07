@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAnimation } from '../store/AnimationContext';
-import { checkForUpdates, getCurrentVersion } from '../utils/updateChecker';
+import { checkForUpdatesV2, getCurrentVersion } from '../utils/updateCheckerV2';
 
 export default function AboutScreen({ navigation }: any) {
   const { settings } = useAnimation();
@@ -18,10 +18,10 @@ export default function AboutScreen({ navigation }: any) {
 
   const handleCheckUpdates = async () => {
     setChecking(true);
-    const { hasUpdate, updateInfo } = await checkForUpdates();
+    const { hasUpdate, updateInfo, selectedDownload } = await checkForUpdatesV2();
     setChecking(false);
-    if (hasUpdate && updateInfo) {
-      navigation.navigate('Update', { updateInfo });
+    if (hasUpdate && updateInfo && selectedDownload) {
+      navigation.navigate('Update', { updateInfo, selectedDownload });
     } else {
       alert('You are on the latest version');
     }

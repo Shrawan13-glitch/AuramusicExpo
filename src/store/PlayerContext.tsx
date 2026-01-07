@@ -5,6 +5,7 @@ import { Song, PlayerState } from '../types';
 import { InnerTube } from '../api/innertube';
 import { useLibrary } from './LibraryContext';
 import { useDownload } from './DownloadContext';
+import { cacheManager } from '../utils/cacheManager';
 
 interface PlayerContextType extends PlayerState {
   shuffle: boolean;
@@ -149,18 +150,35 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setIsChangingSong(true);
     
     try {
-      const downloadedSong = downloadContext?.getDownloadedSong(song.id);
       let audioSource;
       
-      if (downloadedSong) {
-        audioSource = downloadedSong.localPath;
+      // Check if song is cached first
+      const cachedPath = await cacheManager.getCachedSongPath(song.id);
+      if (cachedPath) {
+        audioSource = `file://${cachedPath}`;
       } else {
-        const streamUrl = await InnerTube.getStreamUrl(song.id);
-        if (!streamUrl) {
-          console.log('No stream URL found for song:', song.title);
-          return;
+        const downloadedSong = downloadContext?.getDownloadedSong(song.id);
+        
+        if (downloadedSong) {
+          audioSource = downloadedSong.localPath;
+        } else {
+          const streamUrl = await InnerTube.getStreamUrl(song.id);
+          if (!streamUrl) {
+            console.log('No stream URL found for song:', song.title);
+            return;
+          }
+          audioSource = streamUrl;
+          
+          // Cache the song in background
+          cacheManager.cacheSong(
+            song.id,
+            song.title || 'Unknown Title',
+            song.artists?.[0]?.name || song.artist || 'Unknown Artist',
+            streamUrl
+          ).catch(error => {
+            console.log('Background caching failed:', error);
+          });
         }
-        audioSource = streamUrl;
       }
 
       // Validate URL format

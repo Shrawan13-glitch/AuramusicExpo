@@ -1,11 +1,13 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../store/AuthContext';
 import { useAnimation } from '../store/AnimationContext';
-import { checkForUpdates, getCurrentVersion } from '../utils/updateChecker';
+import { checkForUpdatesV2, getCurrentVersion } from '../utils/updateCheckerV2';
+import { cacheManager } from '../utils/cacheManager';
 import Toast from '../components/Toast';
+import SettingsModal from '../components/SettingsModal';
 
 export default function SettingsScreen({ navigation }: any) {
   const { isAuthenticated, accountInfo, logout } = useAuth();
@@ -13,23 +15,92 @@ export default function SettingsScreen({ navigation }: any) {
   const [checking, setChecking] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [showContent, setShowContent] = useState(false);
+  const [showCacheModal, setShowCacheModal] = useState(false);
+  const [cacheSize, setCacheSize] = useState(500);
+  const [cacheStats, setCacheStats] = useState({ totalSize: 0, songCount: 0 });
+
+  // Handle back button for cache modal
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (showCacheModal) {
+        setShowCacheModal(false);
+        return true;
+      }
+      return false;
+    });
+    return () => backHandler.remove();
+  }, [showCacheModal]);
 
   useEffect(() => {
     const speedDelays = { fast: 250, normal: 350, slow: 550 };
     const timer = setTimeout(() => setShowContent(true), speedDelays[settings.speed]);
+    loadCacheSettings();
     return () => clearTimeout(timer);
   }, [settings.speed]);
 
+  const loadCacheSettings = async () => {
+    try {
+      const [maxSize, stats] = await Promise.all([
+        cacheManager.getMaxCacheSize(),
+        cacheManager.getCacheStats()
+      ]);
+      setCacheSize(maxSize);
+      setCacheStats(stats);
+    } catch (error) {
+      console.log('Error loading cache settings:', error);
+    }
+  };
+
   const handleCheckUpdates = useCallback(async () => {
     setChecking(true);
-    const { hasUpdate, updateInfo } = await checkForUpdates();
+    const { hasUpdate, updateInfo, selectedDownload } = await checkForUpdatesV2();
     setChecking(false);
-    if (hasUpdate && updateInfo) {
-      navigation.navigate('Update', { updateInfo });
+    if (hasUpdate && updateInfo && selectedDownload) {
+      navigation.navigate('Update', { updateInfo, selectedDownload });
     } else {
       setShowToast(true);
     }
   }, [navigation]);
+
+  const handleClearCache = () => {
+    Alert.alert(
+      'Clear Cache',
+      'This will remove all cached songs. Are you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: async () => {
+            await cacheManager.clearAllCache();
+            loadCacheSettings();
+          }
+        }
+      ]
+    );
+  };
+
+  const handleSaveCacheSize = async (selectedSize: string) => {
+    const size = parseInt(selectedSize);
+    setCacheSize(size);
+    await cacheManager.setMaxCacheSize(size);
+    loadCacheSettings();
+  };
+
+  const cacheOptions = [
+    { key: '100', label: '100 MB', subtitle: 'Minimal storage usage' },
+    { key: '250', label: '250 MB', subtitle: 'Light usage' },
+    { key: '500', label: '500 MB', subtitle: 'Recommended' },
+    { key: '1000', label: '1 GB', subtitle: 'Heavy usage' },
+    { key: '2000', label: '2 GB', subtitle: 'Maximum storage' }
+  ];
+
+  const formatSize = (bytes: number): string => {
+    if (bytes < 1024 * 1024) {
+      return `${(bytes / 1024).toFixed(1)} KB`;
+    }
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
 
   const SettingItem = ({ icon, title, subtitle, onPress, showArrow = true, iconColor = '#666' }) => (
     <TouchableOpacity style={styles.settingItem} onPress={onPress}>
@@ -83,6 +154,31 @@ export default function SettingsScreen({ navigation }: any) {
           </View>
 
           <View style={styles.section}>
+            <Text style={styles.sectionHeader}>STORAGE</Text>
+            <SettingItem
+              icon="folder-outline"
+              title="Cached Songs"
+              subtitle={`${cacheStats.songCount} songs • ${formatSize(cacheStats.totalSize)}`}
+              onPress={() => navigation.navigate('CachedSongs')}
+              iconColor="#f39c12"
+            />
+            <SettingItem
+              icon="settings-outline"
+              title="Cache Settings"
+              subtitle={`Max size: ${cacheSize} MB`}
+              onPress={() => setShowCacheModal(true)}
+              iconColor="#9b59b6"
+            />
+            <SettingItem
+              icon="trash-outline"
+              title="Clear Cache"
+              subtitle="Remove all cached songs"
+              onPress={handleClearCache}
+              iconColor="#e74c3c"
+            />
+          </View>
+
+          <View style={styles.section}>
             <Text style={styles.sectionHeader}>INTERFACE</Text>
             <SettingItem
               icon="flash-outline"
@@ -119,6 +215,16 @@ export default function SettingsScreen({ navigation }: any) {
         type="success"
         onHide={() => setShowToast(false)}
       />
+
+      {/* Cache Settings Modal */}
+      <SettingsModal
+        visible={showCacheModal}
+        title="Cache Size"
+        options={cacheOptions}
+        selectedKey={cacheSize.toString()}
+        onSelect={handleSaveCacheSize}
+        onClose={() => setShowCacheModal(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -142,5 +248,5 @@ const styles = StyleSheet.create({
   settingContent: { flex: 1, justifyContent: 'center' },
   settingTitle: { fontSize: 17, fontWeight: '400', color: '#fff', lineHeight: 22 },
   settingSubtitle: { fontSize: 15, color: '#8e8e93', marginTop: 2, lineHeight: 20 },
-  sectionHeader: { fontSize: 13, fontWeight: '600', color: '#666', paddingHorizontal: 20, marginBottom: 8, letterSpacing: 0.5 },
+  sectionHeader: { fontSize: 13, fontWeight: '600', color: '#666', paddingHorizontal: 20, marginBottom: 8, letterSpacing: 0.5 }
 });

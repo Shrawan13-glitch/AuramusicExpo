@@ -119,10 +119,15 @@ export class APKDownloader {
   // Get file size from URL
   async getFileSize(url: string): Promise<number> {
     try {
-      const response = await fetch(url, { method: 'HEAD' });
+      const response = await fetch(url, { method: 'HEAD', timeout: 10000 });
+      if (!response.ok) {
+        console.log('File size check failed:', response.status);
+        return 0;
+      }
       const contentLength = response.headers.get('content-length');
       return contentLength ? parseInt(contentLength, 10) : 0;
-    } catch {
+    } catch (error) {
+      console.log('File size check error:', error);
       return 0;
     }
   }
@@ -144,6 +149,24 @@ export class APKDownloader {
   ): Promise<boolean> {
     if (this.isDownloading) {
       onError?.({ type: 'unknown', message: 'Download already in progress', retryable: false });
+      return false;
+    }
+
+    // Validate URL first
+    if (!downloadUrl || !downloadUrl.startsWith('http')) {
+      onError?.({ type: 'network', message: 'Invalid download URL', retryable: false });
+      return false;
+    }
+
+    // Check if URL is accessible
+    try {
+      const testResponse = await fetch(downloadUrl, { method: 'HEAD', timeout: 10000 });
+      if (!testResponse.ok) {
+        onError?.({ type: 'network', message: `Server error: ${testResponse.status}`, retryable: true });
+        return false;
+      }
+    } catch (error) {
+      onError?.({ type: 'network', message: 'Cannot reach download server', retryable: true });
       return false;
     }
 
@@ -224,12 +247,33 @@ export class APKDownloader {
       } else {
         throw new Error(`Download failed with status: ${result.statusCode}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       this.isDownloading = false;
       console.log('Download error:', error);
       
+      // Handle specific error types
+      let errorMessage = 'Download failed';
+      let retryable = true;
+      
+      if (error?.message?.includes('404')) {
+        errorMessage = 'File not found on server';
+        retryable = false;
+      } else if (error?.message?.includes('403')) {
+        errorMessage = 'Access denied by server';
+        retryable = false;
+      } else if (error?.message?.includes('500')) {
+        errorMessage = 'Server error, please try again later';
+        retryable = true;
+      } else if (error?.message?.includes('timeout')) {
+        errorMessage = 'Download timeout, check your connection';
+        retryable = true;
+      } else if (error?.message?.includes('Network')) {
+        errorMessage = 'Network error, check your connection';
+        retryable = true;
+      }
+      
       // Retry logic with exponential backoff
-      if (this.retryCount < this.maxRetries) {
+      if (this.retryCount < this.maxRetries && retryable) {
         this.retryCount++;
         const delay = Math.pow(2, this.retryCount) * 1000; // Exponential backoff
         
@@ -239,13 +283,13 @@ export class APKDownloader {
         
         onError?.({ 
           type: 'network', 
-          message: `Download failed. Retrying in ${delay/1000}s... (${this.retryCount}/${this.maxRetries})`, 
+          message: `${errorMessage}. Retrying in ${delay/1000}s... (${this.retryCount}/${this.maxRetries})`, 
           retryable: true 
         });
         return false;
       }
       
-      onError?.({ type: 'unknown', message: 'Download failed after retries', retryable: false });
+      onError?.({ type: 'network', message: errorMessage, retryable: false });
       return false;
     }
   }

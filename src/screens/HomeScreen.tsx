@@ -9,6 +9,8 @@ import { Song } from '../types';
 import SongOptionsModal from '../components/SongOptionsModal';
 import TabHeader from '../components/TabHeader';
 import { useSongOptions } from '../hooks/useSongOptions';
+import OfflineBanner from '../components/OfflineBanner';
+import ErrorState from '../components/ErrorState';
 
 // Add hashCode method for color generation
 String.prototype.hashCode = function() {
@@ -27,6 +29,7 @@ export default function HomeScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(false);
   const [skeletonSections, setSkeletonSections] = useState(0);
   const { playSong, currentSong } = usePlayer();
   const { modalVisible, selectedSong, showOptions, hideOptions } = useSongOptions();
@@ -37,6 +40,7 @@ export default function HomeScreen({ navigation }: any) {
 
   const loadHome = useCallback(async () => {
     try {
+      setError(false);
       const data = await InnerTube.getHome();
       setSections(data.sections);
       setContinuation(data.continuation);
@@ -51,17 +55,19 @@ export default function HomeScreen({ navigation }: any) {
       }
     } catch (error) {
       setLoading(false);
+      setError(true);
     }
   }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    setError(false);
     try {
       const data = await InnerTube.getHome();
       setSections(data.sections);
       setContinuation(data.continuation);
     } catch (error) {
-      // Error handled silently
+      setError(true);
     } finally {
       setRefreshing(false);
     }
@@ -846,9 +852,27 @@ export default function HomeScreen({ navigation }: any) {
     );
   }
 
+  if (error || (!loading && sections.length === 0)) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <TabHeader title="Home" navigation={navigation} />
+        <ErrorState 
+          title={sections.length === 0 ? "No content available" : "Failed to load home"}
+          message={sections.length === 0 ? "Unable to load your music feed. Check your connection and try again." : "Unable to load your music feed. Check your connection and try again."}
+          onRetry={loadHome}
+        />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <TabHeader title="Home" navigation={navigation} />
+      
+      <OfflineBanner 
+        onDownloadsPress={() => navigation.navigate('DownloadedSongs')}
+        onTryAgain={onRefresh}
+      />
       
       <FlashList
         data={sections}

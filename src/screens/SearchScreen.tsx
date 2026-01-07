@@ -8,6 +8,8 @@ import { usePlayer } from '../store/PlayerContext';
 import SongOptionsModal from '../components/SongOptionsModal';
 import { useSongOptions } from '../hooks/useSongOptions';
 import TabHeader from '../components/TabHeader';
+import OfflineBanner from '../components/OfflineBanner';
+import ErrorState from '../components/ErrorState';
 
 const FILTERS = [
   { label: 'All', value: null },
@@ -36,6 +38,7 @@ export default function SearchScreen({ navigation }: any) {
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [exploreData, setExploreData] = useState<any>(null);
   const [exploreLoading, setExploreLoading] = useState(true);
+  const [exploreError, setExploreError] = useState(false);
   const debounceTimer = useRef<NodeJS.Timeout>();
   const { playSong } = usePlayer();
   const { modalVisible, selectedSong, showOptions, hideOptions } = useSongOptions();
@@ -46,9 +49,15 @@ export default function SearchScreen({ navigation }: any) {
 
   const loadExplore = async () => {
     setExploreLoading(true);
-    const result = await InnerTube.explore();
-    setExploreData(result);
-    setExploreLoading(false);
+    setExploreError(false);
+    try {
+      const result = await InnerTube.explore();
+      setExploreData(result);
+    } catch (error) {
+      setExploreError(true);
+    } finally {
+      setExploreLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -203,6 +212,11 @@ export default function SearchScreen({ navigation }: any) {
         )}
       </View>
 
+      <OfflineBanner 
+        onDownloadsPress={() => navigation.navigate('DownloadedSongs')}
+        onTryAgain={loadExplore}
+      />
+
       {query.length === 0 ? (
         <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
           <View style={styles.section}>
@@ -217,6 +231,14 @@ export default function SearchScreen({ navigation }: any) {
                     <View style={styles.skeletonContent} />
                   </View>
                 ))
+              ) : exploreError ? (
+                <View style={styles.errorContainer}>
+                  <ErrorState 
+                    title="Failed to load browse"
+                    message="Unable to load music categories. Check your connection and try again."
+                    onRetry={loadExplore}
+                  />
+                </View>
               ) : (
                 exploreData?.moodAndGenres?.map((genre: any, index: number) => {
                   const colors = MOOD_COLORS[index % MOOD_COLORS.length];
@@ -519,5 +541,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a1a',
     borderRadius: 4,
     width: '50%',
+  },
+  errorContainer: {
+    width: '100%',
+    height: 300,
   },
 });

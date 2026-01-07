@@ -2,16 +2,17 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Animated, Dimensions, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { UpdateInfo, openUpdateUrl } from '../utils/updateChecker';
+import { UpdateInfoV2, SelectedDownload, openUpdateUrl } from '../utils/updateCheckerV2';
 import { apkDownloader, DownloadProgress } from '../utils/apkDownloader';
 
 interface UpdateModalProps {
   visible: boolean;
-  updateInfo: UpdateInfo;
+  updateInfo: UpdateInfoV2;
+  selectedDownload: SelectedDownload;
   onDismiss: () => void;
 }
 
-export default function UpdateModal({ visible, updateInfo, onDismiss }: UpdateModalProps) {
+export default function UpdateModal({ visible, updateInfo, selectedDownload, onDismiss }: UpdateModalProps) {
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [downloadSize, setDownloadSize] = useState('');
@@ -59,7 +60,7 @@ export default function UpdateModal({ visible, updateInfo, onDismiss }: UpdateMo
     let startTime = Date.now();
     
     const success = await apkDownloader.downloadAndInstall(
-      updateInfo.downloadUrl,
+      selectedDownload.url,
       (progress: DownloadProgress) => {
         const progressValue = progress.progress;
         setDownloadProgress(progressValue);
@@ -166,7 +167,7 @@ export default function UpdateModal({ visible, updateInfo, onDismiss }: UpdateMo
                     }
                   ]
                 >
-                  Version {updateInfo.latestVersion}
+                  Version {updateInfo.latestVersion} ({selectedDownload.architecture})
                 </Animated.Text>
               </View>
             </View>

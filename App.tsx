@@ -11,8 +11,9 @@ import { AuthProvider } from './src/store/AuthContext';
 import { DownloadProvider } from './src/store/DownloadContext';
 import { NotificationProvider } from './src/store/NotificationContext';
 import { AnimationProvider } from './src/store/AnimationContext';
+import { NetworkProvider } from './src/store/NetworkContext';
 import MiniPlayer from './src/components/MiniPlayer';
-import { checkForUpdates } from './src/utils/updateChecker';
+import { checkForUpdatesV2 } from './src/utils/updateCheckerV2';
 
 // Enable StrictMode in development
 if (__DEV__) {
@@ -37,9 +38,9 @@ export default function App() {
     const checkUpdates = () => {
       InteractionManager.runAfterInteractions(async () => {
         try {
-          const { hasUpdate, updateInfo } = await checkForUpdates();
-          if (hasUpdate && updateInfo && navigationRef.current) {
-            navigationRef.current?.navigate('Update', { updateInfo });
+          const { hasUpdate, updateInfo, selectedDownload } = await checkForUpdatesV2();
+          if (hasUpdate && updateInfo && selectedDownload && navigationRef.current) {
+            navigationRef.current?.navigate('Update', { updateInfo, selectedDownload });
           }
         } catch (error) {
           // Update check failed silently
@@ -54,26 +55,28 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <AnimationProvider>
-          <NotificationProvider>
-            <AuthProvider>
-              <LibraryProvider>
-                <DownloadProvider>
-                  <PlayerProvider>
-                    <NavigationContainer
-                      ref={navigationRef}
-                      onReady={() => {
-                        // Navigation ready
-                      }}
-                    >
-                      <AppNavigator />
-                    </NavigationContainer>
-                  </PlayerProvider>
-                </DownloadProvider>
-              </LibraryProvider>
-            </AuthProvider>
-          </NotificationProvider>
-        </AnimationProvider>
+        <NetworkProvider>
+          <AnimationProvider>
+            <NotificationProvider>
+              <AuthProvider>
+                <LibraryProvider>
+                  <DownloadProvider>
+                    <PlayerProvider>
+                      <NavigationContainer
+                        ref={navigationRef}
+                        onReady={() => {
+                          // Navigation ready
+                        }}
+                      >
+                        <AppNavigator />
+                      </NavigationContainer>
+                    </PlayerProvider>
+                  </DownloadProvider>
+                </LibraryProvider>
+              </AuthProvider>
+            </NotificationProvider>
+          </AnimationProvider>
+        </NetworkProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

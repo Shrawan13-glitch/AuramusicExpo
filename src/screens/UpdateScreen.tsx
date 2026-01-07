@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, Dimensi
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { UpdateInfo, openUpdateUrl } from '../utils/updateChecker';
+import { UpdateInfoV2, SelectedDownload, openUpdateUrl } from '../utils/updateCheckerV2';
 import { apkDownloader, DownloadProgress, DownloadError } from '../utils/apkDownloader';
 
 interface UpdateScreenProps {
@@ -12,7 +12,8 @@ interface UpdateScreenProps {
 }
 
 export default function UpdateScreen({ route, navigation }: UpdateScreenProps) {
-  const updateInfo: UpdateInfo = route.params?.updateInfo;
+  const updateInfo: UpdateInfoV2 = route.params?.updateInfo;
+  const selectedDownload: SelectedDownload = route.params?.selectedDownload;
   const isStrict = updateInfo?.isStrict === 'true';
   
   const [isDownloading, setIsDownloading] = useState(false);
@@ -57,7 +58,7 @@ export default function UpdateScreen({ route, navigation }: UpdateScreenProps) {
     setShowDownloadScreen(true);
     
     const success = await apkDownloader.downloadAndInstall(
-      updateInfo.downloadUrl,
+      selectedDownload.url,
       (progress: DownloadProgress) => {
         setDownloadProgress(progress.progress);
         
@@ -160,7 +161,7 @@ export default function UpdateScreen({ route, navigation }: UpdateScreenProps) {
             
             <Text style={styles.modernTitle}>Update Available</Text>
             <View style={styles.versionBadge}>
-              <Text style={styles.modernVersion}>v{updateInfo.latestVersion}</Text>
+              <Text style={styles.modernVersion}>v{updateInfo.latestVersion} ({selectedDownload.architecture})</Text>
             </View>
           </Animated.View>
 

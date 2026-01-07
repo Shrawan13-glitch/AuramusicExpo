@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../store/AuthContext';
-import AccountModal from './AccountModal';
+import LightAccountModal from './LightAccountModal';
 
 interface TabHeaderProps {
   title: string;
@@ -33,7 +33,7 @@ export default function TabHeader({ title, navigation }: TabHeaderProps) {
       </View>
     </View>
 
-      <AccountModal
+      <LightAccountModal
         visible={showAccountModal}
         onClose={() => setShowAccountModal(false)}
         isAuthenticated={isAuthenticated}
