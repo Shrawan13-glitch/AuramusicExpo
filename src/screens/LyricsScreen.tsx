@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, TextInput, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, TextInput, Alert, ImageBackground } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
 import { InnerTube } from '../api/innertube';
 import { usePlayer } from '../store/PlayerContext';
 import { lyricsCache } from '../utils/lyricsCache';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { height: screenHeight } = Dimensions.get('window');
 
@@ -18,6 +19,7 @@ export default function LyricsScreen({ onClose }: any) {
   const [showResyncButton, setShowResyncButton] = useState(false);
   const [showAddLyrics, setShowAddLyrics] = useState(false);
   const [customLyrics, setCustomLyrics] = useState('');
+  const [backgroundStyle, setBackgroundStyle] = useState('blur');
   const scrollViewRef = useRef<ScrollView>(null);
   const [lyricsViewHeight, setLyricsViewHeight] = useState(0);
 
@@ -32,8 +34,18 @@ export default function LyricsScreen({ onClose }: any) {
   useEffect(() => {
     if (currentSong) {
       checkCacheAndLoad();
+      loadBackgroundStyle();
     }
   }, [currentSong?.id]);
+
+  const loadBackgroundStyle = async () => {
+    try {
+      const style = await AsyncStorage.getItem('playerBackgroundStyle');
+      if (style) setBackgroundStyle(style);
+    } catch (error) {
+      // Error loading background style handled silently
+    }
+  };
 
   const checkCacheAndLoad = async () => {
     if (!currentSong) return;
@@ -96,7 +108,7 @@ export default function LyricsScreen({ onClose }: any) {
   // Initial center scroll when lyrics load
   useEffect(() => {
     if (lyrics && !loading && lyricsViewHeight > 0) {
-      handleResync();
+      syncToCurrentPosition();
     }
   }, [lyrics, loading, lyricsViewHeight]);
 
@@ -120,6 +132,10 @@ export default function LyricsScreen({ onClose }: any) {
   const handleResync = () => {
     setAutoScroll(true);
     setShowResyncButton(false);
+    syncToCurrentPosition();
+  };
+
+  const syncToCurrentPosition = () => {
     if (currentLineIndex >= 0) {
       scrollToLine(currentLineIndex);
     } else if (hasTimedLyrics) {
@@ -230,10 +246,32 @@ export default function LyricsScreen({ onClose }: any) {
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
+  const renderBackground = () => {
+    const backgroundProps = { style: StyleSheet.absoluteFillObject };
+    switch (backgroundStyle) {
+      case 'blur':
+        return (
+          <ImageBackground source={currentSong.thumbnailUrl ? { uri: currentSong.thumbnailUrl } : require('../../assets/icon.png')} {...backgroundProps} blurRadius={50}>
+            <View style={[StyleSheet.absoluteFillObject, styles.darkOverlay]} />
+          </ImageBackground>
+        );
+      case 'image':
+        return (
+          <ImageBackground source={currentSong.thumbnailUrl ? { uri: currentSong.thumbnailUrl } : require('../../assets/icon.png')} {...backgroundProps} blurRadius={20}>
+            <View style={[StyleSheet.absoluteFillObject, styles.mediumOverlay]} />
+          </ImageBackground>
+        );
+      default:
+        return <View style={[StyleSheet.absoluteFillObject, styles.gradientBackground]} />;
+    }
+  };
+
   if (!currentSong) return null;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <View style={styles.fullScreen}>
+      {renderBackground()}
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Ionicons name="chevron-down" size={28} color="#fff" />
@@ -272,26 +310,25 @@ export default function LyricsScreen({ onClose }: any) {
           </TouchableOpacity>
         </View>
       ) : (
-        <>
-          <ScrollView 
-            ref={scrollViewRef}
-            style={styles.lyricsContainer}
-            contentContainerStyle={styles.lyricsContent}
-            showsVerticalScrollIndicator={false}
-            onScrollBeginDrag={handleManualScroll}
-            onLayout={(event) => {
-              const { height } = event.nativeEvent.layout;
-              setLyricsViewHeight(height);
-            }}
-          >
-            <View style={{ height: lyricsViewHeight / 2 }} />
-            {(hasTimedLyrics ? timedLines : lyrics.lines).map((line, index) => {
-              const isActive = hasTimedLyrics && index === currentLineIndex;
-              const isPast = hasTimedLyrics && index < currentLineIndex;
-              
-              return (
+        <ScrollView 
+          ref={scrollViewRef}
+          style={styles.lyricsContainer}
+          contentContainerStyle={styles.lyricsContent}
+          showsVerticalScrollIndicator={false}
+          onScrollBeginDrag={handleManualScroll}
+          onLayout={(event) => {
+            const { height } = event.nativeEvent.layout;
+            setLyricsViewHeight(height);
+          }}
+        >
+          <View style={{ height: lyricsViewHeight / 2 }} />
+          {(hasTimedLyrics ? timedLines : lyrics.lines).map((line, index) => {
+            const isActive = hasTimedLyrics && index === currentLineIndex;
+            const isPast = hasTimedLyrics && index < currentLineIndex;
+            
+            return (
+              <View key={index} style={{ height: 64, justifyContent: 'center' }}>
                 <TouchableOpacity 
-                  key={index}
                   onPress={() => handleLinePress(index)}
                   disabled={!hasTimedLyrics}
                 >
@@ -306,50 +343,50 @@ export default function LyricsScreen({ onClose }: any) {
                     {line.text || ' '}
                   </Text>
                 </TouchableOpacity>
-              );
-            })}
-            <View style={{ height: lyricsViewHeight / 2 }} />
-          </ScrollView>
-          
-          <View style={styles.controls}>
-            <View style={styles.progressContainer}>
-              <Text style={styles.timeText}>{formatTime(position)}</Text>
-              <Slider
-                style={styles.slider}
-                minimumValue={0}
-                maximumValue={duration}
-                value={position}
-                onSlidingComplete={seek}
-                minimumTrackTintColor="#1db954"
-                maximumTrackTintColor="#333"
-                thumbStyle={styles.thumb}
-              />
-              <Text style={styles.timeText}>{formatTime(duration)}</Text>
-            </View>
-            
-            <View style={styles.playbackControls}>
-              <TouchableOpacity onPress={skipPrevious} style={styles.controlButton}>
-                <Ionicons name="play-skip-back" size={32} color="#fff" />
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                onPress={isPlaying ? pause : resume} 
-                style={[styles.controlButton, styles.playButton]}
-              >
-                <Ionicons 
-                  name={isPlaying ? "pause" : "play"} 
-                  size={36} 
-                  color="#000" 
-                />
-              </TouchableOpacity>
-              
-              <TouchableOpacity onPress={skipNext} style={styles.controlButton}>
-                <Ionicons name="play-skip-forward" size={32} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </>
+              </View>
+            );
+          })}
+          <View style={{ height: lyricsViewHeight / 2 }} />
+        </ScrollView>
       )}
+      
+      <View style={styles.controls}>
+        <View style={styles.progressContainer}>
+          <Text style={styles.timeText}>{formatTime(position)}</Text>
+          <Slider
+            style={styles.slider}
+            minimumValue={0}
+            maximumValue={duration}
+            value={position}
+            onSlidingComplete={seek}
+            minimumTrackTintColor="#1db954"
+            maximumTrackTintColor="#333"
+            thumbStyle={styles.thumb}
+          />
+          <Text style={styles.timeText}>{formatTime(duration)}</Text>
+        </View>
+        
+        <View style={styles.playbackControls}>
+          <TouchableOpacity onPress={skipPrevious} style={styles.controlButton}>
+            <Ionicons name="play-skip-back" size={32} color="#fff" />
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            onPress={isPlaying ? pause : resume} 
+            style={[styles.controlButton, styles.playButton]}
+          >
+            <Ionicons 
+              name={isPlaying ? "pause" : "play"} 
+              size={36} 
+              color="#000" 
+            />
+          </TouchableOpacity>
+          
+          <TouchableOpacity onPress={skipNext} style={styles.controlButton}>
+            <Ionicons name="play-skip-forward" size={32} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      </View>
       
       {showAddLyrics && (
         <View style={styles.addLyricsModal}>
@@ -381,14 +418,18 @@ export default function LyricsScreen({ onClose }: any) {
           </View>
         </View>
       )}
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  fullScreen: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: 'transparent',
   },
   header: {
     flexDirection: 'row',
@@ -405,8 +446,6 @@ const styles = StyleSheet.create({
   songInfo: {
     paddingHorizontal: 24,
     paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#222',
   },
   songTitle: {
     fontSize: 18,
@@ -465,7 +504,6 @@ const styles = StyleSheet.create({
   lyricLine: {
     fontSize: 20,
     color: '#666',
-    marginVertical: 16,
     lineHeight: 32,
     textAlign: 'center',
     transition: 'color 0.3s ease',
@@ -508,7 +546,7 @@ const styles = StyleSheet.create({
   controls: {
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    backgroundColor: 'transparent',
   },
   progressContainer: {
     flexDirection: 'row',
@@ -602,5 +640,14 @@ const styles = StyleSheet.create({
   saveButtonText: {
     color: '#000',
     fontWeight: '600',
+  },
+  gradientBackground: {
+    backgroundColor: '#1a1a2e',
+  },
+  darkOverlay: {
+    backgroundColor: 'rgba(0,0,0,0.65)',
+  },
+  mediumOverlay: {
+    backgroundColor: 'rgba(0,0,0,0.6)',
   },
 });
