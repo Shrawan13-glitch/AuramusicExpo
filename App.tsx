@@ -14,6 +14,7 @@ import { AnimationProvider } from './src/store/AnimationContext';
 import { NetworkProvider } from './src/store/NetworkContext';
 import MiniPlayer from './src/components/MiniPlayer';
 import { checkForUpdatesV2 } from './src/utils/updateCheckerV2';
+import { lyricsCache } from './src/utils/lyricsCache';
 
 // Enable StrictMode in development
 if (__DEV__) {
@@ -27,6 +28,9 @@ export default function App() {
   useEffect(() => {
     // Keep app awake during music playback
     activateKeepAwakeAsync();
+    
+    // Initialize lyrics cache
+    lyricsCache.initialize();
     
     return () => {
       deactivateKeepAwake();

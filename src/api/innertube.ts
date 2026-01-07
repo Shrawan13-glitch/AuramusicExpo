@@ -1531,64 +1531,81 @@ export const InnerTube = {
 
   async getLyrics(videoId: string): Promise<{ lines: Array<{ text: string; startTime?: number }> } | null> {
     try {
-      // Get song info first
+      // Get song info from next endpoint
       const nextResponse = await axios.post(
         `${BASE_URL}/next?key=${API_KEY}`,
         {
           context: createContext(),
           videoId,
-        }
+        },
+        { timeout: 5000 }
       );
 
-      const tabs = nextResponse.data?.contents?.singleColumnMusicWatchNextResultsRenderer?.tabbedRenderer?.watchNextTabbedResultsRenderer?.tabs;
-      const queueTab = tabs?.[0];
-      const videoRenderer = queueTab?.tabRenderer?.content?.musicQueueRenderer?.content?.playlistPanelRenderer?.contents?.[0]?.playlistPanelVideoRenderer;
+      const videoRenderer = nextResponse.data?.contents?.singleColumnMusicWatchNextResultsRenderer?.tabbedRenderer?.watchNextTabbedResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.musicQueueRenderer?.content?.playlistPanelRenderer?.contents?.[0]?.playlistPanelVideoRenderer;
       
       const title = videoRenderer?.title?.runs?.[0]?.text;
       const artistRuns = videoRenderer?.longBylineText?.runs || [];
       const artist = artistRuns.filter((r: any) => r.navigationEndpoint?.browseEndpoint?.browseId?.startsWith('UC'))
         .map((r: any) => r.text).join(', ');
 
-      if (!title || !artist) return null;
-
-      // Search LRCLIB
-      const response = await axios.get('https://lrclib.net/api/search', {
-        params: {
-          track_name: title,
-          artist_name: artist,
-        },
-      });
-
-      if (!response.data || response.data.length === 0) return null;
-
-      const result = response.data[0];
-      const syncedLyrics = result.syncedLyrics;
-
-      if (!syncedLyrics) {
-        // Fallback to plain lyrics
-        const plainLyrics = result.plainLyrics;
-        if (!plainLyrics) return null;
-        const lines = plainLyrics.split('\n').map((text: string) => ({ text }));
-        return { lines };
+      if (!title || !artist) {
+        console.log('Missing song info');
+        return null;
       }
 
-      // Parse synced lyrics (LRC format)
-      const lines = syncedLyrics.split('\n')
-        .map((line: string) => {
-          const match = line.match(/\[(\d+):(\d+\.\d+)\](.*)/);
-          if (!match) return null;
-          const minutes = parseInt(match[1]);
-          const seconds = parseFloat(match[2]);
-          const text = match[3].trim();
-          return {
-            text,
-            startTime: (minutes * 60 + seconds) * 1000,
-          };
-        })
-        .filter((line: any) => line && line.text);
+      console.log('Song:', title, 'by', artist);
 
-      return lines.length > 0 ? { lines } : null;
-    } catch (error) {
+      // Search LRCLIB with retry
+      let response;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          response = await fetch(`https://lrclib.net/api/search?track_name=${encodeURIComponent(title)}&artist_name=${encodeURIComponent(artist)}`);
+          if (response.ok) break;
+          if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 1000));
+        } catch (e) {
+          if (attempt === 2) throw e;
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+      
+      if (!response || !response.ok) {
+        console.log('Failed to fetch lyrics after retries');
+        return null;
+      }
+        const data = await response.json();
+        if (data?.[0]?.syncedLyrics) {
+          const lines = data[0].syncedLyrics.split('\n')
+            .map((line: string) => {
+              const match = line.match(/\[(\d+):(\d+\.\d+)\](.*)/);
+              if (!match) return null;
+              const minutes = parseInt(match[1]);
+              const seconds = parseFloat(match[2]);
+              const text = match[3].trim();
+              if (!text) return null;
+              return { text, startTime: (minutes * 60 + seconds) * 1000 };
+            })
+            .filter(Boolean);
+          
+          if (lines.length > 0) {
+            console.log('Found synced lyrics:', lines.length, 'lines');
+            return { lines };
+          }
+        }
+        
+        if (data?.[0]?.plainLyrics) {
+          const lines = data[0].plainLyrics.split('\n')
+            .map((text: string) => ({ text: text.trim() }))
+            .filter((line: any) => line.text);
+          
+          if (lines.length > 0) {
+            console.log('Found plain lyrics:', lines.length, 'lines');
+            return { lines };
+          }
+        }
+      
+      return null;
+    } catch (error: any) {
+      console.log('Lyrics error:', error.message);
       return null;
     }
   },

@@ -163,6 +163,13 @@ export default function SettingsScreen({ navigation }: any) {
               iconColor="#f39c12"
             />
             <SettingItem
+              icon="musical-note-outline"
+              title="Cached Lyrics"
+              subtitle="Manage stored lyrics"
+              onPress={() => navigation.navigate('CachedLyrics')}
+              iconColor="#e67e22"
+            />
+            <SettingItem
               icon="settings-outline"
               title="Cache Settings"
               subtitle={`Max size: ${cacheSize} MB`}

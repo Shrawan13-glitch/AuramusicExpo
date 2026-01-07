@@ -240,14 +240,17 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
           </View>
 
           <View style={styles.bottomControls}>
-            <TouchableOpacity onPress={() => setShowLyrics(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name="document-text-outline" size={26} color="#fff" />
+            <TouchableOpacity onPress={() => setShowLyrics(true)} style={styles.lyricsButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="document-text-outline" size={20} color="#fff" />
+              <Text style={styles.lyricsText}>Lyrics</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => showOptions(currentSong)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name="ellipsis-horizontal" size={26} color="#fff" />
+            <TouchableOpacity onPress={() => showOptions(currentSong)} style={styles.lyricsButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="ellipsis-horizontal" size={20} color="#fff" />
+              <Text style={styles.lyricsText}>More</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={onOpenQueue} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name="list" size={26} color="#fff" />
+            <TouchableOpacity onPress={onOpenQueue} style={styles.lyricsButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="list" size={20} color="#fff" />
+              <Text style={styles.lyricsText}>Queue</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -412,5 +415,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 80,
     paddingTop: 24,
     paddingBottom: 20,
+  },
+  lyricsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 6,
+  },
+  lyricsText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '500',
   },
 });

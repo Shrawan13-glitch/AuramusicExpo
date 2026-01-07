@@ -29,6 +29,7 @@ import MiniPlayer from '../components/MiniPlayer';
 import MessageDetailScreen from '../screens/MessageDetailScreen';
 import AnimationSettingsScreen from '../screens/AnimationSettingsScreen';
 import CachedSongsScreen from '../screens/CachedSongsScreen';
+import CachedLyricsScreen from '../screens/CachedLyricsScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -315,6 +316,18 @@ export default function AppNavigator() {
           <View style={styles.container}>
             <View style={{ flex: 1 }}>
               <CachedSongsScreen {...props} />
+            </View>
+            <View style={styles.miniPlayerBottom}>
+              <MiniPlayer />
+            </View>
+          </View>
+        )}
+      </Stack.Screen>
+      <Stack.Screen name="CachedLyrics">
+        {(props) => (
+          <View style={styles.container}>
+            <View style={{ flex: 1 }}>
+              <CachedLyricsScreen {...props} />
             </View>
             <View style={styles.miniPlayerBottom}>
               <MiniPlayer />
