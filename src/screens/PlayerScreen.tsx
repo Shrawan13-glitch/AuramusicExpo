@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet, Dimensions, Modal, PanResponder, ImageBackground, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import Slider from '@react-native-community/slider';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -42,6 +43,23 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
     loadSkipDuration();
     loadSkipEnabled();
   }, []);
+
+  // Handle StatusBar when screen is focused/unfocused
+  useFocusEffect(
+    React.useCallback(() => {
+      // Set StatusBar for player screen
+      StatusBar.setBarStyle('light-content', true);
+      StatusBar.setBackgroundColor('transparent', true);
+      StatusBar.setTranslucent(true);
+      
+      return () => {
+        // Reset StatusBar when leaving player screen
+        StatusBar.setBarStyle('light-content', true);
+        StatusBar.setBackgroundColor('#000', true);
+        StatusBar.setTranslucent(false);
+      };
+    }, [])
+  );
 
   useEffect(() => {
     if (!isDragging) {
@@ -131,7 +149,6 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
 
   return (
     <View style={styles.fullScreen}>
-      <StatusBar barStyle={getStatusBarStyle()} backgroundColor="transparent" translucent />
       {renderBackground()}
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         <View style={styles.container} {...panResponder.panHandlers}>

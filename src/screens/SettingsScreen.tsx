@@ -194,6 +194,13 @@ export default function SettingsScreen({ navigation }: any) {
               onPress={() => navigation.navigate('AnimationSettings')}
               iconColor="#ff6b6b"
             />
+            <SettingItem
+              icon="mic-outline"
+              title="Voice Assistant"
+              subtitle="Voice commands & settings"
+              onPress={() => navigation.navigate('VoiceSettings')}
+              iconColor="#1db954"
+            />
           </View>
 
           <View style={styles.section}>

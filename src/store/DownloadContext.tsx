@@ -214,7 +214,7 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       );
       
       if (downloadResult.status !== 200 && downloadResult.status !== 206) {
-        throw new Error(`Download failed: ${downloadResult.status}`);
+        throw new Error(`Download failed with status: ${downloadResult.status}`);
       }
       
       const fileInfo = await FileSystem.getInfoAsync(filePath);
@@ -248,6 +248,13 @@ export const DownloadProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         ...prev,
         [songId]: { songId, progress: 0, status: 'failed' }
       }));
+      
+      setTimeout(() => {
+        setDownloadProgress(prev => {
+          const { [songId]: removed, ...rest } = prev;
+          return rest;
+        });
+      }, 2000);
     }
   }, [downloadedSongs]);
 

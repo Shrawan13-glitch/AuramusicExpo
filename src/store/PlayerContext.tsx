@@ -118,8 +118,13 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         case 'PLAYBACK_TRACK_ENDED':
         case 'TRACK_ENDED':
           console.log('AUTOPLAY: Track ended in background');
-          if (skipNextRef.current) {
-            skipNextRef.current();
+          if (skipNextRef.current && !hasTriggeredNext.current) {
+            hasTriggeredNext.current = true;
+            skipNextRef.current().finally(() => {
+              setTimeout(() => {
+                hasTriggeredNext.current = false;
+              }, 1000);
+            });
           }
           break;
       }
@@ -190,27 +195,28 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       hasTriggeredNext.current = false;
       setIntendedPlaying(true);
       
+      // Stop any existing track first
+      try {
+        await AudioPro.stop();
+      } catch (error) {
+        // Ignore stop errors
+      }
+      
       const track = {
         id: song.id,
         url: audioSource,
         title: song.title || 'Unknown Title',
         artist: song.artists?.[0]?.name || song.artist || 'Unknown Artist',
         artwork: song.thumbnail || song.thumbnailUrl,
-        onEnd: () => {
-          if (!hasTriggeredNext.current) {
-            hasTriggeredNext.current = true;
-            setTimeout(() => {
-              skipNext();
-              hasTriggeredNext.current = false;
-            }, 100);
-          }
-        }
       };
       
       await AudioPro.play(track);
       
       // Update app state to match AudioPro
-      setState(prev => ({ ...prev, currentSong: song }));
+      setState(prev => ({ 
+        ...prev, 
+        currentSong: song,
+      }));
       
       const startTime = Date.now();
       setTimeout(() => {
@@ -227,10 +233,13 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
       }).catch(() => {});
       
+      // Only update queue if explicitly provided
       if (queue) {
         setRadioContinuation(null);
+        // Remove the current song from the queue to avoid duplicates
+        const queueWithoutCurrent = queue.filter(s => s.id !== song.id);
         setOriginalQueue(queue);
-        const finalQueue = shuffle ? shuffleArray([...queue]) : queue;
+        const finalQueue = shuffle ? shuffleArray([...queueWithoutCurrent]) : queueWithoutCurrent;
         setState(prev => ({ ...prev, queue: finalQueue }));
       } else if (generateRadio) {
         const { songs, continuation } = await InnerTube.next(song.id);
@@ -280,43 +289,43 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const skipNext = useCallback(async () => {
     if (isChangingSong) return;
     
-    const currentState = state;
-    const { currentSong, queue } = currentState;
-    
-    if (repeat === 'one' && currentSong) {
-      await playSong(currentSong, undefined, false);
-      return;
-    }
+    setState(currentState => {
+      const { currentSong, queue } = currentState;
+      
+      if (repeat === 'one' && currentSong) {
+        playSong(currentSong, undefined, false);
+        return currentState;
+      }
 
-    // Load more songs if queue is low
-    if (queue.length <= 5 && radioContinuation && currentSong) {
-      try {
-        const { songs, continuation } = await InnerTube.next(currentSong.id, radioContinuation);
-        setRadioContinuation(continuation);
-        setOriginalQueue(prev => [...prev, ...songs]);
-        const newSongs = shuffle ? shuffleArray([...songs]) : songs;
-        setState(prev => ({ ...prev, queue: [...prev.queue, ...newSongs] }));
-      } catch (error) {
-        // Error loading more songs handled silently
+      // Load more songs if queue is low
+      if (queue.length <= 5 && radioContinuation && currentSong) {
+        InnerTube.next(currentSong.id, radioContinuation).then(({ songs, continuation }) => {
+          setRadioContinuation(continuation);
+          setOriginalQueue(prev => [...prev, ...songs]);
+          const newSongs = shuffle ? shuffleArray([...songs]) : songs;
+          setState(prev => ({ ...prev, queue: [...prev.queue, ...newSongs] }));
+        }).catch(() => {});
       }
-    }
 
-    if (queue.length > 0) {
-      const nextSong = queue[0];
-      if (currentSong) {
-        setPreviousSongs(prev => [...prev, currentSong]);
+      if (queue.length > 0) {
+        const nextSong = queue[0];
+        if (currentSong) {
+          setPreviousSongs(prev => [...prev, currentSong]);
+        }
+        playSong(nextSong, undefined, false);
+        return { ...currentState, queue: queue.slice(1) };
+      } else if (repeat === 'all' && originalQueue.length > 0) {
+        const newQueue = shuffle ? shuffleArray([...originalQueue]) : [...originalQueue];
+        if (currentSong) {
+          setPreviousSongs(prev => [...prev, currentSong]);
+        }
+        playSong(newQueue[0], undefined, false);
+        return { ...currentState, queue: newQueue.slice(1) };
       }
-      setState(prev => ({ ...prev, queue: prev.queue.slice(1) }));
-      await playSong(nextSong, undefined, false);
-    } else if (repeat === 'all' && originalQueue.length > 0) {
-      const newQueue = shuffle ? shuffleArray([...originalQueue]) : [...originalQueue];
-      if (currentSong) {
-        setPreviousSongs(prev => [...prev, currentSong]);
-      }
-      setState(prev => ({ ...prev, queue: newQueue.slice(1) }));
-      await playSong(newQueue[0], undefined, false);
-    }
-  }, [state, repeat, radioContinuation, shuffle, originalQueue, playSong]);
+      
+      return currentState;
+    });
+  }, [repeat, radioContinuation, shuffle, originalQueue, playSong, isChangingSong]);
 
   const skipPreviousRef = useRef<() => Promise<void>>();
 
@@ -359,19 +368,22 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const setSleepTimer = useCallback((minutes: number) => {
     if (sleepTimerRef.current) clearInterval(sleepTimerRef.current);
     
-    const totalSeconds = Math.round(minutes * 60);
+    const endTime = Date.now() + (minutes * 60 * 1000);
     setSleepTimerRemaining(minutes);
     
     sleepTimerRef.current = setInterval(() => {
-      setSleepTimerRemaining(prev => {
-        if (prev === null || prev <= (1/60)) { // Less than 1 second remaining
-          if (sleepTimerRef.current) clearInterval(sleepTimerRef.current);
-          pause();
-          return null;
-        }
-        return prev - (1/60); // Decrease by 1 second
-      });
-    }, 1000); // Update every second
+      const now = Date.now();
+      const remaining = Math.max(0, endTime - now);
+      const remainingMinutes = remaining / (60 * 1000);
+      
+      if (remaining <= 0) {
+        if (sleepTimerRef.current) clearInterval(sleepTimerRef.current);
+        setSleepTimerRemaining(null);
+        pause();
+      } else {
+        setSleepTimerRemaining(remainingMinutes);
+      }
+    }, 1000);
   }, [pause]);
 
   const cancelSleepTimer = useCallback(() => {

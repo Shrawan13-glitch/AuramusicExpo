@@ -29,6 +29,7 @@ import MiniPlayer from '../components/MiniPlayer';
 import MessageDetailScreen from '../screens/MessageDetailScreen';
 import AnimationSettingsScreen from '../screens/AnimationSettingsScreen';
 import CachedSongsScreen from '../screens/CachedSongsScreen';
+import VoiceSettingsScreen from '../screens/VoiceSettingsScreen';
 import CachedLyricsScreen from '../screens/CachedLyricsScreen';
 
 const Tab = createBottomTabNavigator();
@@ -342,6 +343,15 @@ export default function AppNavigator() {
         }}
       >
         {(props) => <AnimationSettingsScreen {...props} />}
+      </Stack.Screen>
+
+      <Stack.Screen 
+        name="VoiceSettings"
+        options={{
+          cardStyleInterpolator: CardStyleInterpolators.forRevealFromBottomAndroid,
+        }}
+      >
+        {(props) => <VoiceSettingsScreen {...props} />}
       </Stack.Screen>
 
       <Stack.Screen name="MessageDetail" component={MessageDetailScreen} />

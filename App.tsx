@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { View, StyleSheet, InteractionManager, AppState } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import AppNavigator from './src/navigation/AppNavigator';
 import { PlayerProvider } from './src/store/PlayerContext';
@@ -59,29 +60,29 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <NetworkProvider>
-          <AnimationProvider>
-            <NotificationProvider>
-              <AuthProvider>
-                <LibraryProvider>
-                  <DownloadProvider>
-                    <PlayerProvider>
-                      <NavigationContainer
-                        ref={navigationRef}
-                        onReady={() => {
-                          // Navigation ready
-                        }}
-                      >
-                        <AppNavigator />
-                      </NavigationContainer>
-                    </PlayerProvider>
-                  </DownloadProvider>
-                </LibraryProvider>
-              </AuthProvider>
-            </NotificationProvider>
-          </AnimationProvider>
-        </NetworkProvider>
-      </SafeAreaProvider>
+          <NetworkProvider>
+            <AnimationProvider>
+              <NotificationProvider>
+                <AuthProvider>
+                  <LibraryProvider>
+                    <DownloadProvider>
+                      <PlayerProvider>
+                        <NavigationContainer
+                          ref={navigationRef}
+                          onReady={() => {
+                            // Navigation ready
+                          }}
+                        >
+                          <AppNavigator />
+                        </NavigationContainer>
+                      </PlayerProvider>
+                    </DownloadProvider>
+                  </LibraryProvider>
+                </AuthProvider>
+              </NotificationProvider>
+            </AnimationProvider>
+          </NetworkProvider>
+        </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
