@@ -1,10 +1,12 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Animated } from 'react-native';
+import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Animated, Modal } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { InnerTube } from '../api/innertube';
 import { usePlayer } from '../store/PlayerContext';
+import { useAssistant } from '../hooks/useAssistant';
+import AssistantScreen from './AssistantScreen';
 
 const SongItem = React.memo(({ song, index, onPress }: any) => (
   <TouchableOpacity style={styles.songItem} onPress={onPress}>
@@ -40,6 +42,7 @@ export default function ArtistScreen({ route, navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [subscribed, setSubscribed] = useState(false);
   const { playSong } = usePlayer();
+  const { showAssistant, openAssistant, closeAssistant } = useAssistant();
   const scrollY = useRef(new Animated.Value(0)).current;
   
   const headerOpacity = scrollY.interpolate({
@@ -113,6 +116,9 @@ export default function ArtistScreen({ route, navigation }: any) {
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">{data?.artist.name}</Text>
+        <TouchableOpacity onPress={openAssistant} style={styles.assistantButton}>
+          <Ionicons name="mic" size={24} color="#1db954" />
+        </TouchableOpacity>
       </Animated.View>
 
       <Animated.ScrollView 
@@ -126,6 +132,9 @@ export default function ArtistScreen({ route, navigation }: any) {
       >
       <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
         <Ionicons name="arrow-back" size={28} color="#fff" />
+      </TouchableOpacity>
+      <TouchableOpacity onPress={openAssistant} style={styles.assistantButtonFixed}>
+        <Ionicons name="mic" size={28} color="#1db954" />
       </TouchableOpacity>
 
       <Image source={{ uri: data.artist.thumbnail }} style={styles.artistImage} />
@@ -228,6 +237,10 @@ export default function ArtistScreen({ route, navigation }: any) {
         </View>
       ))}
       </Animated.ScrollView>
+      
+      <Modal visible={showAssistant} animationType="slide" presentationStyle="fullScreen" onRequestClose={closeAssistant}>
+        <AssistantScreen onClose={closeAssistant} navigation={navigation} />
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -283,4 +296,6 @@ const styles = StyleSheet.create({
   gridTitle: { fontSize: 14, color: '#fff', marginTop: 8, fontWeight: '500' },
   gridSubtitle: { fontSize: 12, color: '#aaa', marginTop: 2 },
   errorText: { color: '#fff', textAlign: 'center', marginTop: 100, fontSize: 16 },
+  assistantButton: { width: 32 },
+  assistantButtonFixed: { position: 'absolute', top: 50, right: 16, zIndex: 10, padding: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 },
 });

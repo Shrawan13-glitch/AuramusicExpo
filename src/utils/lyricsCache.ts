@@ -30,7 +30,7 @@ class LyricsCache {
         this.cleanExpired();
       }
     } catch (error) {
-      console.log('Failed to load lyrics cache:', error);
+      
     }
   }
 
@@ -132,7 +132,7 @@ class LyricsCache {
       };
       await AsyncStorage.setItem(this.CACHE_KEY, JSON.stringify(data));
     } catch (error) {
-      console.log('Failed to save lyrics cache:', error);
+      
     }
   }
 }

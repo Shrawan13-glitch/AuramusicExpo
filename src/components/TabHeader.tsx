@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../store/AuthContext';
+import { useAssistant } from '../hooks/useAssistant';
 import LightAccountModal from './LightAccountModal';
 import AssistantScreen from '../screens/AssistantScreen';
 
@@ -12,15 +13,15 @@ interface TabHeaderProps {
 
 export default function TabHeader({ title, navigation }: TabHeaderProps) {
   const { isAuthenticated, accountInfo, logout } = useAuth();
-  const [showAccountModal, setShowAccountModal] = useState(false);
-  const [showAssistant, setShowAssistant] = useState(false);
+  const [showAccountModal, setShowAccountModal] = React.useState(false);
+  const { showAssistant, openAssistant, closeAssistant } = useAssistant();
 
   return (
     <>
       <View style={styles.header}>
         <Text style={styles.title}>{title}</Text>
         <View style={styles.headerRight}>
-          <TouchableOpacity onPress={() => setShowAssistant(true)} style={styles.assistantButton}>
+          <TouchableOpacity onPress={openAssistant} style={styles.assistantButton}>
             <Ionicons name="mic" size={24} color="#1db954" />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('RecentlyPlayed')} style={styles.recentButton}>
@@ -48,8 +49,8 @@ export default function TabHeader({ title, navigation }: TabHeaderProps) {
         onSignOut={() => { setShowAccountModal(false); logout(); }}
       />
 
-      <Modal visible={showAssistant} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setShowAssistant(false)}>
-        <AssistantScreen onClose={() => setShowAssistant(false)} navigation={navigation} />
+      <Modal visible={showAssistant} animationType="slide" presentationStyle="fullScreen" onRequestClose={closeAssistant}>
+        <AssistantScreen onClose={closeAssistant} navigation={navigation} />
       </Modal>
     </>
   );

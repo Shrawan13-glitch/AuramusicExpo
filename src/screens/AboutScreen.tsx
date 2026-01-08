@@ -47,7 +47,9 @@ export default function AboutScreen({ navigation }: any) {
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>About</Text>
-        <View style={{ width: 24 }} />
+        <TouchableOpacity onPress={() => navigation.navigate('AssistantScreen')} style={styles.assistantButton}>
+          <Ionicons name="mic" size={24} color="#1db954" />
+        </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -170,4 +172,5 @@ const styles = StyleSheet.create({
   footer: { alignItems: 'center', paddingHorizontal: 20, paddingTop: 40 },
   footerText: { fontSize: 16, color: '#aaa', marginBottom: 8 },
   copyright: { fontSize: 14, color: '#666' },
+  assistantButton: { padding: 4 },
 });

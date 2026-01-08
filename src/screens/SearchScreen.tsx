@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, TextInput, TouchableOpacity, Image, Text, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
+import { View, TextInput, TouchableOpacity, Image, Text, StyleSheet, ActivityIndicator, ScrollView, Modal } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { InnerTube } from '../api/innertube';
 import { usePlayer } from '../store/PlayerContext';
+import { useAssistant } from '../hooks/useAssistant';
 import SongOptionsModal from '../components/SongOptionsModal';
 import { useSongOptions } from '../hooks/useSongOptions';
 import TabHeader from '../components/TabHeader';
 import OfflineBanner from '../components/OfflineBanner';
 import ErrorState from '../components/ErrorState';
+import AssistantScreen from './AssistantScreen';
 
 const FILTERS = [
   { label: 'All', value: null },
@@ -42,6 +44,7 @@ export default function SearchScreen({ navigation }: any) {
   const debounceTimer = useRef<NodeJS.Timeout>();
   const { playSong } = usePlayer();
   const { modalVisible, selectedSong, showOptions, hideOptions } = useSongOptions();
+  const { showAssistant, openAssistant, closeAssistant } = useAssistant();
 
   useEffect(() => {
     loadExplore();
@@ -210,6 +213,9 @@ export default function SearchScreen({ navigation }: any) {
             <Ionicons name="close-circle" size={22} color="#666" />
           </TouchableOpacity>
         )}
+        <TouchableOpacity onPress={openAssistant} style={styles.assistantButton}>
+          <Ionicons name="mic" size={22} color="#1db954" />
+        </TouchableOpacity>
       </View>
 
       <OfflineBanner 
@@ -371,6 +377,10 @@ export default function SearchScreen({ navigation }: any) {
         showDeleteOption={false}
         navigation={navigation}
       />
+      
+      <Modal visible={showAssistant} animationType="slide" presentationStyle="fullScreen" onRequestClose={closeAssistant}>
+        <AssistantScreen onClose={closeAssistant} navigation={navigation} />
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -545,5 +555,8 @@ const styles = StyleSheet.create({
   errorContainer: {
     width: '100%',
     height: 300,
+  },
+  assistantButton: {
+    marginLeft: 8,
   },
 });

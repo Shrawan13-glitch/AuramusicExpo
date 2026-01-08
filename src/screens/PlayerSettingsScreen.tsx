@@ -11,8 +11,10 @@ export default function PlayerSettingsScreen({ navigation }: any) {
   const [backgroundStyle, setBackgroundStyle] = useState('blur');
   const [skipDuration, setSkipDuration] = useState(10);
   const [skipEnabled, setSkipEnabled] = useState(true);
+  const [lyricsSpacing, setLyricsSpacing] = useState(64);
   const [showSkipModal, setShowSkipModal] = useState(false);
   const [showBackgroundModal, setShowBackgroundModal] = useState(false);
+  const [showLyricsModal, setShowLyricsModal] = useState(false);
   const [showContent, setShowContent] = useState(false);
 
   useEffect(() => {
@@ -28,7 +30,8 @@ export default function PlayerSettingsScreen({ navigation }: any) {
       await Promise.all([
         loadBackgroundStyle(),
         loadSkipDuration(), 
-        loadSkipEnabled()
+        loadSkipEnabled(),
+        loadLyricsSpacing()
       ]);
       const speedDelays = { fast: 250, normal: 350, slow: 550 };
       setTimeout(() => setShowContent(true), speedDelays[settings.speed]);
@@ -90,6 +93,24 @@ export default function PlayerSettingsScreen({ navigation }: any) {
     }
   };
 
+  const loadLyricsSpacing = async () => {
+    try {
+      const spacing = await AsyncStorage.getItem('lyricsSpacing');
+      if (spacing) setLyricsSpacing(parseInt(spacing));
+    } catch (error) {
+      // Error loading lyrics spacing handled silently
+    }
+  };
+
+  const saveLyricsSpacing = async (spacing: number) => {
+    try {
+      await AsyncStorage.setItem('lyricsSpacing', spacing.toString());
+      setLyricsSpacing(spacing);
+    } catch (error) {
+      // Error saving lyrics spacing handled silently
+    }
+  };
+
   const skipDurationOptions = [
     { key: '5', label: '5 seconds' },
     { key: '10', label: '10 seconds' },
@@ -102,6 +123,13 @@ export default function PlayerSettingsScreen({ navigation }: any) {
     { key: 'image', label: 'Blur', subtitle: 'Album artwork background' }
   ];
 
+  const lyricsSpacingOptions = [
+    { key: '48', label: 'Compact' },
+    { key: '64', label: 'Normal' },
+    { key: '80', label: 'Comfortable' },
+    { key: '96', label: 'Spacious' }
+  ];
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
@@ -109,7 +137,9 @@ export default function PlayerSettingsScreen({ navigation }: any) {
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Player Settings</Text>
-        <View style={{ width: 24 }} />
+        <TouchableOpacity onPress={() => navigation.navigate('AssistantScreen')} style={styles.assistantButton}>
+          <Ionicons name="mic" size={24} color="#1db954" />
+        </TouchableOpacity>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -149,6 +179,14 @@ export default function PlayerSettingsScreen({ navigation }: any) {
                 </View>
                 <Ionicons name="chevron-forward" size={20} color="#666" />
               </TouchableOpacity>
+              
+              <TouchableOpacity style={styles.settingItem} onPress={() => setShowLyricsModal(true)}>
+                <View style={styles.settingContent}>
+                  <Text style={styles.settingTitle}>Lyrics Spacing</Text>
+                  <Text style={styles.settingSubtitle}>{lyricsSpacingOptions.find(o => o.key === lyricsSpacing.toString())?.label}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#666" />
+              </TouchableOpacity>
             </View>
           </>
         )}
@@ -170,6 +208,15 @@ export default function PlayerSettingsScreen({ navigation }: any) {
         selectedKey={backgroundStyle}
         onSelect={saveBackgroundStyle}
         onClose={() => setShowBackgroundModal(false)}
+      />
+      
+      <SettingsModal
+        visible={showLyricsModal}
+        title="Lyrics Spacing"
+        options={lyricsSpacingOptions}
+        selectedKey={lyricsSpacing.toString()}
+        onSelect={(key) => saveLyricsSpacing(parseInt(key))}
+        onClose={() => setShowLyricsModal(false)}
       />
     </SafeAreaView>
   );
@@ -196,4 +243,5 @@ const styles = StyleSheet.create({
   settingTitle: { fontSize: 16, color: '#fff', fontWeight: '500' },
   settingSubtitle: { fontSize: 14, color: '#666', marginTop: 2 },
   scrollContent: { paddingBottom: 100 },
+  assistantButton: { padding: 4 },
 });

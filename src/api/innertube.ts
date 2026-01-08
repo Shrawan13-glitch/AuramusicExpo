@@ -1549,11 +1549,11 @@ export const InnerTube = {
         .map((r: any) => r.text).join(', ');
 
       if (!title || !artist) {
-        console.log('Missing song info');
+        
         return null;
       }
 
-      console.log('Song:', title, 'by', artist);
+      
 
       // Search LRCLIB with retry
       let response;
@@ -1569,7 +1569,7 @@ export const InnerTube = {
       }
       
       if (!response || !response.ok) {
-        console.log('Failed to fetch lyrics after retries');
+        
         return null;
       }
         const data = await response.json();
@@ -1587,7 +1587,7 @@ export const InnerTube = {
             .filter(Boolean);
           
           if (lines.length > 0) {
-            console.log('Found synced lyrics:', lines.length, 'lines');
+            
             return { lines };
           }
         }
@@ -1598,14 +1598,14 @@ export const InnerTube = {
             .filter((line: any) => line.text);
           
           if (lines.length > 0) {
-            console.log('Found plain lyrics:', lines.length, 'lines');
+            
             return { lines };
           }
         }
       
       return null;
     } catch (error: any) {
-      console.log('Lyrics error:', error.message);
+      
       return null;
     }
   },

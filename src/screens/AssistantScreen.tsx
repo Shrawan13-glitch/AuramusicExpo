@@ -5,12 +5,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { usePlayer } from '../store/PlayerContext';
+import { useLibrary } from '../store/LibraryContext';
 import { InnerTube } from '../api/innertube';
 
 const { width, height } = Dimensions.get('window');
 
 export default function AssistantScreen({ onClose, navigation }: { onClose: () => void; navigation?: any }) {
   const { playSong, pause, resume, skipNext, skipPrevious, isPlaying, toggleShuffle, currentSong } = usePlayer();
+  const { likedSongs } = useLibrary();
   const [isListening, setIsListening] = useState(false);
   const [transcribedText, setTranscribedText] = useState('');
   const [responseText, setResponseText] = useState('Hi! Tap the mic and tell me what to play.');
@@ -48,11 +50,10 @@ export default function AssistantScreen({ onClose, navigation }: { onClose: () =
       const savedCommands = await AsyncStorage.getItem('voiceCustomCommands');
       if (savedCommands) {
         const commands = JSON.parse(savedCommands);
-        console.log('Loaded custom commands:', commands);
         setCustomCommands(commands);
       }
     } catch (error) {
-      console.log('Error loading settings:', error);
+      // Error handled silently
     }
   };
 
@@ -156,6 +157,8 @@ export default function AssistantScreen({ onClose, navigation }: { onClose: () =
         lang: settings.language,
         interimResults: settings.interimResults,
         continuous: settings.continuous,
+        maxAlternatives: 1,
+        partialResults: settings.interimResults,
       });
     } catch (error) {
       setResponseText('Speech recognition not available on this device.');
@@ -169,7 +172,7 @@ export default function AssistantScreen({ onClose, navigation }: { onClose: () =
   const processCommand = async (command: string) => {
     const lowerCommand = command.toLowerCase();
     
-    console.log('Processing command:', lowerCommand);
+    
     
     // Reload custom commands to ensure we have the latest
     let currentCustomCommands = customCommands;
@@ -177,20 +180,20 @@ export default function AssistantScreen({ onClose, navigation }: { onClose: () =
       const savedCommands = await AsyncStorage.getItem('voiceCustomCommands');
       if (savedCommands) {
         currentCustomCommands = JSON.parse(savedCommands);
-        console.log('Reloaded custom commands:', currentCustomCommands);
+        
       }
     } catch (error) {
-      console.log('Error reloading custom commands:', error);
+      
     }
     
-    console.log('Available custom commands:', currentCustomCommands);
+    
     
     // Check custom commands first
     const customCommand = currentCustomCommands.find(cmd => 
       cmd.keyword && lowerCommand.includes(cmd.keyword.toLowerCase())
     );
     
-    console.log('Found custom command:', customCommand);
+    
     
     if (customCommand) {
       setResponseText(`Playing ${customCommand.targetName}...`);
@@ -206,12 +209,22 @@ export default function AssistantScreen({ onClose, navigation }: { onClose: () =
           }
         } else if (customCommand.type === 'playlist') {
           if (settings.autoPlay) {
-            const playlistData = await InnerTube.getPlaylist(customCommand.targetId);
-            if (playlistData?.songs?.length > 0) {
-              await playSong(playlistData.songs[0], playlistData.songs);
-              setResponseText(`Playing playlist "${customCommand.targetName}"`);
+            if (customCommand.targetId === 'liked-songs') {
+              // Handle liked songs specially
+              if (likedSongs.length > 0) {
+                await playSong(likedSongs[0], likedSongs);
+                setResponseText(`Playing Liked Songs`);
+              } else {
+                setResponseText('No liked songs found');
+              }
             } else {
-              setResponseText('Playlist is empty or unavailable');
+              const playlistData = await InnerTube.getPlaylist(customCommand.targetId);
+              if (playlistData?.songs?.length > 0) {
+                await playSong(playlistData.songs[0], playlistData.songs);
+                setResponseText(`Playing playlist "${customCommand.targetName}"`);
+              } else {
+                setResponseText('Playlist is empty or unavailable');
+              }
             }
           } else {
             setResponseText(`Found playlist "${customCommand.targetName}"`);

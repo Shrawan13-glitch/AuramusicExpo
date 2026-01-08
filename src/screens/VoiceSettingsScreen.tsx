@@ -156,7 +156,7 @@ export default function VoiceSettingsScreen({ navigation }: any) {
       targetName: item.title || item.name,
     };
     
-    console.log('Adding custom command:', command);
+    
     const updated = [...customCommands, command];
     saveCustomCommands(updated);
     setNewKeyword('');

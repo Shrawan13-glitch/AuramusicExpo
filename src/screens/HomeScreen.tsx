@@ -101,7 +101,7 @@ export default function HomeScreen({ navigation }: any) {
 
   const handleSectionPress = (section: any) => {
     const sectionType = getSectionType(section);
-    console.log(sectionType);
+    
     navigation.navigate('SectionView', { 
       sectionTitle: section.title,
       sectionType: sectionType,

@@ -395,6 +395,9 @@ export default function PlaylistScreen({ route, navigation }: any) {
           >
             {data?.playlist?.title}
           </Animated.Text>
+          <TouchableOpacity onPress={() => navigation.navigate('AssistantScreen')}>
+            <Ionicons name="mic" size={24} color="#1db954" />
+          </TouchableOpacity>
         </Animated.View>
 
         <FlashList

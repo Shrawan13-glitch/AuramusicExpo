@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, TextInput, Alert, ImageBackground } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Dimensions, TextInput, Alert, ImageBackground, Animated, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
+import { FlashList } from '@shopify/flash-list';
 import { InnerTube } from '../api/innertube';
 import { usePlayer } from '../store/PlayerContext';
 import { lyricsCache } from '../utils/lyricsCache';
@@ -20,8 +21,15 @@ export default function LyricsScreen({ onClose }: any) {
   const [showAddLyrics, setShowAddLyrics] = useState(false);
   const [customLyrics, setCustomLyrics] = useState('');
   const [backgroundStyle, setBackgroundStyle] = useState('blur');
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useRef<FlashList<any>>(null);
   const [lyricsViewHeight, setLyricsViewHeight] = useState(0);
+  const loadingAbortRef = useRef<boolean>(false);
+  const currentRequestRef = useRef<string | null>(null);
+  const backgroundOpacity = useState(new Animated.Value(1))[0];
+  const [backgroundImage, setBackgroundImage] = useState(currentSong?.thumbnailUrl);
+  const [nextBackgroundImage, setNextBackgroundImage] = useState(null);
+  const nextBackgroundOpacity = useState(new Animated.Value(0))[0];
+  const [lyricsSpacing, setLyricsSpacing] = useState(64);
 
   // Memoize timed lyrics for performance
   const timedLines = useMemo(() => {
@@ -33,15 +41,44 @@ export default function LyricsScreen({ onClose }: any) {
 
   useEffect(() => {
     if (currentSong) {
+      loadingAbortRef.current = true; // Cancel any existing requests
+      currentRequestRef.current = currentSong.id;
+      loadingAbortRef.current = false;
       checkCacheAndLoad();
       loadBackgroundStyle();
+      
+      // Smooth background transition
+      if (currentSong.thumbnailUrl !== backgroundImage) {
+        if (currentSong.thumbnailUrl) {
+          // Preload and set next background
+          Image.prefetch(currentSong.thumbnailUrl).then(() => {
+            setNextBackgroundImage(currentSong.thumbnailUrl);
+            // Fade in new background over old one
+            Animated.timing(nextBackgroundOpacity, {
+              toValue: 1,
+              duration: 600,
+              useNativeDriver: true,
+            }).start();
+          }).catch(() => {
+            setBackgroundImage(currentSong.thumbnailUrl);
+          });
+        } else {
+          setBackgroundImage(currentSong.thumbnailUrl);
+        }
+      }
     }
+    return () => {
+      loadingAbortRef.current = true;
+    };
   }, [currentSong?.id]);
 
   const loadBackgroundStyle = async () => {
     try {
       const style = await AsyncStorage.getItem('playerBackgroundStyle');
       if (style) setBackgroundStyle(style);
+      
+      const spacing = await AsyncStorage.getItem('lyricsSpacing');
+      if (spacing) setLyricsSpacing(parseInt(spacing));
     } catch (error) {
       // Error loading background style handled silently
     }
@@ -50,19 +87,25 @@ export default function LyricsScreen({ onClose }: any) {
   const checkCacheAndLoad = async () => {
     if (!currentSong) return;
     
+    const currentSongId = currentSong.id;
+    
     try {
       const cached = await lyricsCache.get(currentSong.id);
       if (cached !== undefined) {
-        setLyrics(cached);
-        setLoading(false);
-        setCurrentLineIndex(-1);
+        if (currentSong.id === currentSongId) {
+          setLyrics(cached);
+          setLoading(false);
+          setCurrentLineIndex(-1);
+        }
         return;
       }
     } catch (error) {
-      console.log('Cache check error:', error);
+      
     }
     
-    loadLyrics();
+    if (currentSong.id === currentSongId) {
+      loadLyrics();
+    }
   };
 
   // Efficient lyrics sync with position
@@ -114,10 +157,8 @@ export default function LyricsScreen({ onClose }: any) {
 
   const scrollToLine = (lineIndex: number) => {
     if (lyricsViewHeight === 0) return;
-    const lineHeight = 64;
-    const scrollY = lineIndex * lineHeight;
-    scrollViewRef.current?.scrollTo({
-      y: scrollY,
+    scrollViewRef.current?.scrollToIndex({
+      index: lineIndex,
       animated: true,
     });
   };
@@ -196,41 +237,55 @@ export default function LyricsScreen({ onClose }: any) {
 
   const loadLyrics = async () => {
     if (!currentSong) return;
+    
+    const requestId = currentSong.id;
+    currentRequestRef.current = requestId;
+    
     setLoading(true);
     setCurrentLineIndex(-1);
     
     // Auto retry up to 3 times
     for (let attempt = 0; attempt < 3; attempt++) {
+      if (loadingAbortRef.current || currentRequestRef.current !== requestId) {
+        return; // Abort if song changed
+      }
+      
       try {
-        console.log(`🎵 Loading lyrics for: ${currentSong.title} (attempt ${attempt + 1})`);
-        const result = await InnerTube.getLyrics(currentSong.id);
+        const result = await InnerTube.getLyrics(requestId);
+        
+        if (loadingAbortRef.current || currentRequestRef.current !== requestId) {
+          return; // Abort if song changed during request
+        }
         
         if (result) {
-          console.log('📝 Lyrics result: Found');
-          await lyricsCache.set(currentSong.id, currentSong.title, 
-            currentSong.artists?.map(a => a.name).join(', ') || 'Unknown Artist', result);
-          setLyrics(result);
-          setLoading(false);
+          if (currentRequestRef.current === requestId && !loadingAbortRef.current) {
+            await lyricsCache.set(requestId, currentSong.title, 
+              currentSong.artists?.map(a => a.name).join(', ') || 'Unknown Artist', result);
+            setLyrics(result);
+            setLoading(false);
+          }
           return; // Success, exit retry loop
         } else {
-          console.log(`📝 Lyrics result: Not found (attempt ${attempt + 1})`);
           if (attempt === 2) {
             // Final attempt failed - cache null result
-            await lyricsCache.set(currentSong.id, currentSong.title, 
-              currentSong.artists?.map(a => a.name).join(', ') || 'Unknown Artist', null);
-            setLyrics(null);
-            setLoading(false);
+            if (currentRequestRef.current === requestId && !loadingAbortRef.current) {
+              await lyricsCache.set(requestId, currentSong.title, 
+                currentSong.artists?.map(a => a.name).join(', ') || 'Unknown Artist', null);
+              setLyrics(null);
+              setLoading(false);
+            }
           } else {
             // Wait 1 second before retry
             await new Promise(resolve => setTimeout(resolve, 1000));
           }
         }
       } catch (error) {
-        console.log(`💥 Lyrics error (attempt ${attempt + 1}):`, error);
         if (attempt === 2) {
           // Final attempt failed
-          setLyrics(null);
-          setLoading(false);
+          if (currentRequestRef.current === requestId && !loadingAbortRef.current) {
+            setLyrics(null);
+            setLoading(false);
+          }
         } else {
           // Wait 1 second before retry
           await new Promise(resolve => setTimeout(resolve, 1000));
@@ -248,18 +303,39 @@ export default function LyricsScreen({ onClose }: any) {
 
   const renderBackground = () => {
     const backgroundProps = { style: StyleSheet.absoluteFillObject };
+    const imageSource = backgroundImage ? { uri: backgroundImage } : require('../../assets/icon.png');
+    const nextImageSource = nextBackgroundImage ? { uri: nextBackgroundImage } : null;
+    
     switch (backgroundStyle) {
       case 'blur':
         return (
-          <ImageBackground source={currentSong.thumbnailUrl ? { uri: currentSong.thumbnailUrl } : require('../../assets/icon.png')} {...backgroundProps} blurRadius={50}>
-            <View style={[StyleSheet.absoluteFillObject, styles.darkOverlay]} />
-          </ImageBackground>
+          <View style={StyleSheet.absoluteFillObject}>
+            <ImageBackground source={imageSource} {...backgroundProps} blurRadius={50}>
+              <View style={[StyleSheet.absoluteFillObject, styles.darkOverlay]} />
+            </ImageBackground>
+            {nextImageSource && (
+              <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: nextBackgroundOpacity }]}>
+                <ImageBackground source={nextImageSource} {...backgroundProps} blurRadius={50}>
+                  <View style={[StyleSheet.absoluteFillObject, styles.darkOverlay]} />
+                </ImageBackground>
+              </Animated.View>
+            )}
+          </View>
         );
       case 'image':
         return (
-          <ImageBackground source={currentSong.thumbnailUrl ? { uri: currentSong.thumbnailUrl } : require('../../assets/icon.png')} {...backgroundProps} blurRadius={20}>
-            <View style={[StyleSheet.absoluteFillObject, styles.mediumOverlay]} />
-          </ImageBackground>
+          <View style={StyleSheet.absoluteFillObject}>
+            <ImageBackground source={imageSource} {...backgroundProps} blurRadius={20}>
+              <View style={[StyleSheet.absoluteFillObject, styles.mediumOverlay]} />
+            </ImageBackground>
+            {nextImageSource && (
+              <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: nextBackgroundOpacity }]}>
+                <ImageBackground source={nextImageSource} {...backgroundProps} blurRadius={20}>
+                  <View style={[StyleSheet.absoluteFillObject, styles.mediumOverlay]} />
+                </ImageBackground>
+              </Animated.View>
+            )}
+          </View>
         );
       default:
         return <View style={[StyleSheet.absoluteFillObject, styles.gradientBackground]} />;
@@ -287,6 +363,20 @@ export default function LyricsScreen({ onClose }: any) {
         <Text style={styles.songArtist} numberOfLines={1}>
           {currentSong.artists?.map(a => a.name).join(', ') || 'Unknown Artist'}
         </Text>
+        <View style={styles.lyricsStatus}>
+          {lyrics && (
+            <View style={styles.statusBadge}>
+              <Ionicons 
+                name={hasTimedLyrics ? "time" : "document-text"} 
+                size={12} 
+                color={hasTimedLyrics ? "#1db954" : "#666"} 
+              />
+              <Text style={[styles.statusText, { color: hasTimedLyrics ? "#1db954" : "#666" }]}>
+                {hasTimedLyrics ? "Synced" : "Static"}
+              </Text>
+            </View>
+          )}
+        </View>
         {showResyncButton && (
           <TouchableOpacity style={styles.resyncButton} onPress={handleResync}>
             <Ionicons name="sync" size={16} color="#1db954" />
@@ -310,27 +400,30 @@ export default function LyricsScreen({ onClose }: any) {
           </TouchableOpacity>
         </View>
       ) : (
-        <ScrollView 
+        <FlashList 
           ref={scrollViewRef}
-          style={styles.lyricsContainer}
-          contentContainerStyle={styles.lyricsContent}
+          data={(hasTimedLyrics ? timedLines : lyrics.lines)}
+          estimatedItemSize={lyricsSpacing}
           showsVerticalScrollIndicator={false}
           onScrollBeginDrag={handleManualScroll}
           onLayout={(event) => {
             const { height } = event.nativeEvent.layout;
             setLyricsViewHeight(height);
           }}
-        >
-          <View style={{ height: lyricsViewHeight / 2 }} />
-          {(hasTimedLyrics ? timedLines : lyrics.lines).map((line, index) => {
+          ListHeaderComponent={<View style={{ height: lyricsViewHeight / 2 }} />}
+          ListFooterComponent={<View style={{ height: lyricsViewHeight / 2 }} />}
+          getItemType={() => 'lyric'}
+          keyExtractor={(_, index) => index.toString()}
+          renderItem={({ item: line, index }) => {
             const isActive = hasTimedLyrics && index === currentLineIndex;
             const isPast = hasTimedLyrics && index < currentLineIndex;
             
             return (
-              <View key={index} style={{ height: 64, justifyContent: 'center' }}>
+              <View style={{ height: lyricsSpacing, justifyContent: 'center', paddingHorizontal: 32 }}>
                 <TouchableOpacity 
                   onPress={() => handleLinePress(index)}
                   disabled={!hasTimedLyrics}
+                  activeOpacity={0.7}
                 >
                   <Text 
                     style={[
@@ -345,9 +438,8 @@ export default function LyricsScreen({ onClose }: any) {
                 </TouchableOpacity>
               </View>
             );
-          })}
-          <View style={{ height: lyricsViewHeight / 2 }} />
-        </ScrollView>
+          }}
+        />
       )}
       
       <View style={styles.controls}>
@@ -457,6 +549,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#aaa',
   },
+  lyricsStatus: {
+    marginTop: 8,
+    alignItems: 'center',
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -497,9 +607,6 @@ const styles = StyleSheet.create({
   },
   lyricsContainer: {
     flex: 1,
-  },
-  lyricsContent: {
-    paddingHorizontal: 24,
   },
   lyricLine: {
     fontSize: 20,
@@ -645,9 +752,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a2e',
   },
   darkOverlay: {
-    backgroundColor: 'rgba(0,0,0,0.65)',
+    backgroundColor: 'rgba(0,0,0,0.75)',
   },
   mediumOverlay: {
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
   },
 });

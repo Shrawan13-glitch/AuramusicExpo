@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, Dimensions, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Animated, Dimensions, Platform, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -50,6 +50,13 @@ export default function UpdateScreen({ route, navigation }: UpdateScreenProps) {
         }
       });
     }
+
+    // Prevent back button from closing update screen
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      return true; // Prevent default back action
+    });
+
+    return () => backHandler.remove();
   }, []);
 
   const handleDownloadAndInstall = async () => {
@@ -233,7 +240,10 @@ export default function UpdateScreen({ route, navigation }: UpdateScreenProps) {
             {!isStrict && !isDownloading && (
               <TouchableOpacity 
                 style={styles.modernSecondaryButton} 
-                onPress={() => navigation.goBack()}
+                onPress={() => {
+                  // Only allow closing via "Not Now" button
+                  navigation.goBack();
+                }}
                 activeOpacity={0.8}
               >
                 <Text style={styles.modernSecondaryButtonText}>Not Now</Text>
@@ -291,13 +301,30 @@ export default function UpdateScreen({ route, navigation }: UpdateScreenProps) {
                   : 'Please wait while we prepare your update...'}
             </Text>
 
-            {error && error.retryable && (
-              <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
-                <LinearGradient colors={['#FF6B35', '#FF8E53']} style={styles.buttonGradient}>
-                  <Ionicons name="refresh" size={20} color="#fff" style={styles.loadingSpinner} />
-                  <Text style={styles.modernPrimaryButtonText}>Retry Download</Text>
-                </LinearGradient>
-              </TouchableOpacity>
+            {error && (
+              <>
+                <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
+                  <LinearGradient colors={['#FF6B35', '#FF8E53']} style={styles.buttonGradient}>
+                    <Ionicons name="refresh" size={20} color="#fff" style={styles.loadingSpinner} />
+                    <Text style={styles.modernPrimaryButtonText}>Retry Download</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+                
+                {!isStrict && (
+                  <TouchableOpacity 
+                    style={styles.backButton} 
+                    onPress={() => {
+                      setShowDownloadScreen(false);
+                      navigation.goBack();
+                    }}
+                  >
+                    <LinearGradient colors={['#666', '#555']} style={styles.buttonGradient}>
+                      <Ionicons name="arrow-back" size={20} color="#fff" />
+                      <Text style={styles.modernPrimaryButtonText}>Go Back</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                )}
+              </>
             )}
 
             {!downloadComplete && !error ? (
@@ -700,6 +727,17 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 20,
     shadowColor: '#FF6B35',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8
+  },
+  backButton: {
+    width: 200,
+    borderRadius: 24,
+    overflow: 'hidden',
+    marginBottom: 20,
+    shadowColor: '#666',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,

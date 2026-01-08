@@ -62,6 +62,9 @@ export default function BrowseScreen({ route, navigation }: any) {
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Browse</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('AssistantScreen')}>
+            <Ionicons name="mic" size={24} color="#1db954" />
+          </TouchableOpacity>
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#1db954" />
@@ -77,6 +80,9 @@ export default function BrowseScreen({ route, navigation }: any) {
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{data?.title || 'Browse'}</Text>
+        <TouchableOpacity onPress={() => navigation.navigate('AssistantScreen')}>
+          <Ionicons name="mic" size={24} color="#1db954" />
+        </TouchableOpacity>
       </View>
 
       <FlashList

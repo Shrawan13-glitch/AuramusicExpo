@@ -1,17 +1,20 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, BackHandler } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, BackHandler, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../store/AuthContext';
 import { useAnimation } from '../store/AnimationContext';
+import { useAssistant } from '../hooks/useAssistant';
 import { checkForUpdatesV2, getCurrentVersion } from '../utils/updateCheckerV2';
 import { cacheManager } from '../utils/cacheManager';
 import Toast from '../components/Toast';
 import SettingsModal from '../components/SettingsModal';
+import AssistantScreen from './AssistantScreen';
 
 export default function SettingsScreen({ navigation }: any) {
   const { isAuthenticated, accountInfo, logout } = useAuth();
   const { settings } = useAnimation();
+  const { showAssistant, openAssistant, closeAssistant } = useAssistant();
   const [checking, setChecking] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [showContent, setShowContent] = useState(false);
@@ -47,7 +50,7 @@ export default function SettingsScreen({ navigation }: any) {
       setCacheSize(maxSize);
       setCacheStats(stats);
     } catch (error) {
-      console.log('Error loading cache settings:', error);
+      
     }
   };
 
@@ -120,7 +123,9 @@ export default function SettingsScreen({ navigation }: any) {
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Settings</Text>
-        <View style={styles.backButton} />
+        <TouchableOpacity onPress={openAssistant} style={styles.assistantButton}>
+          <Ionicons name="mic" size={24} color="#1db954" />
+        </TouchableOpacity>
       </View>
 
       {showContent && (
@@ -239,6 +244,9 @@ export default function SettingsScreen({ navigation }: any) {
         onSelect={handleSaveCacheSize}
         onClose={() => setShowCacheModal(false)}
       />
+      <Modal visible={showAssistant} animationType="slide" presentationStyle="fullScreen" onRequestClose={closeAssistant}>
+        <AssistantScreen onClose={closeAssistant} navigation={navigation} />
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -262,5 +270,6 @@ const styles = StyleSheet.create({
   settingContent: { flex: 1, justifyContent: 'center' },
   settingTitle: { fontSize: 17, fontWeight: '400', color: '#fff', lineHeight: 22 },
   settingSubtitle: { fontSize: 15, color: '#8e8e93', marginTop: 2, lineHeight: 20 },
-  sectionHeader: { fontSize: 13, fontWeight: '600', color: '#666', paddingHorizontal: 20, marginBottom: 8, letterSpacing: 0.5 }
+  sectionHeader: { fontSize: 13, fontWeight: '600', color: '#666', paddingHorizontal: 20, marginBottom: 8, letterSpacing: 0.5 },
+  assistantButton: { width: 32 },
 });

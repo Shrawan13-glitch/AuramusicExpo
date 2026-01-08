@@ -34,7 +34,7 @@ class CacheManager {
         await RNFS.mkdir(this.cacheDir);
       }
     } catch (error) {
-      console.log('Cache initialization error:', error);
+      
     }
   }
 
@@ -44,7 +44,7 @@ class CacheManager {
       const data = await AsyncStorage.getItem(this.metadataKey);
       return data ? JSON.parse(data) : [];
     } catch (error) {
-      console.log('Error getting cached songs:', error);
+      
       return [];
     }
   }
@@ -54,7 +54,7 @@ class CacheManager {
     try {
       await AsyncStorage.setItem(this.metadataKey, JSON.stringify(songs));
     } catch (error) {
-      console.log('Error saving cached songs:', error);
+      
     }
   }
 
@@ -141,7 +141,7 @@ class CacheManager {
 
       return true;
     } catch (error) {
-      console.log('Error caching song:', error);
+      
       return false;
     }
   }
@@ -166,7 +166,7 @@ class CacheManager {
         await this.saveCachedSongs(songs);
       }
     } catch (error) {
-      console.log('Error removing song from cache:', error);
+      
     }
   }
 
@@ -191,7 +191,7 @@ class CacheManager {
           }
           currentSize -= oldestSong.size;
         } catch (error) {
-          console.log('Error removing old cached song:', error);
+          
         }
       }
 
@@ -232,7 +232,7 @@ class CacheManager {
         return parseInt(size);
       }
     } catch (error) {
-      console.log('Error getting max cache size:', error);
+      
     }
     return 500; // Default 500MB
   }
@@ -253,7 +253,7 @@ class CacheManager {
       // Clear metadata
       await AsyncStorage.removeItem(this.metadataKey);
     } catch (error) {
-      console.log('Error clearing cache:', error);
+      
     }
   }
 }

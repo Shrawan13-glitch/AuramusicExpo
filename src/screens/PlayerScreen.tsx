@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, Dimensions, Modal, PanResponder, ImageBackground, StatusBar } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { View, Text, Image, TouchableOpacity, StyleSheet, Dimensions, Modal, PanResponder, ImageBackground, StatusBar, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import Slider from '@react-native-community/slider';
@@ -25,6 +25,27 @@ const formatTime = (ms: number) => {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 
+// Memoized components for better performance
+const MemoizedArtwork = memo(({ uri }: { uri?: string }) => (
+  <Image 
+    source={uri ? { uri } : require('../../assets/icon.png')} 
+    style={styles.artwork} 
+    onError={() => {}}
+    fadeDuration={0}
+  />
+));
+
+const MemoizedBackground = memo(({ style, imageUri, blurRadius, overlayStyle }: any) => (
+  <ImageBackground 
+    source={imageUri ? { uri: imageUri } : require('../../assets/icon.png')} 
+    style={StyleSheet.absoluteFillObject} 
+    blurRadius={blurRadius}
+    fadeDuration={0}
+  >
+    <View style={[StyleSheet.absoluteFillObject, overlayStyle]} />
+  </ImageBackground>
+));
+
 export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) {
   const { currentSong, isPlaying, pause, resume, skipNext, skipPrevious, position, duration, seek, shuffle, repeat, toggleShuffle, toggleRepeat, setSleepTimer, cancelSleepTimer, sleepTimerRemaining } = usePlayer();
   const { isLiked, addLikedSong, removeLikedSong } = useLibrary();
@@ -37,12 +58,38 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
   const [sliderValue, setSliderValue] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [skipEnabled, setSkipEnabled] = useState(true);
+  const [isLikedOptimistic, setIsLikedOptimistic] = useState(false);
+  const backgroundOpacity = useState(new Animated.Value(1))[0];
+  const [backgroundImage, setBackgroundImage] = useState(currentSong?.thumbnailUrl);
+  const [nextBackgroundImage, setNextBackgroundImage] = useState(null);
+  const nextBackgroundOpacity = useState(new Animated.Value(0))[0];
 
   useEffect(() => {
     loadBackgroundStyle();
     loadSkipDuration();
     loadSkipEnabled();
   }, []);
+
+  useEffect(() => {
+    if (currentSong?.thumbnailUrl !== backgroundImage) {
+      if (currentSong?.thumbnailUrl) {
+        // Preload and set next background
+        Image.prefetch(currentSong.thumbnailUrl).then(() => {
+          setNextBackgroundImage(currentSong.thumbnailUrl);
+          // Fade in new background over old one
+          Animated.timing(nextBackgroundOpacity, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }).start();
+        }).catch(() => {
+          setBackgroundImage(currentSong.thumbnailUrl);
+        });
+      } else {
+        setBackgroundImage(currentSong?.thumbnailUrl);
+      }
+    }
+  }, [currentSong?.thumbnailUrl]);
 
   // Handle StatusBar when screen is focused/unfocused
   useFocusEffect(
@@ -60,6 +107,17 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
       };
     }, [])
   );
+
+  // Memoized values for better performance
+  const liked = useMemo(() => isLiked(currentSong?.id), [isLiked, currentSong?.id]);
+  const formattedPosition = useMemo(() => formatTime(isDragging ? sliderValue : (position || 0)), [isDragging, sliderValue, position]);
+  const formattedDuration = useMemo(() => formatTime(duration || 0), [duration]);
+  const maxSliderValue = useMemo(() => Math.max(duration || 1, 1), [duration]);
+
+  // Update optimistic like state when actual state changes
+  useEffect(() => {
+    setIsLikedOptimistic(liked);
+  }, [liked]);
 
   useEffect(() => {
     if (!isDragging) {
@@ -94,19 +152,50 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
     }
   };
 
-  const skipBackward = () => {
+  // Memoized callbacks for better performance
+  const skipBackward = useCallback(() => {
     const newPosition = Math.max(0, position - skipDuration * 1000);
     seek(newPosition);
-  };
+  }, [position, skipDuration, seek]);
 
-  const skipForward = () => {
+  const skipForward = useCallback(() => {
     const newPosition = Math.min(duration, position + skipDuration * 1000);
     seek(newPosition);
-  };
+  }, [duration, position, skipDuration, seek]);
+
+  const handlePlayPause = useCallback(() => {
+    isPlaying ? pause() : resume();
+  }, [isPlaying, pause, resume]);
+
+  const handleLikeToggle = useCallback(() => {
+    if (!currentSong) return;
+    // Optimistic update for instant UI feedback
+    setIsLikedOptimistic(!isLikedOptimistic);
+    // Actual update
+    isLikedOptimistic ? removeLikedSong(currentSong.id) : addLikedSong(currentSong);
+  }, [currentSong, isLikedOptimistic, addLikedSong, removeLikedSong]);
+
+  const handleSliderStart = useCallback(() => {
+    setIsDragging(true);
+  }, []);
+
+  const handleSliderChange = useCallback((value: number) => {
+    setSliderValue(value);
+  }, []);
+
+  const handleSliderComplete = useCallback((value: number) => {
+    seek(value);
+    setIsDragging(false);
+  }, [seek]);
+
+  const handleArtistPress = useCallback((artist: any) => {
+    if (artist.id && navigation) {
+      onClose();
+      navigation.navigate('Artist', { artistId: artist.id });
+    }
+  }, [navigation, onClose]);
 
   if (!currentSong) return null;
-
-  const liked = isLiked(currentSong.id);
 
   const panResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => true,
@@ -117,31 +206,57 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
     onPanResponderMove: () => {},
     onPanResponderRelease: (_, gestureState) => {
       if (gestureState.dy > 100) {
+        nextBackgroundOpacity.stopAnimation();
         onClose();
       }
     },
     onShouldBlockNativeResponder: () => false,
   });
 
-  const renderBackground = () => {
-    const backgroundProps = { style: StyleSheet.absoluteFillObject };
+  const renderBackground = useMemo(() => {
     switch (backgroundStyle) {
       case 'blur':
         return (
-          <ImageBackground source={currentSong.thumbnailUrl ? { uri: currentSong.thumbnailUrl } : require('../../assets/icon.png')} {...backgroundProps} blurRadius={50}>
-            <View style={[StyleSheet.absoluteFillObject, styles.darkOverlay]} />
-          </ImageBackground>
+          <View style={StyleSheet.absoluteFillObject}>
+            <MemoizedBackground 
+              imageUri={backgroundImage} 
+              blurRadius={50} 
+              overlayStyle={styles.darkOverlay}
+            />
+            {nextBackgroundImage && (
+              <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: nextBackgroundOpacity }]}>
+                <MemoizedBackground 
+                  imageUri={nextBackgroundImage} 
+                  blurRadius={50} 
+                  overlayStyle={styles.darkOverlay}
+                />
+              </Animated.View>
+            )}
+          </View>
         );
       case 'image':
         return (
-          <ImageBackground source={currentSong.thumbnailUrl ? { uri: currentSong.thumbnailUrl } : require('../../assets/icon.png')} {...backgroundProps} blurRadius={20}>
-            <View style={[StyleSheet.absoluteFillObject, styles.mediumOverlay]} />
-          </ImageBackground>
+          <View style={StyleSheet.absoluteFillObject}>
+            <MemoizedBackground 
+              imageUri={backgroundImage} 
+              blurRadius={20} 
+              overlayStyle={styles.mediumOverlay}
+            />
+            {nextBackgroundImage && (
+              <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: nextBackgroundOpacity }]}>
+                <MemoizedBackground 
+                  imageUri={nextBackgroundImage} 
+                  blurRadius={20} 
+                  overlayStyle={styles.mediumOverlay}
+                />
+              </Animated.View>
+            )}
+          </View>
         );
       default:
         return <View style={[StyleSheet.absoluteFillObject, styles.gradientBackground]} />;
     }
-  };
+  }, [backgroundStyle, backgroundImage, nextBackgroundImage, nextBackgroundOpacity]);
 
   const getStatusBarStyle = () => {
     return 'light-content';
@@ -149,11 +264,15 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
 
   return (
     <View style={styles.fullScreen}>
-      {renderBackground()}
+      {renderBackground}
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         <View style={styles.container} {...panResponder.panHandlers}>
           <View style={styles.header}>
-            <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <TouchableOpacity onPress={() => {
+          // Stop any ongoing animations
+          nextBackgroundOpacity.stopAnimation();
+          onClose();
+        }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Ionicons name="chevron-down" size={28} color="#fff" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Now Playing</Text>
@@ -164,7 +283,7 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
 
         <View style={styles.artworkContainer}>
           <View style={styles.artworkShadow}>
-            <Image source={currentSong.thumbnailUrl ? { uri: currentSong.thumbnailUrl } : require('../../assets/icon.png')} style={styles.artwork} onError={() => {}} />
+            <MemoizedArtwork uri={currentSong?.thumbnailUrl} />
           </View>
         </View>
 
@@ -174,12 +293,7 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
             {currentSong.artists?.map((artist, index) => (
               <React.Fragment key={artist.id || index}>
                 <TouchableOpacity 
-                  onPress={() => {
-                    if (artist.id && navigation) {
-                      onClose();
-                      navigation.navigate('Artist', { artistId: artist.id });
-                    }
-                  }}
+                  onPress={() => handleArtistPress(artist)}
                   hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
                 >
                   <Text style={styles.artist}>{artist.name}</Text>
@@ -194,25 +308,18 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
           <Slider
             style={styles.slider}
             minimumValue={0}
-            maximumValue={Math.max(duration || 1, 1)}
+            maximumValue={maxSliderValue}
             value={sliderValue}
-            onSlidingStart={() => {
-              setIsDragging(true);
-            }}
-            onValueChange={(value) => {
-              setSliderValue(value);
-            }}
-            onSlidingComplete={(value) => {
-              seek(value);
-              setIsDragging(false);
-            }}
+            onSlidingStart={handleSliderStart}
+            onValueChange={handleSliderChange}
+            onSlidingComplete={handleSliderComplete}
             minimumTrackTintColor="#1db954"
             maximumTrackTintColor="#333"
             thumbTintColor="#fff"
           />
           <View style={styles.timeRow}>
-            <Text style={styles.time}>{formatTime(isDragging ? sliderValue : (position || 0))}</Text>
-            <Text style={styles.time}>{formatTime(duration || 0)}</Text>
+            <Text style={styles.time}>{formattedPosition}</Text>
+            <Text style={styles.time}>{formattedDuration}</Text>
           </View>
         </View>
 
@@ -221,8 +328,8 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
             <TouchableOpacity onPress={toggleShuffle} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Ionicons name="shuffle" size={22} color={shuffle ? '#1db954' : '#666'} />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => liked ? removeLikedSong(currentSong.id) : addLikedSong(currentSong)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name={liked ? 'heart' : 'heart-outline'} size={26} color={liked ? '#1db954' : '#fff'} />
+            <TouchableOpacity onPress={handleLikeToggle} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name={isLikedOptimistic ? 'heart' : 'heart-outline'} size={26} color={isLikedOptimistic ? '#1db954' : '#fff'} />
             </TouchableOpacity>
             <DownloadButton song={currentSong} size={24} />
             <TouchableOpacity onPress={toggleRepeat} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
@@ -241,7 +348,7 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
               </TouchableOpacity>
             )}
             
-            <TouchableOpacity onPress={isPlaying ? pause : resume} style={styles.playButton}>
+            <TouchableOpacity onPress={handlePlayPause} style={styles.playButton}>
               <Ionicons name={isPlaying ? "pause" : "play"} size={40} color="#000" />
             </TouchableOpacity>
             
@@ -375,10 +482,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a2e',
   },
   darkOverlay: {
-    backgroundColor: 'rgba(0,0,0,0.65)',
+    backgroundColor: 'rgba(0,0,0,0.75)',
   },
   mediumOverlay: {
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
   },
   progressContainer: {
     paddingHorizontal: 32,

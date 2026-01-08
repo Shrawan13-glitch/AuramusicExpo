@@ -78,6 +78,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ child
         syncLikedSongs();
       }
     } catch (e) {
+      // Error handled silently
     }
   };
 

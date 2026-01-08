@@ -79,7 +79,7 @@ export class APKDownloader {
         return granted === PermissionsAndroid.RESULTS.GRANTED;
       }
     } catch (err) {
-      console.log('Permission error:', err);
+      
       Alert.alert(
         'Permission Error',
         'Unable to request storage permission. Please enable it manually in app settings.',
@@ -121,13 +121,13 @@ export class APKDownloader {
     try {
       const response = await fetch(url, { method: 'HEAD', timeout: 10000 });
       if (!response.ok) {
-        console.log('File size check failed:', response.status);
+        
         return 0;
       }
       const contentLength = response.headers.get('content-length');
       return contentLength ? parseInt(contentLength, 10) : 0;
     } catch (error) {
-      console.log('File size check error:', error);
+      
       return 0;
     }
   }
@@ -234,7 +234,7 @@ export class APKDownloader {
         },
         progressDivider: 1,
         begin: (res) => {
-          console.log('Download started:', res);
+          
         },
       });
 
@@ -242,14 +242,14 @@ export class APKDownloader {
       this.isDownloading = false;
 
       if (result.statusCode === 200) {
-        console.log('APK downloaded successfully');
+        
         return true;
       } else {
         throw new Error(`Download failed with status: ${result.statusCode}`);
       }
     } catch (error: any) {
       this.isDownloading = false;
-      console.log('Download error:', error);
+      
       
       // Handle specific error types
       let errorMessage = 'Download failed';
@@ -315,10 +315,10 @@ export class APKDownloader {
     try {
       if (await RNFS.exists(this.downloadPath)) {
         await RNFS.unlink(this.downloadPath);
-        console.log('APK file cleaned up successfully');
+        
       }
     } catch (error) {
-      console.log('Cleanup error:', error);
+      
     }
   }
 
@@ -357,7 +357,7 @@ export class APKDownloader {
       }
       return false;
     } catch (error) {
-      console.log('Installation error:', error);
+      
       Alert.alert('Installation Failed', 'Could not install the update. Please try again.');
       return false;
     }
@@ -383,7 +383,7 @@ export class APKDownloader {
       }
       return true;
     } catch (error) {
-      console.log('Permission check error:', error);
+      
       return false;
     }
   }
@@ -410,7 +410,7 @@ export class APKDownloader {
       }
       return false;
     } catch (error) {
-      console.log('Download and install error:', error);
+      
       onError?.({ type: 'unknown', message: 'Download failed', retryable: true });
       return false;
     }

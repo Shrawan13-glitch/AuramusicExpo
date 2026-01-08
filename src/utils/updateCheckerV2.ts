@@ -3,7 +3,7 @@ import { Linking, Platform } from 'react-native';
 import * as Device from 'expo-device';
 
 const UPDATE_URL = 'https://shrawan13-glitch.github.io/AuraMusic-updates/v2/version.json';
-const CURRENT_VERSION = '2.0.1';
+const CURRENT_VERSION = '2.1.0';
 
 export interface UpdateInfoV2 {
   latestVersion: string;
@@ -81,13 +81,13 @@ export const checkForUpdatesV2 = async (): Promise<{ hasUpdate: boolean; updateI
       const updateInfo: UpdateInfoV2 = response.data;
       
       if (!updateInfo || !updateInfo.latestVersion) {
-        console.log('Invalid update response: missing version info');
+        
         return { hasUpdate: false };
       }
       
       // Validate downloads object
       if (!updateInfo.downloads || !updateInfo.downloads.universal) {
-        console.log('Invalid update response: missing download URLs');
+        
         return { hasUpdate: false };
       }
       
@@ -105,7 +105,7 @@ export const checkForUpdatesV2 = async (): Promise<{ hasUpdate: boolean; updateI
       return { hasUpdate: false };
       
     } catch (error: any) {
-      console.log(`Update check attempt ${attempt} failed:`, error?.message || error);
+      
       if (attempt === 3) {
         return { hasUpdate: false };
       }

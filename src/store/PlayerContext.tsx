@@ -47,12 +47,38 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [intendedPlaying, setIntendedPlaying] = useState(false);
   const [isChangingSong, setIsChangingSong] = useState(false);
   const [sleepTimerRemaining, setSleepTimerRemaining] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const sleepTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const hasTriggeredNext = useRef(false);
   const skipNextRef = useRef<() => Promise<void>>();
   const lastUpdateRef = useRef<number>(0);
   const positionUpdateRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Optimized state updates with batching
+  const updateState = useCallback((updater: (prev: PlayerState) => PlayerState) => {
+    setState(prev => {
+      const newState = updater(prev);
+      // Only update if state actually changed
+      if (JSON.stringify(newState) !== JSON.stringify(prev)) {
+        return newState;
+      }
+      return prev;
+    });
+  }, []);
+
+  // Throttled position updates for better performance
+  const throttledPositionUpdate = useCallback((position: number, duration: number) => {
+    const now = Date.now();
+    if (now - lastUpdateRef.current > 500) { // Update every 500ms for smoother UI
+      lastUpdateRef.current = now;
+      updateState(prev => ({
+        ...prev,
+        position,
+        duration,
+      }));
+    }
+  }, [updateState]);
 
   useEffect(() => {
     setupPlayer();
@@ -66,35 +92,32 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const currentPosition = audioState.position || 0;
     const currentDuration = audioState.duration || 0;
     
-    // Only update app state to reflect AudioPro's current state
-    setState(prev => {
-      const newState = { ...prev };
-      
-      if (audioState.state === 'PLAYING') {
-        newState.isPlaying = true;
-      } else if (audioState.state === 'PAUSED') {
-        newState.isPlaying = false;
-      }
-      
-      newState.position = currentPosition;
-      newState.duration = currentDuration;
-      
-      return newState;
-    });
-    
-    // Disable autoplay - let AudioPro handle it completely
-    // if (currentDuration > 0 && currentPosition >= currentDuration - 1000 && audioState.state !== 'PLAYING') {
-    //   if (!hasTriggeredNext.current) {
-    //     console.log('AUTOPLAY: Song ended, triggering next');
-    //     hasTriggeredNext.current = true;
-    //     setTimeout(() => {
-    //       skipNext();
-    //       hasTriggeredNext.current = false;
-    //     }, 500);
-    //   }
-    // }
-
-  }, [audioState.state, audioState.position, audioState.duration, intendedPlaying, skipNext]);
+    // Only update if not loading and not seeking
+    if (!isLoading && !isChangingSong) {
+      setState(prev => {
+        const newState = { ...prev };
+        let hasChanges = false;
+        
+        // Only update playing state if it actually changed
+        if (audioState.state === 'PLAYING' && !prev.isPlaying) {
+          newState.isPlaying = true;
+          hasChanges = true;
+        } else if (audioState.state === 'PAUSED' && prev.isPlaying && !intendedPlaying) {
+          newState.isPlaying = false;
+          hasChanges = true;
+        }
+        
+        // Update position and duration
+        if (Math.abs(currentPosition - prev.position) > 500 || currentDuration !== prev.duration) {
+          newState.position = currentPosition;
+          newState.duration = currentDuration;
+          hasChanges = true;
+        }
+        
+        return hasChanges ? newState : prev;
+      });
+    }
+  }, [audioState.state, audioState.position, audioState.duration, isLoading, isChangingSong, intendedPlaying]);
 
   const setupPlayer = async () => {
     AudioPro.configure({ 
@@ -117,7 +140,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           break;
         case 'PLAYBACK_TRACK_ENDED':
         case 'TRACK_ENDED':
-          console.log('AUTOPLAY: Track ended in background');
+          
           if (skipNextRef.current && !hasTriggeredNext.current) {
             hasTriggeredNext.current = true;
             skipNextRef.current().finally(() => {
@@ -153,6 +176,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const playSong = useCallback(async (song: Song, queue?: Song[], generateRadio = true) => {
     if (isChangingSong) return;
     setIsChangingSong(true);
+    setIsLoading(true);
     
     try {
       let audioSource;
@@ -169,7 +193,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         } else {
           const streamUrl = await InnerTube.getStreamUrl(song.id);
           if (!streamUrl) {
-            console.log('No stream URL found for song:', song.title);
             return;
           }
           audioSource = streamUrl;
@@ -180,15 +203,12 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             song.title || 'Unknown Title',
             song.artists?.[0]?.name || song.artist || 'Unknown Artist',
             streamUrl
-          ).catch(error => {
-            console.log('Background caching failed:', error);
-          });
+          ).catch(error => {});
         }
       }
 
       // Validate URL format
       if (!audioSource || (!audioSource.startsWith('http') && !audioSource.startsWith('file://'))) {
-        console.log('Invalid audio source:', audioSource);
         return;
       }
 
@@ -216,6 +236,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setState(prev => ({ 
         ...prev, 
         currentSong: song,
+        isPlaying: true, // Assume playing when starting new song
       }));
       
       const startTime = Date.now();
@@ -250,31 +271,35 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setState(prev => ({ ...prev, queue: finalQueue }));
       }
     } catch (error) {
-      console.log('Error playing song:', error);
     } finally {
       setIsChangingSong(false);
+      setIsLoading(false);
     }
   }, [library, shuffle, downloadContext, isChangingSong]);
 
   const pause = useCallback(async () => {
+    // Immediate UI update for better perceived performance
+    updateState(prev => ({ ...prev, isPlaying: false }));
     setIntendedPlaying(false);
     await AudioPro.pause();
-    setState(prev => ({ ...prev, isPlaying: false }));
-  }, []);
+  }, [updateState]);
 
   const resume = useCallback(async () => {
+    // Immediate UI update for better perceived performance
+    updateState(prev => ({ ...prev, isPlaying: true }));
     setIntendedPlaying(true);
     await AudioPro.resume();
-    setState(prev => ({ ...prev, isPlaying: true }));
-  }, []);
+  }, [updateState]);
 
   const seek = useCallback(async (position: number) => {
+    // Keep playing state during seek
     setIntendedPlaying(true);
+    setState(prev => ({ ...prev, position, isPlaying: true }));
     try {
-      await AudioPro.seekTo(position); // AudioPro expects milliseconds
-      setState(prev => ({ ...prev, position }));
+      await AudioPro.seekTo(position);
     } catch (error) {
-      console.log('Seek error:', error);
+      // Revert position on error
+      setState(prev => ({ ...prev, position: prev.position }));
     }
   }, []);
 

@@ -29,7 +29,7 @@ export class DebugLogger {
 
     // Console output with emojis
     const emoji = level === 'ERROR' ? '❌' : level === 'WARN' ? '⚠️' : 'ℹ️';
-    console.log(`${emoji} [${level}] ${message}`, data ? data : '');
+    
   }
 
   async getAuthStatus(): Promise<{

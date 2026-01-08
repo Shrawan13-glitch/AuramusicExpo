@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Animated, Dimensions, Platform } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Animated, Dimensions, Platform, BackHandler } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { UpdateInfoV2, SelectedDownload, openUpdateUrl } from '../utils/updateCheckerV2';
@@ -37,6 +37,13 @@ export default function UpdateModal({ visible, updateInfo, selectedDownload, onD
         Animated.spring(scaleAnim, { toValue: 1, tension: 100, friction: 8, useNativeDriver: true }),
         Animated.timing(slideAnim, { toValue: 1, duration: 500, useNativeDriver: true })
       ]).start();
+
+      // Prevent back button from closing modal
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+        return true; // Prevent default back action
+      });
+
+      return () => backHandler.remove();
     } else {
       fadeAnim.setValue(0);
       scaleAnim.setValue(0.8);
@@ -80,6 +87,11 @@ export default function UpdateModal({ visible, updateInfo, selectedDownload, onD
         const elapsed = (Date.now() - startTime) / 1000;
         const speed = (progress.bytesWritten / (1024 * 1024)) / elapsed;
         setDownloadSpeed(`${speed.toFixed(1)} MB/s`);
+      },
+      undefined,
+      (error) => {
+        // Handle download error
+        console.error('Download error:', error);
       }
     );
 
@@ -87,12 +99,15 @@ export default function UpdateModal({ visible, updateInfo, selectedDownload, onD
     setShowDownloadScreen(false);
     if (success && !isStrict) {
       onDismiss();
+    } else if (!success && !isStrict) {
+      // Allow dismissal on download failure for non-strict updates
+      onDismiss();
     }
   };
 
   return (
     <>
-      <Modal visible={visible} transparent animationType="none">
+      <Modal visible={visible} transparent animationType="none" onRequestClose={() => {}}>
         <Animated.View style={[styles.modernOverlay, { opacity: fadeAnim }]}>
           {/* Blur Background */}
           <View style={styles.blurBackground} />

@@ -26,11 +26,13 @@ import DownloadedSongsScreen from '../screens/DownloadedSongsScreen';
 import QualitySettingsScreen from '../screens/QualitySettingsScreen';
 import SectionView from '../screens/SectionView';
 import MiniPlayer from '../components/MiniPlayer';
+import StatusBarAssistant from '../components/StatusBarAssistant';
 import MessageDetailScreen from '../screens/MessageDetailScreen';
 import AnimationSettingsScreen from '../screens/AnimationSettingsScreen';
 import CachedSongsScreen from '../screens/CachedSongsScreen';
 import VoiceSettingsScreen from '../screens/VoiceSettingsScreen';
 import CachedLyricsScreen from '../screens/CachedLyricsScreen';
+import AssistantScreen from '../screens/AssistantScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -141,15 +143,16 @@ export default function AppNavigator() {
   };
 
   return (
-    <Stack.Navigator 
-      screenOptions={{ 
-        headerShown: false, 
-        presentation: 'card',
-        cardStyle: { backgroundColor: '#000' },
-        cardOverlayEnabled: false,
-        ...getAnimationConfig(),
-      }}
-    >
+    <>
+      <Stack.Navigator 
+        screenOptions={{ 
+          headerShown: false, 
+          presentation: 'card',
+          cardStyle: { backgroundColor: '#000' },
+          cardOverlayEnabled: false,
+          ...getAnimationConfig(),
+        }}
+      >
       <Stack.Screen name="Main" component={MainScreen} />
       <Stack.Screen name="Artist">
         {(props) => (
@@ -356,9 +359,19 @@ export default function AppNavigator() {
 
       <Stack.Screen name="MessageDetail" component={MessageDetailScreen} />
 
-      <Stack.Screen name="Update" component={UpdateScreen} options={{ headerShown: false }} />
+      <Stack.Screen 
+        name="Update" 
+        component={UpdateScreen} 
+        options={{ 
+          headerShown: false,
+          gestureEnabled: false,
+          cardStyleInterpolator: CardStyleInterpolators.forModalPresentationIOS,
+        }} 
+      />
       <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
+
+    </>
   );
 }
 

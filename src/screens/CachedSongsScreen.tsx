@@ -26,7 +26,7 @@ export default function CachedSongsScreen({ navigation }: any) {
       setCachedSongs(songs);
       setCacheStats(stats);
     } catch (error) {
-      console.log('Error loading cached songs:', error);
+      
     } finally {
       setLoading(false);
     }

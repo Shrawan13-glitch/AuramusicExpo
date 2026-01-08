@@ -35,7 +35,7 @@ class FilePickerService {
              imagePickerStatus === 'granted' && 
              cameraStatus === 'granted';
     } catch (error) {
-      console.log('Permission request failed:', error);
+      
       return false;
     }
   }
@@ -67,7 +67,7 @@ class FilePickerService {
       }
       return [];
     } catch (error) {
-      console.log('Image picker error:', error);
+      
       return [];
     }
   }
@@ -104,7 +104,7 @@ class FilePickerService {
       }
     } catch (error) {
       if (error.code !== 'E_PICKER_CANCELLED') {
-        console.log('Image crop picker error:', error);
+        
       }
       return [];
     }
@@ -134,7 +134,7 @@ class FilePickerService {
       }
       return null;
     } catch (error) {
-      console.log('Camera error:', error);
+      
       return null;
     }
   }
@@ -169,7 +169,7 @@ class FilePickerService {
       }
       return [];
     } catch (error) {
-      console.log('Document picker error:', error);
+      
       return [];
     }
   }
@@ -205,7 +205,7 @@ class FilePickerService {
       return [];
     } catch (error) {
       if (!result.canceled) {
-        console.log('Audio picker error:', error);
+        
       }
       return [];
     }

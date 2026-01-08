@@ -183,6 +183,9 @@ export default function AlbumScreen({ route, navigation }: any) {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('AssistantScreen')} style={styles.assistantButton}>
+            <Ionicons name="mic" size={24} color="#1db954" />
+          </TouchableOpacity>
         </View>
 
         <FlashList
@@ -201,8 +204,9 @@ export default function AlbumScreen({ route, navigation }: any) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   safeArea: { flex: 1 },
-  backButtonContainer: { position: 'absolute', top: 50, left: 16, zIndex: 10 },
+  backButtonContainer: { position: 'absolute', top: 50, left: 16, zIndex: 10, flexDirection: 'row', gap: 12 },
   backButton: { padding: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 },
+  assistantButton: { padding: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 },
   albumHeader: { alignItems: 'center', padding: 16, paddingTop: 60 },
   albumArt: { width: 200, height: 200, borderRadius: 8, marginBottom: 16 },
   generatedArtwork: {
