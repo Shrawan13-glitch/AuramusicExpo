@@ -5,9 +5,11 @@ import { useFocusEffect } from '@react-navigation/native';
 import Slider from '@react-native-community/slider';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LinearGradient } from 'expo-linear-gradient';
 import { usePlayer } from '../store/PlayerContext';
 import { useLibrary } from '../store/LibraryContext';
 import { useDownload } from '../store/DownloadContext';
+import { useAnimation } from '../store/AnimationContext';
 import DownloadButton from '../components/DownloadButton';
 import SongOptionsModal from '../components/SongOptionsModal';
 import { useSongOptions } from '../hooks/useSongOptions';
@@ -32,15 +34,17 @@ const MemoizedArtwork = memo(({ uri }: { uri?: string }) => (
     style={styles.artwork} 
     onError={() => {}}
     fadeDuration={0}
+    resizeMode="cover"
   />
 ));
 
-const MemoizedBackground = memo(({ style, imageUri, blurRadius, overlayStyle }: any) => (
+const MemoizedBackground = memo(({ imageUri, blurRadius, overlayStyle }: any) => (
   <ImageBackground 
     source={imageUri ? { uri: imageUri } : require('../../assets/icon.png')} 
     style={StyleSheet.absoluteFillObject} 
     blurRadius={blurRadius}
     fadeDuration={0}
+    resizeMode="cover"
   >
     <View style={[StyleSheet.absoluteFillObject, overlayStyle]} />
   </ImageBackground>
@@ -50,6 +54,7 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
   const { currentSong, isPlaying, pause, resume, skipNext, skipPrevious, position, duration, seek, shuffle, repeat, toggleShuffle, toggleRepeat, setSleepTimer, cancelSleepTimer, sleepTimerRemaining } = usePlayer();
   const { isLiked, addLikedSong, removeLikedSong } = useLibrary();
   const { isDownloaded } = useDownload();
+  const { settings } = useAnimation();
   const { modalVisible, selectedSong, showOptions, hideOptions } = useSongOptions();
   const [showLyrics, setShowLyrics] = useState(false);
   const [backgroundStyle, setBackgroundStyle] = useState('blur');
@@ -59,37 +64,12 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
   const [isDragging, setIsDragging] = useState(false);
   const [skipEnabled, setSkipEnabled] = useState(true);
   const [isLikedOptimistic, setIsLikedOptimistic] = useState(false);
-  const backgroundOpacity = useState(new Animated.Value(1))[0];
-  const [backgroundImage, setBackgroundImage] = useState(currentSong?.thumbnailUrl);
-  const [nextBackgroundImage, setNextBackgroundImage] = useState(null);
-  const nextBackgroundOpacity = useState(new Animated.Value(0))[0];
 
   useEffect(() => {
     loadBackgroundStyle();
     loadSkipDuration();
     loadSkipEnabled();
   }, []);
-
-  useEffect(() => {
-    if (currentSong?.thumbnailUrl !== backgroundImage) {
-      if (currentSong?.thumbnailUrl) {
-        // Preload and set next background
-        Image.prefetch(currentSong.thumbnailUrl).then(() => {
-          setNextBackgroundImage(currentSong.thumbnailUrl);
-          // Fade in new background over old one
-          Animated.timing(nextBackgroundOpacity, {
-            toValue: 1,
-            duration: 600,
-            useNativeDriver: true,
-          }).start();
-        }).catch(() => {
-          setBackgroundImage(currentSong.thumbnailUrl);
-        });
-      } else {
-        setBackgroundImage(currentSong?.thumbnailUrl);
-      }
-    }
-  }, [currentSong?.thumbnailUrl]);
 
   // Handle StatusBar when screen is focused/unfocused
   useFocusEffect(
@@ -113,6 +93,9 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
   const formattedPosition = useMemo(() => formatTime(isDragging ? sliderValue : (position || 0)), [isDragging, sliderValue, position]);
   const formattedDuration = useMemo(() => formatTime(duration || 0), [duration]);
   const maxSliderValue = useMemo(() => Math.max(duration || 1, 1), [duration]);
+  const currentArtwork = useMemo(() => currentSong?.thumbnailUrl, [currentSong?.thumbnailUrl]);
+  const currentTitle = useMemo(() => currentSong?.title, [currentSong?.title]);
+  const currentArtists = useMemo(() => currentSong?.artists, [currentSong?.artists]);
 
   // Update optimistic like state when actual state changes
   useEffect(() => {
@@ -206,7 +189,6 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
     onPanResponderMove: () => {},
     onPanResponderRelease: (_, gestureState) => {
       if (gestureState.dy > 100) {
-        nextBackgroundOpacity.stopAnimation();
         onClose();
       }
     },
@@ -217,167 +199,257 @@ export default function PlayerScreen({ onClose, onOpenQueue, navigation }: any) 
     switch (backgroundStyle) {
       case 'blur':
         return (
-          <View style={StyleSheet.absoluteFillObject}>
-            <MemoizedBackground 
-              imageUri={backgroundImage} 
-              blurRadius={50} 
-              overlayStyle={styles.darkOverlay}
-            />
-            {nextBackgroundImage && (
-              <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: nextBackgroundOpacity }]}>
-                <MemoizedBackground 
-                  imageUri={nextBackgroundImage} 
-                  blurRadius={50} 
-                  overlayStyle={styles.darkOverlay}
-                />
-              </Animated.View>
-            )}
-          </View>
+          <MemoizedBackground 
+            imageUri={currentArtwork} 
+            blurRadius={50} 
+            overlayStyle={styles.darkOverlay}
+          />
         );
       case 'image':
         return (
-          <View style={StyleSheet.absoluteFillObject}>
-            <MemoizedBackground 
-              imageUri={backgroundImage} 
-              blurRadius={20} 
-              overlayStyle={styles.mediumOverlay}
-            />
-            {nextBackgroundImage && (
-              <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: nextBackgroundOpacity }]}>
-                <MemoizedBackground 
-                  imageUri={nextBackgroundImage} 
-                  blurRadius={20} 
-                  overlayStyle={styles.mediumOverlay}
-                />
-              </Animated.View>
-            )}
-          </View>
+          <MemoizedBackground 
+            imageUri={currentArtwork} 
+            blurRadius={20} 
+            overlayStyle={styles.mediumOverlay}
+          />
         );
       default:
-        return <View style={[StyleSheet.absoluteFillObject, styles.gradientBackground]} />;
+        return (
+          <LinearGradient
+            colors={['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57']}
+            locations={[0, 0.25, 0.5, 0.75, 1]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+        );
     }
-  }, [backgroundStyle, backgroundImage, nextBackgroundImage, nextBackgroundOpacity]);
-
-  const getStatusBarStyle = () => {
-    return 'light-content';
-  };
+  }, [backgroundStyle, currentArtwork]);
 
   return (
     <View style={styles.fullScreen}>
       {renderBackground}
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-        <View style={styles.container} {...panResponder.panHandlers}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={() => {
-          // Stop any ongoing animations
-          nextBackgroundOpacity.stopAnimation();
-          onClose();
-        }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name="chevron-down" size={28} color="#fff" />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Now Playing</Text>
-            <TouchableOpacity onPress={() => setShowSleepTimer(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name="moon" size={24} color={sleepTimerRemaining ? '#1db954' : '#fff'} />
-            </TouchableOpacity>
-          </View>
-
-        <View style={styles.artworkContainer}>
-          <View style={styles.artworkShadow}>
-            <MemoizedArtwork uri={currentSong?.thumbnailUrl} />
-          </View>
-        </View>
-
-        <View style={styles.infoContainer}>
-          <Text style={styles.title} numberOfLines={2}>{currentSong.title}</Text>
-          <View style={styles.artistsRow}>
-            {currentSong.artists?.map((artist, index) => (
-              <React.Fragment key={artist.id || index}>
-                <TouchableOpacity 
-                  onPress={() => handleArtistPress(artist)}
-                  hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
-                >
-                  <Text style={styles.artist}>{artist.name}</Text>
+        <View style={settings.modernPlayerUI ? styles.modernContainer : styles.container} {...panResponder.panHandlers}>
+          {settings.modernPlayerUI ? (
+            <View style={styles.modernLayout}>
+              <View style={styles.modernHeader}>
+                <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Ionicons name="chevron-down" size={28} color="#fff" />
                 </TouchableOpacity>
-                {index < currentSong.artists.length - 1 && <Text style={styles.artist}>, </Text>}
-              </React.Fragment>
-            )) || <Text style={styles.artist}>Unknown Artist</Text>}
-          </View>
-        </View>
+                <Text style={styles.headerTitle}>Now Playing</Text>
+                <TouchableOpacity onPress={() => setShowSleepTimer(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Ionicons name="moon" size={24} color={sleepTimerRemaining ? '#1db954' : '#fff'} />
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.cardContainer}>
+                <View style={styles.artworkCard}>
+                  <MemoizedArtwork uri={currentArtwork} />
+                  <View style={styles.floatingControls}>
+                    <TouchableOpacity onPress={toggleShuffle} style={styles.floatingButton}>
+                      <Ionicons name="shuffle" size={16} color={shuffle ? '#1db954' : '#fff'} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={toggleRepeat} style={styles.floatingButton}>
+                      <Ionicons name={repeat === 'one' ? 'repeat-outline' : 'repeat'} size={16} color={repeat !== 'off' ? '#1db954' : '#fff'} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleLikeToggle} style={styles.floatingButton}>
+                      <Ionicons name={isLikedOptimistic ? 'heart' : 'heart-outline'} size={16} color={isLikedOptimistic ? '#ff4757' : '#fff'} />
+                    </TouchableOpacity>
+                    <View style={styles.floatingButton}>
+                      <DownloadButton song={currentSong} size={16} modern={true} />
+                    </View>
+                  </View>
+                </View>
+                
+                <View style={styles.infoCard}>
+                  <Text style={styles.modernTitle} numberOfLines={2}>{currentTitle}</Text>
+                  <View style={styles.artistsRow}>
+                    {currentArtists?.map((artist, index) => (
+                      <React.Fragment key={artist.id || index}>
+                        <TouchableOpacity onPress={() => handleArtistPress(artist)}>
+                          <Text style={styles.modernArtist}>{artist.name}</Text>
+                        </TouchableOpacity>
+                        {index < currentArtists.length - 1 && <Text style={styles.modernArtist}>, </Text>}
+                      </React.Fragment>
+                    )) || <Text style={styles.modernArtist}>Unknown Artist</Text>}
+                  </View>
+                </View>
+              </View>
+              
+              <View style={styles.progressCard}>
+                <Slider
+                  style={styles.slider}
+                  minimumValue={0}
+                  maximumValue={maxSliderValue}
+                  value={sliderValue}
+                  onSlidingStart={handleSliderStart}
+                  onValueChange={handleSliderChange}
+                  onSlidingComplete={handleSliderComplete}
+                  minimumTrackTintColor="#1db954"
+                  maximumTrackTintColor="rgba(255,255,255,0.2)"
+                  thumbTintColor="#fff"
+                />
+                <View style={styles.timeRow}>
+                  <Text style={styles.time}>{formattedPosition}</Text>
+                  <Text style={styles.time}>{formattedDuration}</Text>
+                </View>
+              </View>
+              
+              <View style={styles.controlsCard}>
+                <View style={styles.mainControlsRow}>
+                  <TouchableOpacity onPress={skipPrevious} style={styles.navButton}>
+                    <Ionicons name="play-skip-back" size={24} color="#fff" />
+                  </TouchableOpacity>
+                  
+                  {skipEnabled && (
+                    <TouchableOpacity onPress={skipBackward} style={styles.skipButton}>
+                      <Ionicons name="play-back" size={20} color="#fff" />
+                    </TouchableOpacity>
+                  )}
+                  
+                  <TouchableOpacity onPress={handlePlayPause} style={styles.playButtonCard}>
+                    <Ionicons name={isPlaying ? "pause" : "play"} size={32} color="#000" />
+                  </TouchableOpacity>
+                  
+                  {skipEnabled && (
+                    <TouchableOpacity onPress={skipForward} style={styles.skipButton}>
+                      <Ionicons name="play-forward" size={20} color="#fff" />
+                    </TouchableOpacity>
+                  )}
+                  
+                  <TouchableOpacity onPress={skipNext} style={styles.navButton}>
+                    <Ionicons name="play-skip-forward" size={24} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+                
+                <View style={styles.bottomActionsRow}>
+                  <TouchableOpacity onPress={() => setShowLyrics(true)} style={styles.horizontalActionButton}>
+                    <Ionicons name="document-text-outline" size={16} color="#fff" />
+                    <Text style={styles.horizontalActionText}>Lyrics</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={onOpenQueue} style={styles.horizontalActionButton}>
+                    <Ionicons name="list" size={16} color="#fff" />
+                    <Text style={styles.horizontalActionText}>Queue</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => showOptions(currentSong)} style={styles.horizontalActionButton}>
+                    <Ionicons name="ellipsis-horizontal" size={16} color="#fff" />
+                    <Text style={styles.horizontalActionText}>More</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          ) : (
+            <>
+              <View style={styles.header}>
+                <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Ionicons name="chevron-down" size={28} color="#fff" />
+                </TouchableOpacity>
+                <Text style={styles.headerTitle}>Now Playing</Text>
+                <TouchableOpacity onPress={() => setShowSleepTimer(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Ionicons name="moon" size={24} color={sleepTimerRemaining ? '#1db954' : '#fff'} />
+                </TouchableOpacity>
+              </View>
 
-        <View style={styles.progressContainer}>
-          <Slider
-            style={styles.slider}
-            minimumValue={0}
-            maximumValue={maxSliderValue}
-            value={sliderValue}
-            onSlidingStart={handleSliderStart}
-            onValueChange={handleSliderChange}
-            onSlidingComplete={handleSliderComplete}
-            minimumTrackTintColor="#1db954"
-            maximumTrackTintColor="#333"
-            thumbTintColor="#fff"
-          />
-          <View style={styles.timeRow}>
-            <Text style={styles.time}>{formattedPosition}</Text>
-            <Text style={styles.time}>{formattedDuration}</Text>
-          </View>
-        </View>
+              <View style={styles.artworkContainer}>
+                <View style={styles.artworkShadow}>
+                  <MemoizedArtwork uri={currentArtwork} />
+                </View>
+              </View>
 
-        <View style={styles.controlsContainer}>
-          <View style={styles.secondaryControls}>
-            <TouchableOpacity onPress={toggleShuffle} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name="shuffle" size={22} color={shuffle ? '#1db954' : '#666'} />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleLikeToggle} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name={isLikedOptimistic ? 'heart' : 'heart-outline'} size={26} color={isLikedOptimistic ? '#1db954' : '#fff'} />
-            </TouchableOpacity>
-            <DownloadButton song={currentSong} size={24} />
-            <TouchableOpacity onPress={toggleRepeat} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name={repeat === 'one' ? 'repeat-outline' : 'repeat'} size={22} color={repeat !== 'off' ? '#1db954' : '#666'} />
-            </TouchableOpacity>
-          </View>
+              <View style={styles.infoContainer}>
+                <Text style={styles.title} numberOfLines={2}>{currentTitle}</Text>
+                <View style={styles.artistsRow}>
+                  {currentArtists?.map((artist, index) => (
+                    <React.Fragment key={artist.id || index}>
+                      <TouchableOpacity 
+                        onPress={() => handleArtistPress(artist)}
+                        hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
+                      >
+                        <Text style={styles.artist}>{artist.name}</Text>
+                      </TouchableOpacity>
+                      {index < currentArtists.length - 1 && <Text style={styles.artist}>, </Text>}
+                    </React.Fragment>
+                  )) || <Text style={styles.artist}>Unknown Artist</Text>}
+                </View>
+              </View>
 
-          <View style={styles.mainControls}>
-            <TouchableOpacity onPress={skipPrevious} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}>
-              <Ionicons name="play-skip-back" size={32} color="#fff" />
-            </TouchableOpacity>
-            
-            {skipEnabled && (
-              <TouchableOpacity onPress={skipBackward} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Ionicons name="play-back" size={28} color="#fff" />
-              </TouchableOpacity>
-            )}
-            
-            <TouchableOpacity onPress={handlePlayPause} style={styles.playButton}>
-              <Ionicons name={isPlaying ? "pause" : "play"} size={40} color="#000" />
-            </TouchableOpacity>
-            
-            {skipEnabled && (
-              <TouchableOpacity onPress={skipForward} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Ionicons name="play-forward" size={28} color="#fff" />
-              </TouchableOpacity>
-            )}
-            
-            <TouchableOpacity onPress={skipNext} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}>
-              <Ionicons name="play-skip-forward" size={32} color="#fff" />
-            </TouchableOpacity>
-          </View>
+              <View style={styles.progressContainer}>
+                <Slider
+                  style={styles.slider}
+                  minimumValue={0}
+                  maximumValue={maxSliderValue}
+                  value={sliderValue}
+                  onSlidingStart={handleSliderStart}
+                  onValueChange={handleSliderChange}
+                  onSlidingComplete={handleSliderComplete}
+                  minimumTrackTintColor="#1db954"
+                  maximumTrackTintColor="#333"
+                  thumbTintColor="#fff"
+                />
+                <View style={styles.timeRow}>
+                  <Text style={styles.time}>{formattedPosition}</Text>
+                  <Text style={styles.time}>{formattedDuration}</Text>
+                </View>
+              </View>
 
-          <View style={styles.bottomControls}>
-            <TouchableOpacity onPress={() => setShowLyrics(true)} style={styles.lyricsButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name="document-text-outline" size={20} color="#fff" />
-              <Text style={styles.lyricsText}>Lyrics</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => showOptions(currentSong)} style={styles.lyricsButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name="ellipsis-horizontal" size={20} color="#fff" />
-              <Text style={styles.lyricsText}>More</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={onOpenQueue} style={styles.lyricsButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name="list" size={20} color="#fff" />
-              <Text style={styles.lyricsText}>Queue</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+              <View style={styles.controlsContainer}>
+                <View style={styles.secondaryControls}>
+                  <TouchableOpacity onPress={toggleShuffle} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <Ionicons name="shuffle" size={22} color={shuffle ? '#1db954' : '#666'} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleLikeToggle} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <Ionicons name={isLikedOptimistic ? 'heart' : 'heart-outline'} size={26} color={isLikedOptimistic ? '#1db954' : '#fff'} />
+                  </TouchableOpacity>
+                  <DownloadButton song={currentSong} size={24} />
+                  <TouchableOpacity onPress={toggleRepeat} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <Ionicons name={repeat === 'one' ? 'repeat-outline' : 'repeat'} size={22} color={repeat !== 'off' ? '#1db954' : '#666'} />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.mainControls}>
+                  <TouchableOpacity onPress={skipPrevious} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}>
+                    <Ionicons name="play-skip-back" size={32} color="#fff" />
+                  </TouchableOpacity>
+                  
+                  {skipEnabled && (
+                    <TouchableOpacity onPress={skipBackward} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                      <Ionicons name="play-back" size={28} color="#fff" />
+                    </TouchableOpacity>
+                  )}
+                  
+                  <TouchableOpacity onPress={handlePlayPause} style={styles.playButton}>
+                    <Ionicons name={isPlaying ? "pause" : "play"} size={40} color="#000" />
+                  </TouchableOpacity>
+                  
+                  {skipEnabled && (
+                    <TouchableOpacity onPress={skipForward} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                      <Ionicons name="play-forward" size={28} color="#fff" />
+                    </TouchableOpacity>
+                  )}
+                  
+                  <TouchableOpacity onPress={skipNext} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}>
+                    <Ionicons name="play-skip-forward" size={32} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.bottomControls}>
+                  <TouchableOpacity onPress={() => setShowLyrics(true)} style={styles.lyricsButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <Ionicons name="document-text-outline" size={20} color="#fff" />
+                    <Text style={styles.lyricsText}>Lyrics</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => showOptions(currentSong)} style={styles.lyricsButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <Ionicons name="ellipsis-horizontal" size={20} color="#fff" />
+                    <Text style={styles.lyricsText}>More</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={onOpenQueue} style={styles.lyricsButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <Ionicons name="list" size={20} color="#fff" />
+                    <Text style={styles.lyricsText}>Queue</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </>
+          )}
         </View>
       </SafeAreaView>
         
@@ -409,13 +481,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'transparent',
   },
-  fullScreenWithBars: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
   safeArea: {
     flex: 1,
     backgroundColor: 'transparent',
@@ -430,10 +495,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 8,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 14,
@@ -477,9 +538,6 @@ const styles = StyleSheet.create({
   artist: {
     fontSize: 16,
     color: '#ccc',
-  },
-  gradientBackground: {
-    backgroundColor: '#1a1a2e',
   },
   darkOverlay: {
     backgroundColor: 'rgba(0,0,0,0.75)',
@@ -553,5 +611,140 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: '500',
+  },
+  // Modern UI Styles
+  modernContainer: {
+    flex: 1,
+    backgroundColor: 'transparent',
+    paddingHorizontal: 20,
+  },
+  modernHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 0,
+    paddingVertical: 16,
+    marginBottom: 10,
+  },
+  modernLayout: {
+    flex: 1,
+    gap: 15,
+  },
+  cardContainer: {
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 24,
+    padding: 20,
+    marginTop: 5,
+  },
+  artworkCard: {
+    position: 'relative',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  floatingControls: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    flexDirection: 'column',
+    gap: 8,
+  },
+  floatingButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoCard: {
+    alignItems: 'center',
+  },
+  progressCard: {
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 20,
+    padding: 20,
+  },
+  controlsCard: {
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 20,
+    padding: 20,
+    gap: 20,
+  },
+  topControls: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  mainControlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 20,
+  },
+  navButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  playButtonCard: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#1db954',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#1db954',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  bottomActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  horizontalActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  skipButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  horizontalActionText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  modernTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modernArtist: {
+    fontSize: 16,
+    color: '#ddd',
+    fontWeight: '400',
+  },
+  modernControlButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

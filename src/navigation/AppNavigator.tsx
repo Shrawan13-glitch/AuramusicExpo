@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons, Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAnimation } from '../store/AnimationContext';
 import HomeScreen from '../screens/HomeScreen';
@@ -46,8 +46,73 @@ const TabNavigator = React.memo(({ onTabBarLayout }: { onTabBarLayout: (height: 
     onTabBarLayout(tabBarHeight);
   }, [tabBarHeight]);
 
+  const getTabBarIcon = (routeName: string, focused: boolean) => {
+    const { tabBarIconStyle } = settings;
+    let iconName = '';
+    let IconComponent = Ionicons;
+    
+    switch (routeName) {
+      case 'Home':
+        if (tabBarIconStyle === 'filled') {
+          iconName = focused ? 'home' : 'home-outline';
+        } else if (tabBarIconStyle === 'outline') {
+          iconName = 'home-outline';
+        } else {
+          iconName = focused ? 'home-sharp' : 'home-outline';
+        }
+        break;
+      case 'Search':
+        if (tabBarIconStyle === 'filled') {
+          IconComponent = MaterialIcons;
+          iconName = 'search';
+        } else if (tabBarIconStyle === 'outline') {
+          IconComponent = Feather;
+          iconName = 'search';
+        } else {
+          iconName = focused ? 'search' : 'search-outline';
+        }
+        break;
+      case 'Messages':
+        if (tabBarIconStyle === 'filled') {
+          iconName = focused ? 'mail' : 'mail-outline';
+        } else if (tabBarIconStyle === 'outline') {
+          IconComponent = Feather;
+          iconName = 'mail';
+        } else {
+          iconName = focused ? 'mail-sharp' : 'mail-outline';
+        }
+        break;
+      case 'Library':
+        if (tabBarIconStyle === 'filled') {
+          IconComponent = MaterialIcons;
+          iconName = 'library-music';
+        } else if (tabBarIconStyle === 'outline') {
+          IconComponent = Feather;
+          iconName = 'music';
+        } else {
+          iconName = focused ? 'library' : 'library-outline';
+        }
+        break;
+    }
+    
+    return { IconComponent, iconName };
+  };
+  
+  React.useEffect(() => {
+    onTabBarLayout(tabBarHeight);
+  }, [tabBarHeight]);
+
   const screenOptions = {
-    tabBarStyle: { backgroundColor: '#121212', borderTopColor: '#282828', position: 'absolute', bottom: 0, left: 0, right: 0, paddingBottom: insets.bottom, height: tabBarHeight },
+    tabBarStyle: { 
+      backgroundColor: '#121212', 
+      borderTopColor: '#282828', 
+      position: 'absolute', 
+      bottom: 0, 
+      left: 0, 
+      right: 0, 
+      paddingBottom: insets.bottom, 
+      height: tabBarHeight
+    },
     tabBarActiveTintColor: '#fff',
     tabBarInactiveTintColor: '#666',
     headerStyle: { backgroundColor: '#000' },
@@ -66,7 +131,10 @@ const TabNavigator = React.memo(({ onTabBarLayout }: { onTabBarLayout: (height: 
         component={HomeScreen}
         options={{
           tabBarLabel: 'Home',
-          tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => {
+            const { IconComponent, iconName } = getTabBarIcon('Home', focused);
+            return <IconComponent name={iconName} size={size} color={color} />;
+          }
         }}
       />
       <Tab.Screen 
@@ -74,7 +142,10 @@ const TabNavigator = React.memo(({ onTabBarLayout }: { onTabBarLayout: (height: 
         component={SearchScreen}
         options={{
           tabBarLabel: 'Search',
-          tabBarIcon: ({ color, size }) => <Ionicons name="search" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => {
+            const { IconComponent, iconName } = getTabBarIcon('Search', focused);
+            return <IconComponent name={iconName} size={size} color={color} />;
+          }
         }}
       />
       <Tab.Screen 
@@ -82,7 +153,10 @@ const TabNavigator = React.memo(({ onTabBarLayout }: { onTabBarLayout: (height: 
         component={MessagesScreen}
         options={{
           tabBarLabel: 'Messages',
-          tabBarIcon: ({ color, size }) => <Ionicons name="mail" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => {
+            const { IconComponent, iconName } = getTabBarIcon('Messages', focused);
+            return <IconComponent name={iconName} size={size} color={color} />;
+          }
         }}
       />
       <Tab.Screen 
@@ -90,7 +164,10 @@ const TabNavigator = React.memo(({ onTabBarLayout }: { onTabBarLayout: (height: 
         component={LibraryScreen}
         options={{
           tabBarLabel: 'Library',
-          tabBarIcon: ({ color, size }) => <Ionicons name="library" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => {
+            const { IconComponent, iconName } = getTabBarIcon('Library', focused);
+            return <IconComponent name={iconName} size={size} color={color} />;
+          }
         }}
       />
     </Tab.Navigator>

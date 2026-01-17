@@ -4,6 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 interface AnimationSettings {
   enabled: boolean;
   speed: 'fast' | 'normal' | 'slow';
+  modernPlayerUI: boolean;
+  tabBarIconStyle: 'default' | 'filled' | 'outline';
 }
 
 interface AnimationContextType {
@@ -17,6 +19,8 @@ const STORAGE_KEY = 'animation_settings';
 const DEFAULT_SETTINGS: AnimationSettings = {
   enabled: true,
   speed: 'fast',
+  modernPlayerUI: true,
+  tabBarIconStyle: 'filled',
 };
 
 export const AnimationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

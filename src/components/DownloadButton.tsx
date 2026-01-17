@@ -7,9 +7,10 @@ interface DownloadButtonProps {
   song: any;
   size?: number;
   color?: string;
+  modern?: boolean;
 }
 
-export default function DownloadButton({ song, size = 20, color = '#fff' }: DownloadButtonProps) {
+export default function DownloadButton({ song, size = 20, color = '#fff', modern = false }: DownloadButtonProps) {
   const { downloadSong, isDownloaded, downloadProgress } = useDownload();
 
   const handlePress = async () => {
@@ -60,7 +61,7 @@ export default function DownloadButton({ song, size = 20, color = '#fff' }: Down
   }
 
   return (
-    <TouchableOpacity style={styles.button} onPress={handlePress}>
+    <TouchableOpacity style={modern ? styles.modernButton : styles.button} onPress={handlePress}>
       <Ionicons name="download-outline" size={size} color={color} />
     </TouchableOpacity>
   );
@@ -69,6 +70,14 @@ export default function DownloadButton({ song, size = 20, color = '#fff' }: Down
 const styles = StyleSheet.create({
   button: {
     padding: 8,
+  },
+  modernButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   progressContainer: {
     position: 'relative',

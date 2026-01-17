@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, BackHandler, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons, Feather } from '@expo/vector-icons';
 import { useAuth } from '../store/AuthContext';
 import { useAnimation } from '../store/AnimationContext';
 import { useAssistant } from '../hooks/useAssistant';
@@ -13,12 +13,14 @@ import AssistantScreen from './AssistantScreen';
 
 export default function SettingsScreen({ navigation }: any) {
   const { isAuthenticated, accountInfo, logout } = useAuth();
-  const { settings } = useAnimation();
+  const { settings, updateSettings } = useAnimation();
   const { showAssistant, openAssistant, closeAssistant } = useAssistant();
   const [checking, setChecking] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [showContent, setShowContent] = useState(false);
   const [showCacheModal, setShowCacheModal] = useState(false);
+  const [showPlayerUIModal, setShowPlayerUIModal] = useState(false);
+  const [showTabIconModal, setShowTabIconModal] = useState(false);
   const [cacheSize, setCacheSize] = useState(500);
   const [cacheStats, setCacheStats] = useState({ totalSize: 0, songCount: 0 });
 
@@ -29,10 +31,14 @@ export default function SettingsScreen({ navigation }: any) {
         setShowCacheModal(false);
         return true;
       }
+      if (showPlayerUIModal) {
+        setShowPlayerUIModal(false);
+        return true;
+      }
       return false;
     });
     return () => backHandler.remove();
-  }, [showCacheModal]);
+  }, [showCacheModal, showPlayerUIModal]);
 
   useEffect(() => {
     const speedDelays = { fast: 250, normal: 350, slow: 550 };
@@ -83,6 +89,26 @@ export default function SettingsScreen({ navigation }: any) {
     );
   };
 
+  const handleSavePlayerUI = async (selectedKey: string) => {
+    const isModern = selectedKey === 'modern';
+    await updateSettings({ modernPlayerUI: isModern });
+  };
+
+  const handleSaveTabIcons = async (selectedKey: string) => {
+    await updateSettings({ tabBarIconStyle: selectedKey });
+  };
+
+  const tabIconOptions = [
+    { key: 'filled', label: 'Filled Icons', subtitle: 'Solid filled icon style' },
+    { key: 'outline', label: 'Outline Icons', subtitle: 'Clean outline style' },
+    { key: 'default', label: 'Default Icons', subtitle: 'Standard Ionicons style' }
+  ];
+
+  const playerUIOptions = [
+    { key: 'modern', label: 'Modern Design', subtitle: 'Card-based layout with floating controls' },
+    { key: 'classic', label: 'Classic Design', subtitle: 'Traditional music player layout' }
+  ];
+
   const handleSaveCacheSize = async (selectedSize: string) => {
     const size = parseInt(selectedSize);
     setCacheSize(size);
@@ -105,16 +131,20 @@ export default function SettingsScreen({ navigation }: any) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const SettingItem = ({ icon, title, subtitle, onPress, showArrow = true, iconColor = '#666' }) => (
-    <TouchableOpacity style={styles.settingItem} onPress={onPress}>
-      <Ionicons name={icon} size={24} color={iconColor} style={styles.settingIcon} />
-      <View style={styles.settingContent}>
-        <Text style={styles.settingTitle}>{title}</Text>
-        {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
-      </View>
-      {showArrow && <Ionicons name="chevron-forward" size={20} color="#666" />}
-    </TouchableOpacity>
-  );
+  const SettingItem = ({ icon, iconFamily = 'Ionicons', title, subtitle, onPress, showArrow = true, iconColor = '#666' }) => {
+    const IconComponent = iconFamily === 'MaterialIcons' ? MaterialIcons : iconFamily === 'Feather' ? Feather : Ionicons;
+    
+    return (
+      <TouchableOpacity style={styles.settingItem} onPress={onPress}>
+        <IconComponent name={icon} size={24} color={iconColor} style={styles.settingIcon} />
+        <View style={styles.settingContent}>
+          <Text style={styles.settingTitle}>{title}</Text>
+          {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
+        </View>
+        {showArrow && <Ionicons name="chevron-forward" size={20} color="#666" />}
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -129,7 +159,7 @@ export default function SettingsScreen({ navigation }: any) {
       </View>
 
       {showContent && (
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
           {isAuthenticated && (
             <View style={styles.section}>
               <View style={styles.accountCard}>
@@ -150,7 +180,8 @@ export default function SettingsScreen({ navigation }: any) {
           <View style={styles.section}>
             <Text style={styles.sectionHeader}>AUDIO</Text>
             <SettingItem
-              icon="musical-notes"
+              icon="music-note"
+              iconFamily="MaterialIcons"
               title="Player"
               subtitle="Playback settings"
               onPress={() => navigation.navigate('PlayerSettings')}
@@ -161,7 +192,8 @@ export default function SettingsScreen({ navigation }: any) {
           <View style={styles.section}>
             <Text style={styles.sectionHeader}>STORAGE</Text>
             <SettingItem
-              icon="folder-outline"
+              icon="folder"
+              iconFamily="Feather"
               title="Cached Songs"
               subtitle={`${cacheStats.songCount} songs • ${formatSize(cacheStats.totalSize)}`}
               onPress={() => navigation.navigate('CachedSongs')}
@@ -198,6 +230,22 @@ export default function SettingsScreen({ navigation }: any) {
               subtitle="Animation speed"
               onPress={() => navigation.navigate('AnimationSettings')}
               iconColor="#ff6b6b"
+            />
+            <SettingItem
+              icon="smartphone"
+              iconFamily="Feather"
+              title="Player UI Style"
+              subtitle={settings.modernPlayerUI ? 'Modern design' : 'Classic design'}
+              onPress={() => setShowPlayerUIModal(true)}
+              iconColor="#9b59b6"
+            />
+            <SettingItem
+              icon="grid"
+              iconFamily="Feather"
+              title="Tab Bar Icons"
+              subtitle={settings.tabBarIconStyle === 'filled' ? 'Filled style' : settings.tabBarIconStyle === 'outline' ? 'Outline style' : 'Default style'}
+              onPress={() => setShowTabIconModal(true)}
+              iconColor="#e67e22"
             />
             <SettingItem
               icon="mic-outline"
@@ -244,6 +292,24 @@ export default function SettingsScreen({ navigation }: any) {
         onSelect={handleSaveCacheSize}
         onClose={() => setShowCacheModal(false)}
       />
+      {/* Player UI Settings Modal */}
+      <SettingsModal
+        visible={showPlayerUIModal}
+        title="Player UI Style"
+        options={playerUIOptions}
+        selectedKey={settings.modernPlayerUI ? 'modern' : 'classic'}
+        onSelect={handleSavePlayerUI}
+        onClose={() => setShowPlayerUIModal(false)}
+      />
+      {/* Tab Bar Icon Settings Modal */}
+      <SettingsModal
+        visible={showTabIconModal}
+        title="Tab Bar Icons"
+        options={tabIconOptions}
+        selectedKey={settings.tabBarIconStyle}
+        onSelect={handleSaveTabIcons}
+        onClose={() => setShowTabIconModal(false)}
+      />
       <Modal visible={showAssistant} animationType="slide" presentationStyle="fullScreen" onRequestClose={closeAssistant}>
         <AssistantScreen onClose={closeAssistant} navigation={navigation} />
       </Modal>
@@ -257,6 +323,7 @@ const styles = StyleSheet.create({
   backButton: { width: 32 },
   headerTitle: { fontSize: 20, fontWeight: '600', color: '#fff', textAlign: 'center' },
   content: { flex: 1 },
+  scrollContent: { paddingBottom: 100 },
   section: { marginBottom: 32 },
   accountCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#121212', marginHorizontal: 20, padding: 20, borderRadius: 12 },
   avatar: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#1db954', alignItems: 'center', justifyContent: 'center' },
