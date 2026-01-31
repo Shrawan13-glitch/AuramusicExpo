@@ -1,4 +1,8 @@
 {
+  "cli": {
+    "version": ">= 7.8.6",
+    "appVersionSource": "local"
+  },
   "build": {
     "development": {
       "developmentClient": true,

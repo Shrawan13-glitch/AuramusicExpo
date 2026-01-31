@@ -13,6 +13,7 @@ import { DownloadProvider } from './src/store/DownloadContext';
 import { NotificationProvider } from './src/store/NotificationContext';
 import { AnimationProvider } from './src/store/AnimationContext';
 import { NetworkProvider } from './src/store/NetworkContext';
+import { PaperProvider } from './src/providers/PaperProvider';
 import MiniPlayer from './src/components/MiniPlayer';
 import { checkForUpdatesV2 } from './src/utils/updateCheckerV2';
 import { lyricsCache } from './src/utils/lyricsCache';
@@ -60,6 +61,7 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
+        <PaperProvider>
           <NetworkProvider>
             <AnimationProvider>
               <NotificationProvider>
@@ -82,6 +84,7 @@ export default function App() {
               </NotificationProvider>
             </AnimationProvider>
           </NetworkProvider>
+        </PaperProvider>
         </SafeAreaProvider>
     </GestureHandlerRootView>
   );
