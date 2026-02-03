@@ -1,277 +1,398 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, ActivityIndicator, ImageBackground } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, Image, Dimensions, Animated, TouchableOpacity } from 'react-native';
+import { Text, useTheme, IconButton, Button, Appbar } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { InnerTube } from '../api/innertube';
-import { usePlayer } from '../store/PlayerContext';
+import { AlbumAPI, AlbumDetails, AlbumTrack, AlbumSuggestion } from '../../api/album';
+import { useSongOptions } from '../contexts/SongOptionsContext';
+import { usePlayer } from '../contexts/PlayerContext';
 
-// Add hashCode method for color generation
-String.prototype.hashCode = function() {
-  let hash = 0;
-  for (let i = 0; i < this.length; i++) {
-    const char = this.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  return hash;
-};
+const { width } = Dimensions.get('window');
 
-const ITEM_HEIGHT = 60;
-
-const SongItem = React.memo(({ item, index, onPress }: any) => (
-  <TouchableOpacity style={styles.songItem} onPress={onPress}>
-    <Text style={styles.trackNumber}>{index + 1}</Text>
-    <View style={styles.songInfo}>
-      <Text style={styles.songTitle} numberOfLines={1}>{item.title}</Text>
-      <Text style={styles.songArtist} numberOfLines={1}>
-        {item.artists?.map((a: any) => a.name).join(', ')}
-      </Text>
-    </View>
-    <Ionicons name="ellipsis-vertical" size={20} color="#666" />
-  </TouchableOpacity>
-));
-
-const AlbumHeader = React.memo(({ data, onPlay, onShuffle }: any) => {
-  // Generate artwork if no thumbnail
-  const generateArtwork = () => {
-    if (data.album.thumbnail) return null;
-    
-    const colors = [`hsl(${(Math.abs(data.album.id?.hashCode() || 0) * 137) % 360}, 80%, 55%)`, `hsl(${(Math.abs(data.album.id?.hashCode() || 0) * 137 + 120) % 360}, 80%, 35%)`];
-    const patterns = ['▲', '●', '■', '♦', '★', '▼', '◆', '♪'];
-    const pattern = patterns[Math.abs(data.album.id?.hashCode() || 0) % patterns.length];
-    
-    return (
-      <View style={[styles.generatedArtwork, { backgroundColor: colors[0] }]}>
-        <View style={[styles.artworkPattern, { backgroundColor: colors[1] }]}>
-          <Text style={styles.patternText}>{pattern}</Text>
-        </View>
-        <View style={[styles.artworkOverlay, { backgroundColor: colors[1] }]} />
-        <View style={styles.artworkTitle}>
-          <Text style={styles.artworkTitleText} numberOfLines={2}>{data.album.title}</Text>
-        </View>
-      </View>
-    );
+interface AlbumScreenProps {
+  route: {
+    params: {
+      albumId: string;
+    };
   };
-  
-  return (
-    <View style={styles.albumHeader}>
-      {data.album.thumbnail ? (
-        <Image source={{ uri: data.album.thumbnail }} style={styles.albumArt} />
-      ) : (
-        generateArtwork()
-      )}
-      <Text style={styles.albumType}>{data.album.type || 'Album'}</Text>
-      <Text style={styles.albumTitle}>{data.album.title || 'Unknown Album'}</Text>
-      <Text style={styles.albumArtist}>{data.album.artist || 'Unknown Artist'}</Text>
-      <Text style={styles.albumYear}>{data.album.year || ''} {data.album.year && '•'} {data.songs?.length || 0} songs</Text>
-    
-    <View style={styles.buttonRow}>
-      <TouchableOpacity style={styles.playButton} onPress={onPlay}>
-        <Ionicons name="play" size={24} color="#000" />
-        <Text style={styles.playButtonText}>Play</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.shuffleButton} onPress={onShuffle}>
-        <Ionicons name="shuffle" size={24} color="#fff" />
-        <Text style={styles.shuffleButtonText}>Shuffle</Text>
-      </TouchableOpacity>
-    </View>
-  </View>
-  );
-});
+  navigation: any;
+}
 
-export default function AlbumScreen({ route, navigation }: any) {
+export default function AlbumScreen({ route, navigation }: AlbumScreenProps) {
   const { albumId } = route.params;
-  const [data, setData] = useState<any>(null);
+  const [album, setAlbum] = useState<AlbumDetails | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showContent, setShowContent] = useState(false);
-  const { playSong } = usePlayer();
+  const [scrollY] = useState(new Animated.Value(0));
+  const theme = useTheme();
+  const { openSongOptions } = useSongOptions();
+  const { playTrack } = usePlayer();
 
   useEffect(() => {
     loadAlbum();
-    const timer = setTimeout(() => setShowContent(true), 300);
-    return () => clearTimeout(timer);
   }, [albumId]);
 
-  const loadAlbum = useCallback(async () => {
+  const loadAlbum = async () => {
     setLoading(true);
-    try {
-      const result = await InnerTube.getAlbum(albumId);
-      setData(result);
-    } catch (error) {
-      // Error loading album handled silently
-    } finally {
-      setLoading(false);
-    }
-  }, [albumId]);
+    const data = await AlbumAPI.getAlbumDetails(albumId);
+    setAlbum(data);
+    setLoading(false);
+  };
 
-  const renderSongItem = useCallback(({ item, index }: any) => (
-    <SongItem
-      item={item}
-      index={index}
-      onPress={() => {
-        const queue = data.songs.slice(index + 1);
-        playSong(item, queue, false);
-      }}
-    />
-  ), [data?.songs, playSong]);
+  const trackQueue = album?.tracks.map((track) => ({
+    id: track.id,
+    title: track.title,
+    artist: track.artist,
+    thumbnail: track.thumbnail || album?.thumbnail || '',
+  })) ?? [];
 
-  const keyExtractor = useCallback((item: any, index: number) => `${item.id}-${index}`, []);
+  const renderTrack = (track: AlbumTrack, index: number) => (
+    <TouchableOpacity
+      key={`${track.id}-${index}`}
+      style={[styles.trackItem, { borderBottomColor: theme.colors.outline }]}
+      activeOpacity={0.7}
+      onPress={() => playTrack({
+        id: track.id,
+        title: track.title,
+        artist: track.artist,
+        thumbnail: track.thumbnail || album?.thumbnail || '',
+      }, trackQueue)}
+      onLongPress={() => openSongOptions({
+        videoId: track.id,
+        title: track.title,
+        artist: track.artist,
+        thumbnail: track.thumbnail,
+      })}
+    >
+      <Image 
+        source={{ uri: album.thumbnail }} 
+        style={[styles.trackThumbnail, { backgroundColor: theme.colors.surfaceVariant }]}
+      />
+      
+      <View style={styles.trackInfo}>
+        <Text 
+          variant="bodyMedium" 
+          numberOfLines={1}
+          style={[styles.trackTitle, { color: theme.colors.onSurface }]}
+        >
+          {track.title}
+        </Text>
+        <Text 
+          variant="bodySmall" 
+          numberOfLines={1}
+          style={[styles.trackArtist, { color: theme.colors.onSurfaceVariant }]}
+        >
+          {track.artist}
+        </Text>
+      </View>
+      
+      {track.duration && (
+        <Text 
+          variant="bodySmall" 
+          style={[styles.trackDuration, { color: theme.colors.onSurfaceVariant }]}
+        >
+          {track.duration}
+        </Text>
+      )}
+      
+      <IconButton
+        icon="dots-vertical"
+        size={20}
+        iconColor={theme.colors.onSurfaceVariant}
+        onPress={() => openSongOptions({
+          videoId: track.id,
+          title: track.title,
+          artist: track.artist,
+          thumbnail: track.thumbnail,
+        })}
+      />
+    </TouchableOpacity>
+  );
 
-  const getItemLayout = useCallback((data: any, index: number) => ({
-    length: ITEM_HEIGHT,
-    offset: ITEM_HEIGHT * index,
-    index,
-  }), []);
-
-  const headerComponent = useMemo(() => (
-    <AlbumHeader
-      data={data}
-      onPlay={() => {
-        if (data.songs.length > 0) {
-          const queue = data.songs.slice(1);
-          playSong(data.songs[0], queue, false);
-        }
-      }}
-      onShuffle={() => {
-        if (data.songs.length > 0) {
-          const shuffled = [...data.songs].sort(() => Math.random() - 0.5);
-          const queue = shuffled.slice(1);
-          playSong(shuffled[0], queue, false);
-        }
-      }}
-    />
-  ), [data, playSong]);
+  const renderSuggestion = (suggestion: AlbumSuggestion) => (
+    <View key={suggestion.id} style={styles.suggestionItem}>
+      <Image 
+        source={{ uri: suggestion.thumbnail }} 
+        style={[styles.suggestionThumbnail, { backgroundColor: theme.colors.surfaceVariant }]}
+      />
+      <Text 
+        variant="bodySmall" 
+        numberOfLines={2}
+        style={[styles.suggestionTitle, { color: theme.colors.onSurface }]}
+      >
+        {suggestion.title}
+      </Text>
+      <Text 
+        variant="bodySmall" 
+        numberOfLines={1}
+        style={[styles.suggestionArtist, { color: theme.colors.onSurfaceVariant }]}
+      >
+        {suggestion.artist}
+      </Text>
+    </View>
+  );
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <ActivityIndicator size="large" color="#fff" style={{ marginTop: 100 }} />
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
+        <View style={styles.loading}>
+          <Text>Loading album...</Text>
+        </View>
       </SafeAreaView>
     );
   }
 
-  if (!data || !data.album) {
+  if (!album) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.errorText}>Failed to load album</Text>
-        {data && <Text style={styles.errorText}>{JSON.stringify(data, null, 2)}</Text>}
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
+        <View style={styles.loading}>
+          <Text>Album not found</Text>
+        </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <ImageBackground 
-        source={data?.album?.thumbnail ? { uri: data.album.thumbnail } : undefined}
-        style={StyleSheet.absoluteFillObject}
-        blurRadius={50}
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
+      {/* Animated Header */}
+      <Animated.View 
+        style={[
+          styles.animatedHeader,
+          {
+            backgroundColor: theme.colors.surface,
+            opacity: scrollY.interpolate({
+              inputRange: [200, 250],
+              outputRange: [0, 1],
+              extrapolate: 'clamp',
+            }),
+          }
+        ]}
       >
-        <LinearGradient
-          colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.8)', '#000']}
-          locations={[0, 0.4, 0.7]}
-          style={StyleSheet.absoluteFillObject}
-        />
-      </ImageBackground>
-      
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <View style={styles.backButtonContainer}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('AssistantScreen')} style={styles.assistantButton}>
-            <Ionicons name="mic" size={24} color="#1db954" />
-          </TouchableOpacity>
+        <Appbar.Header style={{ backgroundColor: 'transparent' }}>
+          <Appbar.BackAction onPress={() => navigation.goBack()} />
+          <Appbar.Content title={album?.title || ''} />
+          <Appbar.Action icon="dots-vertical" onPress={() => {}} />
+        </Appbar.Header>
+      </Animated.View>
+
+      <Animated.ScrollView 
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: false }
+        )}
+        scrollEventThrottle={16}
+      >
+        <View style={[styles.header, { backgroundColor: theme.colors.surface }]}>
+          <View style={styles.headerContent}>
+            <IconButton
+              icon="arrow-left"
+              size={24}
+              iconColor={theme.colors.onSurface}
+              onPress={() => navigation.goBack()}
+              style={styles.backButton}
+            />
+            
+            <Image 
+              source={{ uri: album.thumbnail }} 
+              style={[styles.albumThumbnail, { backgroundColor: theme.colors.surfaceVariant }]}
+            />
+            
+            <View style={styles.albumInfo}>
+              <Text variant="headlineSmall" style={[styles.albumTitle, { color: theme.colors.onSurface }]}>
+                {album.title}
+              </Text>
+              
+              <Text variant="bodyMedium" style={[styles.albumArtist, { color: theme.colors.onSurfaceVariant }]}>
+                {album.artist}
+              </Text>
+              
+              <Text variant="bodySmall" style={[styles.albumSubtitle, { color: theme.colors.onSurfaceVariant }]}>
+                {album.subtitle}
+              </Text>
+              
+              <Text variant="bodySmall" style={[styles.albumSecondSubtitle, { color: theme.colors.onSurfaceVariant }]}>
+                {album.secondSubtitle}
+              </Text>
+            </View>
+          </View>
+          
+          <View style={styles.actionButtons}>
+            <Button
+              mode="contained"
+              icon="play"
+              onPress={() => {}}
+              style={styles.playButton}
+            >
+              Play
+            </Button>
+            
+            <IconButton
+              icon="shuffle"
+              size={24}
+              iconColor={theme.colors.onSurface}
+              onPress={() => {}}
+            />
+            
+            <IconButton
+              icon="plus"
+              size={24}
+              iconColor={theme.colors.onSurface}
+              onPress={() => {}}
+            />
+            
+            <IconButton
+              icon="dots-vertical"
+              size={24}
+              iconColor={theme.colors.onSurface}
+              onPress={() => {}}
+            />
+          </View>
+        </View>
+        
+        <View style={[styles.tracksContainer, { backgroundColor: theme.colors.background }]}>
+          {album.tracks.map((track, index) => renderTrack(track, index))}
         </View>
 
-        <FlashList
-          data={showContent ? data.songs : []}
-          keyExtractor={keyExtractor}
-          renderItem={renderSongItem}
-          estimatedItemSize={60}
-          ListHeaderComponent={headerComponent}
-          contentContainerStyle={{ paddingBottom: 80 }}
-        />
-      </SafeAreaView>
-    </View>
+        {album.suggestions && album.suggestions.length > 0 && (
+          <View style={[styles.suggestionsContainer, { backgroundColor: theme.colors.background }]}>
+            <Text variant="titleMedium" style={[styles.suggestionsTitle, { color: theme.colors.onSurface }]}>
+              Releases for you
+            </Text>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.suggestionsScroll}
+            >
+              {album.suggestions.map(renderSuggestion)}
+            </ScrollView>
+          </View>
+        )}
+      </Animated.ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  safeArea: { flex: 1 },
-  backButtonContainer: { position: 'absolute', top: 50, left: 16, zIndex: 10, flexDirection: 'row', gap: 12 },
-  backButton: { padding: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 },
-  assistantButton: { padding: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 },
-  albumHeader: { alignItems: 'center', padding: 16, paddingTop: 60 },
-  albumArt: { width: 200, height: 200, borderRadius: 8, marginBottom: 16 },
-  generatedArtwork: {
+  container: {
+    flex: 1,
+  },
+  loading: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  header: {
+    paddingBottom: 24,
+  },
+  headerContent: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  backButton: {
+    alignSelf: 'flex-start',
+    marginBottom: 16,
+  },
+  albumThumbnail: {
     width: 200,
     height: 200,
     borderRadius: 8,
+    alignSelf: 'center',
     marginBottom: 16,
-    position: 'relative',
-    justifyContent: 'center',
+  },
+  albumInfo: {
     alignItems: 'center',
+    gap: 4,
   },
-  artworkPattern: {
-    position: 'absolute',
-    top: 20,
-    right: 20,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
+  albumTitle: {
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  albumArtist: {
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  albumSubtitle: {
+    textAlign: 'center',
+  },
+  albumSecondSubtitle: {
+    textAlign: 'center',
+  },
+  actionButtons: {
+    flexDirection: 'row',
     alignItems: 'center',
-    opacity: 0.8,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    marginTop: 24,
+    gap: 8,
   },
-  patternText: {
-    fontSize: 20,
-    color: '#fff',
-    fontWeight: '900',
+  playButton: {
+    borderRadius: 24,
   },
-  artworkOverlay: {
+  tracksContainer: {
+    paddingTop: 16,
+  },
+  trackItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 0.5,
+  },
+  trackThumbnail: {
+    width: 48,
+    height: 48,
+    borderRadius: 6,
+    marginRight: 12,
+  },
+  trackInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  trackTitle: {
+    fontWeight: '500',
+  },
+  trackArtist: {
+    fontSize: 13,
+  },
+  trackDuration: {
+    fontSize: 12,
+    marginRight: 8,
+  },
+  suggestionsContainer: {
+    paddingTop: 24,
+    paddingBottom: 16,
+  },
+  suggestionsTitle: {
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    fontWeight: '600',
+  },
+  suggestionsScroll: {
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  suggestionItem: {
+    width: 120,
+  },
+  suggestionThumbnail: {
+    width: 120,
+    height: 120,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  suggestionTitle: {
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  suggestionArtist: {
+    fontSize: 12,
+  },
+  animatedHeader: {
     position: 'absolute',
-    bottom: 0,
+    top: 0,
     left: 0,
     right: 0,
-    height: 60,
-    opacity: 0.4,
-    borderBottomLeftRadius: 8,
-    borderBottomRightRadius: 8,
+    zIndex: 1000,
+    elevation: 4,
   },
-  artworkTitle: {
-    position: 'absolute',
-    bottom: 10,
-    left: 10,
-    right: 10,
-  },
-  artworkTitleText: {
-    fontSize: 14,
-    color: '#fff',
-    fontWeight: '700',
-    textAlign: 'center',
-    textShadowColor: 'rgba(0,0,0,0.8)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-  albumType: { fontSize: 12, color: '#aaa', textTransform: 'uppercase', marginBottom: 4, textAlign: 'center' },
-  albumTitle: { fontSize: 24, fontWeight: 'bold', color: '#fff', textAlign: 'center', marginBottom: 8 },
-  albumArtist: { fontSize: 16, color: '#fff', marginBottom: 4, textAlign: 'center' },
-  albumYear: { fontSize: 14, color: '#aaa', marginBottom: 24, textAlign: 'center' },
-  buttonRow: { flexDirection: 'row', gap: 12 },
-  playButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1db954', paddingVertical: 12, borderRadius: 24, gap: 8 },
-  playButtonText: { color: '#000', fontSize: 16, fontWeight: 'bold' },
-  shuffleButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#333', paddingVertical: 12, borderRadius: 24, gap: 8 },
-  shuffleButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  songItem: { flexDirection: 'row', alignItems: 'center', padding: 12, paddingHorizontal: 16 },
-  trackNumber: { width: 30, fontSize: 16, color: '#666', textAlign: 'center' },
-  songInfo: { flex: 1, marginLeft: 12 },
-  songTitle: { fontSize: 16, color: '#fff', fontWeight: '500' },
-  songArtist: { fontSize: 14, color: '#aaa', marginTop: 2 },
-  errorText: { color: '#fff', textAlign: 'center', marginTop: 100, fontSize: 16 },
 });

@@ -1,91 +1,79 @@
-import React, { useEffect, useRef } from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View } from 'react-native';
+import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { View, StyleSheet, InteractionManager, AppState } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { PaperProvider } from 'react-native-paper';
+import { InteractionManager } from 'react-native';
 
-import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import AppNavigator from './src/navigation/AppNavigator';
-import { PlayerProvider } from './src/store/PlayerContext';
-import { LibraryProvider } from './src/store/LibraryContext';
-import { AuthProvider } from './src/store/AuthContext';
-import { DownloadProvider } from './src/store/DownloadContext';
-import { NotificationProvider } from './src/store/NotificationContext';
-import { AnimationProvider } from './src/store/AnimationContext';
-import { NetworkProvider } from './src/store/NetworkContext';
-import { PaperProvider } from './src/providers/PaperProvider';
-import MiniPlayer from './src/components/MiniPlayer';
-import { checkForUpdatesV2 } from './src/utils/updateCheckerV2';
-import { lyricsCache } from './src/utils/lyricsCache';
+import AuthScreen from './src/screens/AuthScreen';
+import LoginScreen from './src/screens/LoginScreen';
+import { AuthProvider, useAuth } from './src/contexts/AuthContext';
+import { PlayerProvider } from './src/contexts/PlayerContext';
+import { SongOptionsProvider } from './src/contexts/SongOptionsContext';
+import { darkTheme } from './src/theme/theme';
+import { AuthCookie } from './src/utils/cookieManager';
+import MusicController from './src/components/MusicController';
 
-// Enable StrictMode in development
-if (__DEV__) {
-  const { enableScreens } = require('react-native-screens');
-  enableScreens(true);
-}
+const AppContent = React.memo(() => {
+  const { isAuthenticated, login } = useAuth();
+  const [showAuthScreen, setShowAuthScreen] = useState(false);
+  const navigationRef = useNavigationContainerRef();
+  const [routeName, setRouteName] = useState<string | undefined>(undefined);
+
+  const handleAuthComplete = useCallback((cookies: AuthCookie[]) => {
+    // Run auth completion after interactions to avoid blocking UI
+    InteractionManager.runAfterInteractions(() => {
+      login(cookies);
+    });
+  }, [login]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setShowAuthScreen(false);
+    }
+  }, [isAuthenticated]);
+
+  if (!isAuthenticated) {
+    if (!showAuthScreen) {
+      return <LoginScreen onLoginPress={() => setShowAuthScreen(true)} />;
+    }
+
+    return <AuthScreen onAuthComplete={handleAuthComplete} />;
+  }
+
+  return (
+    <PlayerProvider>
+      <SongOptionsProvider>
+        <NavigationContainer
+          ref={navigationRef}
+          onReady={() => setRouteName(navigationRef.getCurrentRoute()?.name)}
+          onStateChange={() => setRouteName(navigationRef.getCurrentRoute()?.name)}
+        >
+          <View style={{ flex: 1 }}>
+            <AppNavigator />
+            <MusicController
+              bottomOffset={routeName === 'Main' ? 88 : 8}
+              activeRouteName={routeName}
+            />
+          </View>
+        </NavigationContainer>
+      </SongOptionsProvider>
+    </PlayerProvider>
+  );
+});
 
 export default function App() {
-  const navigationRef = useRef<any>(null);
-
-  useEffect(() => {
-    // Keep app awake during music playback
-    activateKeepAwakeAsync();
-    
-    // Initialize lyrics cache
-    lyricsCache.initialize();
-    
-    return () => {
-      deactivateKeepAwake();
-    };
-  }, []);
-
-  useEffect(() => {
-    // Defer non-critical initialization until after interactions
-    const checkUpdates = () => {
-      InteractionManager.runAfterInteractions(async () => {
-        try {
-          const { hasUpdate, updateInfo, selectedDownload } = await checkForUpdatesV2();
-          if (hasUpdate && updateInfo && selectedDownload && navigationRef.current) {
-            navigationRef.current?.navigate('Update', { updateInfo, selectedDownload });
-          }
-        } catch (error) {
-          // Update check failed silently
-        }
-      });
-    };
-    
-    // Delay update check to not block startup
-    setTimeout(checkUpdates, 3000);
-  }, []);
-
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <PaperProvider>
-          <NetworkProvider>
-            <AnimationProvider>
-              <NotificationProvider>
-                <AuthProvider>
-                  <LibraryProvider>
-                    <DownloadProvider>
-                      <PlayerProvider>
-                        <NavigationContainer
-                          ref={navigationRef}
-                          onReady={() => {
-                            // Navigation ready
-                          }}
-                        >
-                          <AppNavigator />
-                        </NavigationContainer>
-                      </PlayerProvider>
-                    </DownloadProvider>
-                  </LibraryProvider>
-                </AuthProvider>
-              </NotificationProvider>
-            </AnimationProvider>
-          </NetworkProvider>
+        <PaperProvider theme={darkTheme}>
+          <AuthProvider>
+            <AppContent />
+          </AuthProvider>
         </PaperProvider>
-        </SafeAreaProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

@@ -1,279 +1,386 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, Dimensions, Share, Alert, ScrollView, FlatList } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useDownload } from '../store/DownloadContext';
-import { useLibrary } from '../store/LibraryContext';
-import { useNotification } from '../store/NotificationContext';
-import CreatePlaylistModal from './CreatePlaylistModal';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Image, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import {
+  Button,
+  Divider,
+  HelperText,
+  ActivityIndicator,
+  IconButton,
+  List,
+  Modal,
+  Portal,
+  Text,
+  useTheme,
+} from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AuthenticatedHttpClient } from '../utils/authenticatedHttpClient';
+import { parseLibraryData, LibraryItem } from '../utils/libraryParser';
+import { PlaylistAPI } from '../../api/playlist';
 
-const OptionItem = React.memo(({ option }: any) => (
-  <TouchableOpacity style={styles.option} onPress={option.onPress} activeOpacity={0.7}>
-    <Ionicons name={option.icon as any} size={24} color={option.color || '#fff'} />
-    <Text style={[styles.optionText, { color: option.color || '#fff' }]}>{option.label}</Text>
-  </TouchableOpacity>
-));
+export interface SongOptionItem {
+  videoId: string;
+  title: string;
+  artist?: string;
+  thumbnail?: string;
+  isLiked?: boolean;
+}
 
 interface SongOptionsModalProps {
   visible: boolean;
-  onClose: () => void;
-  song: any;
-  showDeleteOption?: boolean;
-  playlistId?: string;
-  navigation?: any;
+  song: SongOptionItem | null;
+  onDismiss: () => void;
 }
 
-export default function SongOptionsModal({ visible, onClose, song, showDeleteOption = false, playlistId, navigation }: SongOptionsModalProps) {
-  const { deleteSong } = useDownload();
-  const { isLiked, addLikedSong, removeLikedSong, playlists, addToPlaylist, removeFromPlaylist } = useLibrary();
-  const { showToast } = useNotification();
-  const [showCreatePlaylist, setShowCreatePlaylist] = useState(false);
-  const [showPlaylistPicker, setShowPlaylistPicker] = useState(false);
+const SongOptionsModal = ({ visible, song, onDismiss }: SongOptionsModalProps) => {
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  const [likeLoading, setLikeLoading] = useState(false);
+  const [isLiked, setIsLiked] = useState(false);
+  const [likedIds, setLikedIds] = useState<Set<string>>(() => new Set());
+  const [likedStatus, setLikedStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [playlistLoading, setPlaylistLoading] = useState(false);
+  const [playlists, setPlaylists] = useState<LibraryItem[]>([]);
+  const [addingPlaylistId, setAddingPlaylistId] = useState<string | null>(null);
 
-  const handleDelete = () => {
-    deleteSong(song.id);
-    onClose();
-  };
-
-  const handleShare = async () => {
+  const loadLikedIds = useCallback(async () => {
+    if (likedStatus === 'loading' || likedStatus === 'ready') return;
+    setLikedStatus('loading');
     try {
-      const artistNames = song?.artists?.map((a: any) => a.name).join(', ') || 'Unknown Artist';
-      const youtubeUrl = `https://music.youtube.com/watch?v=${song?.id}`;
-      
-      const shareMessage = `🎵 ${song?.title}\n👤 ${artistNames}\n\n🎧 Listen on YouTube Music:\n${youtubeUrl}\n\nShared via AuraMusic`;
-      
-      await Share.share({
-        message: shareMessage,
-        title: `${song?.title} - ${artistNames}`,
-        url: youtubeUrl,
-      });
+      const response = await AuthenticatedHttpClient.getUserLibrary();
+      const sections = parseLibraryData(response);
+      const allItems = sections.flatMap((section) => section.items);
+      const likedPlaylist =
+        allItems.find((item) => item.type === 'playlist' && /liked music/i.test(item.title)) ||
+        allItems.find((item) => item.type === 'playlist' && /liked/i.test(item.title));
+      const likedPlaylistId = likedPlaylist?.id || 'LM';
+
+      const playlist = await PlaylistAPI.getPlaylistDetails(likedPlaylistId);
+      if (!playlist) {
+        setLikedStatus('error');
+        return;
+      }
+
+      const nextLikedIds = new Set<string>();
+      playlist.tracks.forEach((track) => nextLikedIds.add(track.id));
+
+      let continuation = playlist.continuationToken;
+      let guard = 0;
+      while (continuation && guard < 10 && nextLikedIds.size < 2000) {
+        const more = await PlaylistAPI.loadMoreTracks(continuation);
+        if (!more) break;
+        more.tracks.forEach((track) => nextLikedIds.add(track.id));
+        continuation = more.continuationToken;
+        guard += 1;
+      }
+
+      setLikedIds(nextLikedIds);
+      setLikedStatus('ready');
     } catch (error) {
-      // Share error handled silently
+      console.error('Failed to load liked songs', error);
+      setLikedStatus('error');
     }
-    onClose();
-  };
+  }, [likedStatus]);
 
-  const handleLike = () => {
-    const liked = isLiked(song.id);
-    if (liked) {
-      removeLikedSong(song.id);
+  useEffect(() => {
+    if (!visible) {
+      setActionError(null);
+      setMessage(null);
+      setExpanded(false);
+      setPlaylists([]);
+      setAddingPlaylistId(null);
+      setPlaylistLoading(false);
+      return;
+    }
+    if (likedStatus === 'idle') {
+      loadLikedIds();
+    }
+  }, [likedIds, likedStatus, loadLikedIds, song?.isLiked, song?.videoId, visible]);
+
+  useEffect(() => {
+    if (!visible) return;
+    if (song?.videoId) {
+      const cachedLiked = likedIds.has(song.videoId);
+      setIsLiked(song.isLiked ?? cachedLiked);
     } else {
-      addLikedSong(song);
+      setIsLiked(false);
     }
-    onClose();
-  };
+  }, [likedIds, song?.isLiked, song?.videoId, visible]);
 
-  const handleAddToPlaylist = async (playlistId: string) => {
-    const playlist = playlists.find(p => p.id === playlistId);
-    if (!playlist) return;
-    
-    setShowPlaylistPicker(false);
-    onClose();
-    
-    // Background sync
-    const result = await addToPlaylist(playlistId, song);
-    
-    if (result) {
-      showToast(`Added to ${playlist.title}`);
-    } else {
-      showToast(`Failed to add to ${playlist.title}`);
+  const subtitle = useMemo(() => {
+    const parts = [];
+    if (song?.artist) parts.push(song.artist);
+    return parts.join(' • ');
+  }, [song?.artist]);
+
+  const handleLike = useCallback(async () => {
+    if (!song?.videoId || likeLoading) return;
+    setLikeLoading(true);
+    setActionError(null);
+    setMessage(null);
+
+    try {
+      if (isLiked) {
+        await AuthenticatedHttpClient.removeLikeSong(song.videoId);
+        setIsLiked(false);
+        setLikedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(song.videoId);
+          return next;
+        });
+        setMessage('Removed from liked music');
+        setLikeLoading(false);
+        return;
+      }
+
+      await AuthenticatedHttpClient.likeSong(song.videoId);
+      setIsLiked(true);
+      setLikedIds((prev) => {
+        const next = new Set(prev);
+        next.add(song.videoId);
+        return next;
+      });
+      setMessage('Saved to liked music');
+    } catch (error) {
+      console.error('Failed to like song', error);
+      setActionError(isLiked ? 'Unable to remove like right now.' : 'Unable to like this song right now.');
+    } finally {
+      setLikeLoading(false);
     }
-  };
+  }, [isLiked, likeLoading, song?.videoId]);
 
-  const handleGoToArtist = () => {
-    if (song?.artists?.[0]?.id && navigation) {
-      navigation.navigate('Artist', { artistId: song.artists[0].id });
+  const openPlaylistPicker = useCallback(async () => {
+    if (!song?.videoId) return;
+    setExpanded(true);
+    setPlaylistLoading(true);
+    setActionError(null);
+    setMessage(null);
+
+    try {
+      const response = await AuthenticatedHttpClient.getUserLibrary();
+      const sections = parseLibraryData(response);
+      const playlistItems = sections
+        .flatMap((section) => section.items)
+        .filter((item) => item.type === 'playlist');
+      setPlaylists(playlistItems);
+    } catch (error) {
+      console.error('Failed to load playlists', error);
+      setActionError('Unable to load playlists right now.');
+    } finally {
+      setPlaylistLoading(false);
     }
-    onClose();
-  };
+  }, [song?.videoId]);
 
-  const handleGoToAlbum = () => {
-    if (song?.album?.id && navigation) {
-      navigation.navigate('Album', { albumId: song.album.id });
-    } else {
-      Alert.alert('Album Not Available', 'Album information is not available for this song.');
+  const handleAddToPlaylist = useCallback(async (playlistId: string) => {
+    if (!song?.videoId || addingPlaylistId) return;
+    setAddingPlaylistId(playlistId);
+    setActionError(null);
+    setMessage(null);
+
+    try {
+      await AuthenticatedHttpClient.addToPlaylist(playlistId, song.videoId);
+      setMessage('Added to playlist');
+      setExpanded(false);
+    } catch (error) {
+      console.error('Failed to add to playlist', error);
+      setActionError('Unable to add to playlist right now.');
+    } finally {
+      setAddingPlaylistId(null);
     }
-    onClose();
-  };
+  }, [addingPlaylistId, song?.videoId]);
 
-  const handleRemoveFromPlaylist = async () => {
-    if (!playlistId) return;
-    
-    const playlist = playlists.find(p => p.id === playlistId);
-    if (!playlist) return;
-    
-    onClose();
-    
-    const result = await removeFromPlaylist(playlistId, song.id);
-    
-    if (result) {
-      showToast(`Removed from ${playlist.title}`);
-      // Force refresh of the playlist screen by triggering a re-render
-      setTimeout(() => {
-        if (navigation && navigation.getState) {
-          const currentRoute = navigation.getState().routes[navigation.getState().index];
-          if (currentRoute.name === 'Playlist') {
-            navigation.replace('Playlist', { playlistId, videoId: currentRoute.params?.videoId });
-          }
-        }
-      }, 100);
-    } else {
-      showToast(`Failed to remove from ${playlist.title}`);
-    }
-  };
-
-  const liked = isLiked(song?.id);
-  const userPlaylists = useMemo(() => playlists.filter(p => p.type === 'playlist' || !p.type), [playlists]);
-  const currentPlaylist = playlistId ? playlists.find(p => p.id === playlistId) : null;
-  
-  // Check if we can remove from playlist - more permissive check
-  const canRemoveFromPlaylist = playlistId && currentPlaylist && (
-    currentPlaylist.isLocal === true || 
-    currentPlaylist.author === 'You' ||
-    currentPlaylist.author === 'you' ||
-    !currentPlaylist.author // Local playlists might not have author set
-  );
-  
-  const renderOption = useCallback(({ item }: any) => <OptionItem option={item} />, []);
-  const keyExtractor = useCallback((item: any) => item.id, []);
-  
-  const options = [
-    { 
-      icon: liked ? 'heart' : 'heart-outline', 
-      label: liked ? 'Remove from Liked Songs' : 'Add to Liked Songs', 
-      onPress: handleLike,
-      color: liked ? '#1db954' : '#fff',
-      id: 'like'
-    },
-    { 
-      icon: 'add-outline', 
-      label: 'Add to Playlist', 
-      onPress: () => setShowPlaylistPicker(true), 
-      color: '#fff',
-      id: 'add-playlist'
-    },
-    { 
-      icon: 'share-outline', 
-      label: 'Share', 
-      onPress: handleShare, 
-      color: '#fff',
-      id: 'share'
-    },
-    { 
-      icon: 'person-outline', 
-      label: 'Go to Artist', 
-      onPress: handleGoToArtist, 
-      color: '#fff',
-      id: 'artist'
-    },
-    { 
-      icon: 'disc-outline', 
-      label: 'Go to Album', 
-      onPress: handleGoToAlbum, 
-      color: '#fff',
-      id: 'album'
-    },
-  ];
-
-  if (canRemoveFromPlaylist) {
-    options.splice(1, 0, { 
-      icon: 'remove-circle-outline', 
-      label: `Remove from ${currentPlaylist.title}`, 
-      onPress: handleRemoveFromPlaylist, 
-      color: '#ff6b6b',
-      id: 'remove-playlist'
-    });
-  }
-
-  if (showDeleteOption) {
-    options.push({ icon: 'trash-outline', label: 'Delete Download', onPress: handleDelete, color: '#ff4757' });
-  }
+  const maxSheetHeight = expanded ? Math.max(windowHeight * 0.92, 420) : Math.max(windowHeight * 0.45, 280);
+  const bottomPadding = Math.max(insets.bottom, 16);
+  const subtitleText = subtitle || ' ';
 
   return (
     <>
-      <Modal
-        visible={visible}
-        transparent
-        animationType="slide"
-        onRequestClose={onClose}
-      >
-        <TouchableOpacity style={styles.overlay} onPress={onClose} activeOpacity={1}>
-          <View style={styles.modal}>
-            <View style={styles.handle} />
-            <View style={styles.header}>
-              <Text style={styles.songTitle} numberOfLines={1}>{song?.title}</Text>
-              <Text style={styles.songArtist} numberOfLines={1}>
-                {song?.artists?.map((a: any) => a.name).join(', ')}
+      <Portal>
+        <Modal
+          visible={visible}
+          onDismiss={onDismiss}
+          style={styles.modalRoot}
+          contentContainerStyle={[
+            styles.sheet,
+            {
+              backgroundColor: theme.colors.surface,
+              paddingBottom: bottomPadding,
+              maxHeight: maxSheetHeight,
+              height: expanded ? maxSheetHeight : undefined,
+            },
+          ]}
+        >
+          <View style={[styles.handle, { backgroundColor: theme.colors.onSurfaceVariant }]} />
+          <View style={styles.headerRow}>
+            <Text variant="titleMedium" style={{ color: theme.colors.onSurface }}>
+              {expanded ? 'Add to playlist' : 'Song options'}
+            </Text>
+            <View style={styles.headerActions}>
+              <IconButton
+                icon={expanded ? 'chevron-down' : 'chevron-up'}
+                size={20}
+                onPress={() => setExpanded((prev) => !prev)}
+                iconColor={theme.colors.onSurfaceVariant}
+              />
+              <IconButton
+                icon="close"
+                size={20}
+                onPress={onDismiss}
+                iconColor={theme.colors.onSurfaceVariant}
+              />
+            </View>
+          </View>
+
+          <View style={styles.songRow}>
+            {song?.thumbnail ? (
+              <Image source={{ uri: song.thumbnail }} style={styles.thumbnail} />
+            ) : (
+              <View style={[styles.thumbnail, styles.thumbnailPlaceholder, { backgroundColor: theme.colors.surfaceVariant }]}>
+                <MaterialCommunityIcons
+                  name="music-note"
+                  size={22}
+                  color={theme.colors.onSurfaceVariant}
+                />
+              </View>
+            )}
+            <View style={styles.songMeta}>
+              <Text variant="titleSmall" numberOfLines={1} style={{ color: theme.colors.onSurface }}>
+                {song?.title || 'Song options'}
+              </Text>
+              <Text variant="bodySmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant }}>
+                {subtitleText}
               </Text>
             </View>
-            <FlatList
-              data={options}
-              keyExtractor={keyExtractor}
-              renderItem={renderOption}
-              style={styles.options}
-              showsVerticalScrollIndicator={false}
-            />
           </View>
-        </TouchableOpacity>
-      </Modal>
 
-      <Modal
-        visible={showPlaylistPicker}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowPlaylistPicker(false)}
-      >
-        <TouchableOpacity style={styles.overlay} onPress={() => setShowPlaylistPicker(false)} activeOpacity={1}>
-          <View style={styles.modal}>
-            <View style={styles.handle} />
-            <View style={styles.header}>
-              <Text style={styles.songTitle}>Add to Playlist</Text>
+          <Divider style={styles.divider} />
+
+          {!expanded ? (
+            <List.Section>
+              <List.Item
+                title={isLiked ? 'Remove from liked' : 'Like'}
+                onPress={handleLike}
+                left={(props) => (
+                  <List.Icon {...props} icon={isLiked ? 'thumb-up' : 'thumb-up-outline'} />
+                )}
+                right={() => likeLoading ? <ActivityIndicator size="small" /> : null}
+                disabled={likeLoading}
+              />
+              <List.Item
+                title="Add to playlist"
+                onPress={openPlaylistPicker}
+                left={(props) => <List.Icon {...props} icon="playlist-music-outline" />}
+                disabled={likeLoading}
+              />
+            </List.Section>
+          ) : (
+            <View style={styles.playlistSection}>
+              {playlistLoading ? (
+                <Text style={{ color: theme.colors.onSurfaceVariant }}>Loading playlists...</Text>
+              ) : playlists.length === 0 ? (
+                <Text style={{ color: theme.colors.onSurfaceVariant }}>No playlists found.</Text>
+              ) : (
+                <ScrollView style={styles.playlistList} contentContainerStyle={styles.playlistContent}>
+                  {playlists.map((playlist) => (
+                    <Button
+                      key={playlist.id}
+                      mode="text"
+                      onPress={() => handleAddToPlaylist(playlist.id)}
+                      loading={addingPlaylistId === playlist.id}
+                      disabled={!!addingPlaylistId}
+                      style={styles.playlistButton}
+                      contentStyle={styles.playlistButtonContent}
+                      labelStyle={{ color: theme.colors.onSurface }}
+                    >
+                      {playlist.title || 'Untitled playlist'}
+                    </Button>
+                  ))}
+                </ScrollView>
+              )}
             </View>
-            <ScrollView style={styles.options} showsVerticalScrollIndicator={false}>
-              <TouchableOpacity
-                style={styles.option}
-                onPress={() => {
-                  setShowPlaylistPicker(false);
-                  setShowCreatePlaylist(true);
-                }}
-              >
-                <Ionicons name="add-circle-outline" size={24} color="#1db954" />
-                <Text style={[styles.optionText, { color: '#1db954' }]}>Create New Playlist</Text>
-              </TouchableOpacity>
-              {userPlaylists.map((playlist) => (
-                <TouchableOpacity
-                  key={playlist.id}
-                  style={styles.option}
-                  onPress={() => handleAddToPlaylist(playlist.id)}
-                >
-                  <Ionicons name="musical-notes-outline" size={24} color="#fff" />
-                  <Text style={styles.optionText}>{playlist.title}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+          )}
 
-      <CreatePlaylistModal 
-        visible={showCreatePlaylist} 
-        onClose={() => setShowCreatePlaylist(false)}
-        onPlaylistCreated={(playlistId) => {
-          setShowCreatePlaylist(false);
-          handleAddToPlaylist(playlistId);
-        }}
-      />
+          <HelperText type="error" visible={!!actionError}>
+            {actionError}
+          </HelperText>
+          <HelperText type="info" visible={!!message}>
+            {message}
+          </HelperText>
+        </Modal>
+      </Portal>
     </>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'flex-end' },
-  modal: { backgroundColor: '#1a1a1a', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 40, maxHeight: '80%' },
-  handle: { width: 40, height: 4, backgroundColor: '#666', borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 20 },
-  header: { paddingHorizontal: 20, paddingBottom: 20, borderBottomWidth: 1, borderBottomColor: '#333' },
-  songTitle: { fontSize: 18, fontWeight: '600', color: '#fff', marginBottom: 4 },
-  songArtist: { fontSize: 14, color: '#bbb' },
-  options: { paddingTop: 20, maxHeight: 400 },
-  option: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, backgroundColor: 'transparent' },
-  optionText: { fontSize: 16, marginLeft: 16, color: '#fff' },
+  modalRoot: {
+    justifyContent: 'flex-end',
+    margin: 0,
+  },
+  sheet: {
+    paddingTop: 8,
+    paddingHorizontal: 16,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    width: '100%',
+  },
+  handle: {
+    alignSelf: 'center',
+    width: 36,
+    height: 4,
+    borderRadius: 999,
+    marginBottom: 8,
+    opacity: 0.7,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  songRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  songMeta: {
+    flex: 1,
+  },
+  thumbnail: {
+    width: 52,
+    height: 52,
+    borderRadius: 8,
+  },
+  thumbnailPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  divider: {
+    marginVertical: 10,
+  },
+  playlistSection: {
+    flex: 1,
+  },
+  playlistList: {
+    flex: 1,
+  },
+  playlistContent: {
+    gap: 8,
+  },
+  playlistButton: {
+    alignItems: 'flex-start',
+  },
+  playlistButtonContent: {
+    justifyContent: 'flex-start',
+  },
 });
+
+export default SongOptionsModal;

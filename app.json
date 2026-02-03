@@ -30,7 +30,9 @@
         "ACCESS_NETWORK_STATE",
         "FOREGROUND_SERVICE",
         "WAKE_LOCK",
-        "RECORD_AUDIO"
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS",
+        "ACCESS_WIFI_STATE"
       ],
       "usesCleartextTraffic": true
     },

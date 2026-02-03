@@ -1,475 +1,517 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useLibrary } from '../store/LibraryContext';
-import { useDownload } from '../store/DownloadContext';
-import { usePlayer } from '../store/PlayerContext';
-import { InnerTube } from '../api/innertube';
-import TabHeader from '../components/TabHeader';
-import CreatePlaylistModal from '../components/CreatePlaylistModal';
-import SongOptionsModal from '../components/SongOptionsModal';
-import { useSongOptions } from '../hooks/useSongOptions';
-import { Song } from '../types';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  View,
+  StyleSheet,
+  FlatList,
+  Image,
+  TouchableOpacity,
+  RefreshControl,
+  ScrollView,
+} from 'react-native';
+import {
+  Text,
+  useTheme,
+  ActivityIndicator,
+  Surface,
+  AnimatedFAB,
+  Portal,
+  Modal,
+  TextInput,
+  Button,
+  RadioButton,
+  Switch,
+  HelperText,
+} from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { AuthenticatedHttpClient } from '../utils/authenticatedHttpClient';
+import { parseLibraryData, LibraryItem, LibrarySection } from '../utils/libraryParser';
 
-const categories = ['Playlists', 'Songs', 'Artists'];
+export default function LibraryScreen() {
+  const theme = useTheme();
+  const navigation = useNavigation();
+  const [sections, setSections] = useState<LibrarySection[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [createTitle, setCreateTitle] = useState('');
+  const [createDescription, setCreateDescription] = useState('');
+  const [createPrivacy, setCreatePrivacy] = useState<'PUBLIC' | 'UNLISTED' | 'PRIVATE'>('PRIVATE');
+  const [allowCollaborators, setAllowCollaborators] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [fabExtended, setFabExtended] = useState(true);
 
-export default function LibraryScreen({ navigation }: any) {
-  const { likedSongs, playlists, syncPlaylists, loadPlaylistSongs } = useLibrary();
-  const { downloadedSongs, downloadedPlaylists, playlistProgress, getPlaylistProgress } = useDownload();
-  const { playSong } = usePlayer();
-  const { modalVisible, selectedSong, showOptions, hideOptions } = useSongOptions();
-  const [selectedCategory, setSelectedCategory] = useState('Playlists');
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [allSongs, setAllSongs] = useState<Song[]>([]);
-  const [artistFilter, setArtistFilter] = useState('Subscribed');
-  const [loading, setLoading] = useState(false);
-
-  // Load all songs from playlists when Songs category is selected
-  useEffect(() => {
-    if (selectedCategory === 'Songs') {
-      loadAllSongs();
-    }
-  }, [selectedCategory, playlists]);
-
-  // Sync playlists on mount (only for authenticated users)
-  useEffect(() => {
-    const checkAuthAndSync = async () => {
-      const cookies = await AsyncStorage.getItem('ytm_cookies');
-      if (cookies) {
-        syncPlaylists();
-      }
-    };
-    checkAuthAndSync();
-  }, [syncPlaylists]);
-
-  const loadAllSongs = async () => {
-    setLoading(true);
+  const loadLibrary = useCallback(async () => {
+    setError(null);
     try {
-      const songs: Song[] = [...likedSongs];
-      
-      // Load songs from each playlist
-      for (const playlist of playlists) {
-        if (playlist.songs && playlist.songs.length > 0) {
-          // Add songs from local playlists
-          songs.push(...playlist.songs);
-        } else if (!playlist.isLocal) {
-          // Load songs from remote playlists
-          try {
-            const playlistSongs = await loadPlaylistSongs(playlist.id);
-            songs.push(...playlistSongs);
-          } catch (error) {
-            // Skip failed playlist loads
-          }
-        }
-      }
-      
-      // Remove duplicates based on song ID
-      const uniqueSongs = songs.filter((song, index, self) => 
-        index === self.findIndex(s => s.id === song.id)
-      );
-      
-      setAllSongs(uniqueSongs);
-    } catch (error) {
-      console.error('Failed to load all songs:', error);
+      const response = await AuthenticatedHttpClient.getUserLibrary();
+      const parsedSections = parseLibraryData(response);
+      setSections(parsedSections);
+    } catch (err) {
+      console.error('Failed to load library', err);
+      setError('Unable to load your library right now.');
+      setSections([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    setLoading(true);
+    loadLibrary().finally(() => setLoading(false));
+  }, [loadLibrary]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadLibrary();
+    setRefreshing(false);
+  }, [loadLibrary]);
+
+  const openCreateModal = useCallback(() => {
+    setCreateError(null);
+    setCreateModalVisible(true);
+  }, []);
+
+  const closeCreateModal = useCallback(() => {
+    if (creating) return;
+    setCreateModalVisible(false);
+  }, [creating]);
+
+  const resetCreateForm = useCallback(() => {
+    setCreateTitle('');
+    setCreateDescription('');
+    setCreatePrivacy('PRIVATE');
+    setAllowCollaborators(false);
+  }, []);
+
+  const handleCreatePlaylist = useCallback(async () => {
+    if (!createTitle.trim()) {
+      setCreateError('Please enter a playlist name.');
+      return;
+    }
+
+    setCreating(true);
+    setCreateError(null);
+
+    try {
+      await AuthenticatedHttpClient.createPlaylist({
+        title: createTitle.trim(),
+        description: createDescription.trim(),
+        privacyStatus: createPrivacy,
+        allowCollaborators,
+      });
+      setCreateModalVisible(false);
+      resetCreateForm();
+      await loadLibrary();
+    } catch (err) {
+      console.error('Failed to create playlist', err);
+      setCreateError('Unable to create the playlist right now.');
     } finally {
-      setLoading(false);
+      setCreating(false);
     }
-  };
+  }, [allowCollaborators, createDescription, createPrivacy, createTitle, loadLibrary, resetCreateForm]);
 
-  const libraryItems = useMemo(() => {
-    if (selectedCategory === 'Songs') {
-      return allSongs.map(song => ({
-        id: song.id,
-        title: song.title,
-        subtitle: song.artists?.map(a => a.name).join(', ') || 'Unknown Artist',
-        type: 'song',
-        thumbnail: song.thumbnailUrl,
-        onPress: () => playSong(song, allSongs)
-      }));
+  const handleItemPress = useCallback((item: LibraryItem) => {
+    switch (item.type) {
+      case 'album':
+        navigation.navigate('Album', { albumId: item.id });
+        break;
+      case 'artist':
+        navigation.navigate('Artist', { artistId: item.id, artistName: item.title });
+        break;
+      case 'playlist':
+        navigation.navigate('Playlist', { playlistId: item.id });
+        break;
+      default:
+        break;
     }
-    
-    if (selectedCategory === 'Artists') {
-      const allArtists = new Map();
-      
-      // Get subscribed artists from library data
-      playlists.forEach(item => {
-        if (item.type === 'artist') {
-          allArtists.set(item.id, {
-            id: item.id,
-            name: item.name || item.title,
-            type: 'artist',
-            source: 'subscribed',
-            thumbnail: item.thumbnailUrl
-          });
-        }
-      });
-      
-      // Get artists from liked songs and playlists (only if All filter)
-      if (artistFilter === 'All') {
-        likedSongs.forEach(song => {
-          song.artists?.forEach(artist => {
-            if (!allArtists.has(artist.id)) {
-              allArtists.set(artist.id, {
-                id: artist.id,
-                name: artist.name,
-                type: 'artist',
-                source: 'playlist'
-              });
-            }
-          });
-        });
-        
-        playlists.forEach(playlist => {
-          if (playlist.songs) {
-            playlist.songs.forEach((song: Song) => {
-              song.artists?.forEach(artist => {
-                if (!allArtists.has(artist.id)) {
-                  allArtists.set(artist.id, {
-                    id: artist.id,
-                    name: artist.name,
-                    type: 'artist',
-                    source: 'playlist'
-                  });
-                }
-              });
-            });
-          }
-        });
-      }
-      
-      const artistList = Array.from(allArtists.values());
-      
-      return artistList.map(artist => ({
-        id: artist.id,
-        title: artist.name,
-        subtitle: artist.source === 'subscribed' ? 'Subscribed' : 'Artist',
-        type: 'artist',
-        thumbnail: artist.thumbnail,
-        isCircular: true,
-        onPress: () => navigation.navigate('Artist', { artistId: artist.id })
-      }));
-    }
-    
-    const items = [];
-    
-    // Liked Music (always first for Playlists)
-    if (selectedCategory === 'Playlists') {
-      items.push({
-        id: 'liked',
-        title: 'Liked music',
-        subtitle: `Auto playlist`,
-        type: 'liked',
-        isPinned: true,
-        onPress: () => navigation.navigate('LikedSongs')
-      });
-      
-      // Downloaded Songs
-      items.push({
-        id: 'downloaded',
-        title: 'Downloaded',
-        subtitle: `Playlist`,
-        type: 'playlist',
-        onPress: () => navigation.navigate('DownloadedSongs')
-      });
-      
-      // User Playlists (filter out episodes)
-      playlists
-        .filter(item => (item.type === 'playlist' || !item.type) && !item.title?.toLowerCase().includes('episode'))
-        .forEach(playlist => {
-          items.push({
-            id: playlist.id,
-            title: playlist.title,
-            subtitle: `Playlist`,
-            type: 'playlist',
-            thumbnail: playlist.thumbnailUrl,
-            onPress: () => navigation.navigate('Playlist', { playlistId: playlist.id })
-          });
-        });
-      
-      // Downloaded Playlists (below API results)
-      if (downloadedPlaylists.length > 0) {
-        downloadedPlaylists.forEach(playlist => {
-          items.push({
-            id: `downloaded_${playlist.id}`,
-            title: playlist.title,
-            subtitle: `Downloaded • ${playlist.songs.length} songs`,
-            type: 'downloaded_playlist',
-            thumbnail: playlist.thumbnail,
-            isOffline: true,
-            onPress: () => navigation.navigate('Playlist', { playlistId: playlist.id })
-          });
-        });
-      }
-      
-      // Partially Downloaded Playlists
-      Object.values(playlistProgress).forEach(progress => {
-        if (!downloadedPlaylists.find(p => p.id === progress.playlistId)) {
-          const playlist = playlists.find(p => p.id === progress.playlistId);
-          if (playlist) {
-            items.push({
-              id: `partial_${progress.playlistId}`,
-              title: playlist.title,
-              subtitle: `${Math.round(progress.progress * 100)}% • ${progress.downloadedSongs}/${progress.totalSongs} songs`,
-              type: 'partial_playlist',
-              thumbnail: playlist.thumbnailUrl,
-              isPartial: true,
-              progress: progress.progress,
-              status: progress.status,
-              onPress: () => navigation.navigate('Playlist', { playlistId: progress.playlistId })
-            });
-          }
-        }
-      });
-    }
-    
-    return items;
-  }, [selectedCategory, likedSongs, downloadedSongs, playlists, allSongs, artistFilter, navigation, playSong]);
+  }, [navigation]);
 
-  const renderCategoryChip = ({ item }: { item: string }) => (
-    <TouchableOpacity
-      style={[styles.chip, selectedCategory === item && styles.chipActive]}
-      onPress={() => setSelectedCategory(item)}
-    >
-      <Text style={[styles.chipText, selectedCategory === item && styles.chipTextActive]}>
-        {item}
+  const renderSection = useCallback(({ item }: { item: LibrarySection }) => (
+    <View style={styles.section}>
+      <Text variant="titleMedium" style={[styles.sectionTitle, { color: theme.colors.onBackground }]}>
+        {item.title}
       </Text>
-    </TouchableOpacity>
-  );
+      <FlatList
+        data={item.items}
+        renderItem={({ item: libraryItem }) => (
+          <LibraryItemCard
+            item={libraryItem}
+            onPress={() => handleItemPress(libraryItem)}
+          />
+        )}
+        keyExtractor={(libraryItem) => libraryItem.id}
+        numColumns={2}
+        scrollEnabled={false}
+        contentContainerStyle={styles.sectionGrid}
+        columnWrapperStyle={styles.sectionRow}
+      />
+    </View>
+  ), [handleItemPress, theme.colors.onBackground]);
 
-  const renderLibraryItem = ({ item }: { item: any }) => {
-    const isLiked = item.type === 'liked';
-    const isSong = item.type === 'song';
-    
-    return (
-      <View style={isSong ? styles.songItem : styles.gridItem}>
-        <TouchableOpacity 
-          style={isSong ? styles.songContent : styles.gridContent} 
-          onPress={item.onPress}
-          onLongPress={isSong ? () => showOptions(allSongs.find(s => s.id === item.id)) : undefined}
-        >
-          {isSong ? (
-            // Song layout (list item)
-            <>
-              <View style={styles.songThumbnail}>
-                {item.thumbnail ? (
-                  <Image source={{ uri: item.thumbnail }} style={styles.songThumbnailImage} />
-                ) : (
-                  <View style={styles.placeholderSongThumbnail}>
-                    <Ionicons name="musical-note" size={20} color="#666" />
-                  </View>
-                )}
-              </View>
-              <View style={styles.songInfo}>
-                <Text style={styles.songTitle} numberOfLines={1}>{item.title}</Text>
-                <Text style={styles.songSubtitle} numberOfLines={1}>{item.subtitle}</Text>
-              </View>
-              <TouchableOpacity style={styles.songMenu} onPress={() => showOptions(allSongs.find(s => s.id === item.id))}>
-                <Ionicons name="ellipsis-vertical" size={20} color="#aaa" />
-              </TouchableOpacity>
-            </>
-          ) : (
-            // Playlist layout (grid item)
-            <>
-              <View style={item.isCircular ? styles.circularThumbnail : styles.thumbnail}>
-                {isLiked ? (
-                  <View style={styles.likedGradient}>
-                    <Ionicons name="heart" size={32} color="#fff" />
-                  </View>
-                ) : item.thumbnail ? (
-                  <Image source={{ uri: item.thumbnail }} style={item.isCircular ? styles.circularThumbnailImage : styles.thumbnailImage} />
-                ) : (
-                  <View style={styles.placeholderThumbnail}>
-                    <Ionicons name={item.type === 'artist' ? "person" : "musical-notes"} size={24} color="#666" />
-                  </View>
-                )}
-              </View>
-              <View style={styles.itemInfo}>
-                <Text style={styles.itemTitle} numberOfLines={2}>{item.title}</Text>
-                <View style={styles.subtitleRow}>
-                  {item.isPinned && <Ionicons name="pin" size={12} color="#aaa" style={styles.pinIcon} />}
-                  {item.isOffline && <Ionicons name="download" size={12} color="#1db954" style={styles.pinIcon} />}
-                  {item.isPartial && (
-                    <Ionicons 
-                      name={item.status === 'paused' ? 'pause' : 'download'} 
-                      size={12} 
-                      color={item.status === 'paused' ? '#ff9500' : '#1db954'} 
-                      style={styles.pinIcon} 
-                    />
-                  )}
-                  <Text style={styles.itemSubtitle} numberOfLines={1}>{item.subtitle}</Text>
-                </View>
-                {item.isPartial && (
-                  <View style={styles.progressBar}>
-                    <View style={[styles.progressFill, { width: `${item.progress * 100}%` }]} />
-                  </View>
-                )}
-              </View>
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
-    );
-  };
+  const listEmpty = useMemo(() => !loading && !error && sections.length === 0, [loading, error, sections.length]);
+
+  const handleScroll = useCallback((event: any) => {
+    const offsetY = event.nativeEvent.contentOffset?.y ?? 0;
+    setFabExtended(offsetY <= 8);
+  }, []);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <TabHeader title="Library" navigation={navigation} />
-      
-      {/* Category Navigation */}
-      <View style={styles.categorySection}>
-        <FlashList
-          horizontal
-          data={categories}
-          renderItem={renderCategoryChip}
-          keyExtractor={(item) => item}
-          estimatedItemSize={100}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryList}
-        />
-      </View>
-      
-      {/* Sort Filter */}
-      <View style={styles.sortSection}>
-        <TouchableOpacity style={styles.sortButton}>
-          <Text style={styles.sortText}>Recent activity</Text>
-          <Ionicons name="chevron-down" size={16} color="#aaa" />
-        </TouchableOpacity>
-        
-        {selectedCategory === 'Artists' && (
-          <View style={styles.artistFilters}>
-            <TouchableOpacity 
-              style={[styles.filterChip, artistFilter === 'All' && styles.filterChipActive]}
-              onPress={() => setArtistFilter('All')}
-            >
-              <Text style={[styles.filterText, artistFilter === 'All' && styles.filterTextActive]}>All</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.filterChip, artistFilter === 'Subscribed' && styles.filterChipActive]}
-              onPress={() => setArtistFilter('Subscribed')}
-            >
-              <Text style={[styles.filterText, artistFilter === 'Subscribed' && styles.filterTextActive]}>Subscribed</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        
-        {selectedCategory === 'Playlists' && (
-          <TouchableOpacity 
-            style={styles.createButton}
-            onPress={() => setShowCreateModal(true)}
-          >
-            <Ionicons name="add" size={20} color="#fff" />
-          </TouchableOpacity>
-        )}
-      </View>
-      
-      {/* Content */}
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {loading ? (
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading songs...</Text>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={{ color: theme.colors.onSurfaceVariant, marginTop: 12 }}>
+            Loading your library...
+          </Text>
         </View>
-      ) : selectedCategory === 'Songs' ? (
-        <FlashList
-          data={libraryItems}
-          renderItem={renderLibraryItem}
-          keyExtractor={(item) => item.id}
-          estimatedItemSize={64}
-          contentContainerStyle={styles.listContainer}
-        />
+      ) : error ? (
+        <ScrollView
+          style={styles.refreshScroll}
+          contentContainerStyle={[styles.emptyState, styles.refreshContent]}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={theme.colors.primary}
+            />
+          }
+          alwaysBounceVertical
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+        >
+          <MaterialCommunityIcons
+            name="cloud-alert"
+            size={56}
+            color={theme.colors.onSurfaceVariant}
+          />
+          <Text variant="titleMedium" style={{ color: theme.colors.onSurface, marginTop: 12 }}>
+            {error}
+          </Text>
+          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginTop: 8 }}>
+            Pull down to try again.
+          </Text>
+        </ScrollView>
+      ) : listEmpty ? (
+        <ScrollView
+          style={styles.refreshScroll}
+          contentContainerStyle={[styles.emptyState, styles.refreshContent]}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={theme.colors.primary}
+            />
+          }
+          alwaysBounceVertical
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+        >
+          <MaterialCommunityIcons
+            name="music-box-multiple-outline"
+            size={56}
+            color={theme.colors.onSurfaceVariant}
+          />
+          <Text variant="titleMedium" style={{ color: theme.colors.onSurface, marginTop: 12 }}>
+            Your library is empty
+          </Text>
+          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginTop: 8 }}>
+            Save music to see it here.
+          </Text>
+        </ScrollView>
       ) : (
-        <FlashList
-          data={libraryItems}
-          renderItem={({ item, index }) => {
-            // Create pairs of items for 2-column layout
-            const pairs = [];
-            for (let i = 0; i < libraryItems.length; i += 2) {
-              pairs.push({
-                left: libraryItems[i],
-                right: libraryItems[i + 1] || null,
-                index: i
-              });
-            }
-            
-            const pair = pairs[index];
-            if (!pair) return null;
-            
-            return (
-              <View style={styles.gridRow}>
-                {renderLibraryItem({ item: pair.left })}
-                {pair.right && renderLibraryItem({ item: pair.right })}
-              </View>
-            );
-          }}
-          data={Array.from({ length: Math.ceil(libraryItems.length / 2) }, (_, i) => i)}
-          keyExtractor={(index) => `row-${index}`}
-          estimatedItemSize={150}
-          contentContainerStyle={styles.gridContainer}
+        <FlatList
+          data={sections}
+          renderItem={renderSection}
+          keyExtractor={(section, index) => `${section.title}-${index}`}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listContent}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={theme.colors.primary}
+            />
+          }
         />
       )}
-      
-      <CreatePlaylistModal 
-        visible={showCreateModal} 
-        onClose={() => setShowCreateModal(false)} 
+
+      <AnimatedFAB
+        icon="plus"
+        label="New"
+        extended={fabExtended}
+        animateFrom="right"
+        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
+        color={theme.colors.onPrimary}
+        onPress={openCreateModal}
+        visible
       />
-      
-      <SongOptionsModal
-        visible={modalVisible}
-        onClose={hideOptions}
-        song={selectedSong}
-        navigation={navigation}
-      />
-    </SafeAreaView>
+
+      <Portal>
+        <Modal
+          visible={createModalVisible}
+          onDismiss={closeCreateModal}
+          contentContainerStyle={[styles.createModal, { backgroundColor: theme.colors.surface }]}
+        >
+          <ScrollView contentContainerStyle={styles.createModalContent}>
+            <Text variant="titleLarge" style={[styles.modalTitle, { color: theme.colors.onSurface }]}>
+              Create playlist
+            </Text>
+
+            <TextInput
+              label="Playlist name"
+              mode="outlined"
+              value={createTitle}
+              onChangeText={setCreateTitle}
+              autoCapitalize="sentences"
+              autoCorrect={false}
+              style={styles.modalInput}
+            />
+
+            <TextInput
+              label="Description"
+              mode="outlined"
+              value={createDescription}
+              onChangeText={setCreateDescription}
+              multiline
+              numberOfLines={3}
+              style={styles.modalInput}
+            />
+
+            <Text variant="titleSmall" style={[styles.modalSectionTitle, { color: theme.colors.onSurface }]}>
+              Privacy
+            </Text>
+            <RadioButton.Group
+              onValueChange={(value) => setCreatePrivacy(value as 'PUBLIC' | 'UNLISTED' | 'PRIVATE')}
+              value={createPrivacy}
+            >
+              <View style={styles.radioRow}>
+                <RadioButton value="PRIVATE" />
+                <Text variant="bodyMedium" style={{ color: theme.colors.onSurface }}>Private</Text>
+              </View>
+              <View style={styles.radioRow}>
+                <RadioButton value="UNLISTED" />
+                <Text variant="bodyMedium" style={{ color: theme.colors.onSurface }}>Unlisted</Text>
+              </View>
+              <View style={styles.radioRow}>
+                <RadioButton value="PUBLIC" />
+                <Text variant="bodyMedium" style={{ color: theme.colors.onSurface }}>Public</Text>
+              </View>
+            </RadioButton.Group>
+
+            <View style={styles.switchRow}>
+              <View style={styles.switchText}>
+                <Text variant="titleSmall" style={{ color: theme.colors.onSurface }}>
+                  Allow collaborators to add songs
+                </Text>
+                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                  Let others add to this playlist once it is created.
+                </Text>
+              </View>
+              <Switch value={allowCollaborators} onValueChange={setAllowCollaborators} />
+            </View>
+
+            <HelperText type="error" visible={!!createError}>
+              {createError}
+            </HelperText>
+
+            <View style={styles.modalActions}>
+              <Button
+                mode="text"
+                onPress={closeCreateModal}
+                disabled={creating}
+              >
+                Cancel
+              </Button>
+              <Button
+                mode="contained"
+                onPress={handleCreatePlaylist}
+                loading={creating}
+                disabled={creating}
+              >
+                Create
+              </Button>
+            </View>
+          </ScrollView>
+        </Modal>
+      </Portal>
+    </View>
   );
 }
 
+interface LibraryItemCardProps {
+  item: LibraryItem;
+  onPress: () => void;
+}
+
+const LibraryItemCard = React.memo(({ item, onPress }: LibraryItemCardProps) => {
+  const theme = useTheme();
+
+  const iconName = useMemo(() => {
+    switch (item.type) {
+      case 'album':
+        return 'album';
+      case 'artist':
+        return 'account-music';
+      case 'playlist':
+        return 'playlist-music';
+      case 'song':
+        return 'music-note';
+      case 'video':
+        return 'play-circle';
+      default:
+        return 'music';
+    }
+  }, [item.type]);
+
+  const isArtist = item.type === 'artist';
+  const imageStyle = isArtist ? [styles.itemImage, styles.artistImage] : styles.itemImage;
+
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.8} style={styles.itemWrapper}>
+      <Surface style={[styles.itemCard, { backgroundColor: theme.colors.surface }]} elevation={2}>
+        {item.thumbnail ? (
+          <Image source={{ uri: item.thumbnail }} style={imageStyle} />
+        ) : (
+          <View style={[imageStyle, styles.itemPlaceholder, { backgroundColor: theme.colors.surfaceVariant }]}>
+            <MaterialCommunityIcons name={iconName} size={28} color={theme.colors.onSurfaceVariant} />
+          </View>
+        )}
+        <Text
+          variant="titleSmall"
+          numberOfLines={2}
+          style={[styles.itemTitle, { color: theme.colors.onSurface }]}
+        >
+          {item.title || 'Untitled'}
+        </Text>
+        {!!item.subtitle && (
+          <Text
+            variant="bodySmall"
+            numberOfLines={2}
+            style={{ color: theme.colors.onSurfaceVariant }}
+          >
+            {item.subtitle}
+          </Text>
+        )}
+      </Surface>
+    </TouchableOpacity>
+  );
+});
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
-  categorySection: { paddingVertical: 12 },
-  categoryList: { paddingHorizontal: 16 },
-  chip: { backgroundColor: '#202020', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8 },
-  chipActive: { backgroundColor: '#fff' },
-  chipText: { color: '#fff', fontSize: 14, fontWeight: '500' },
-  chipTextActive: { color: '#000' },
-  sortSection: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 16 },
-  sortButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#202020', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
-  sortText: { color: '#fff', fontSize: 14, marginRight: 4 },
-  artistFilters: { flexDirection: 'row', gap: 8 },
-  filterChip: { backgroundColor: '#202020', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
-  filterChipActive: { backgroundColor: '#1db954' },
-  filterText: { color: '#fff', fontSize: 14 },
-  filterTextActive: { color: '#fff' },
-  createButton: { backgroundColor: '#1db954', width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  loadingText: { color: '#aaa', fontSize: 16 },
-  // Grid layout (playlists)
-  gridContainer: { paddingHorizontal: 8, paddingBottom: 140 },
-  gridRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 8, marginBottom: 24 },
-  gridItem: { width: '48%' },
-  gridContent: { width: '100%' },
-  thumbnail: { width: '100%', aspectRatio: 1, borderRadius: 8, marginBottom: 8, overflow: 'hidden' },
-  circularThumbnail: { width: '100%', aspectRatio: 1, borderRadius: 1000, marginBottom: 8, overflow: 'hidden' },
-  likedGradient: { flex: 1, backgroundColor: '#e74c3c', alignItems: 'center', justifyContent: 'center' },
-  thumbnailImage: { width: '100%', height: '100%' },
-  circularThumbnailImage: { width: '100%', height: '100%' },
-  placeholderThumbnail: { flex: 1, backgroundColor: '#202020', alignItems: 'center', justifyContent: 'center' },
-  itemInfo: { paddingHorizontal: 4 },
-  itemTitle: { color: '#fff', fontSize: 14, fontWeight: '600', marginBottom: 4 },
-  subtitleRow: { flexDirection: 'row', alignItems: 'center' },
-  pinIcon: { marginRight: 4 },
-  itemSubtitle: { color: '#aaa', fontSize: 12, flex: 1 },
-  progressBar: { height: 2, backgroundColor: '#333', borderRadius: 1, marginTop: 4 },
-  progressFill: { height: 2, backgroundColor: '#1db954', borderRadius: 1 },
-  // List layout (songs)
-  listContainer: { paddingHorizontal: 16, paddingBottom: 140 },
-  songItem: { width: '100%', marginBottom: 4 },
-  songContent: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
-  songThumbnail: { width: 48, height: 48, borderRadius: 4, marginRight: 12, overflow: 'hidden' },
-  songThumbnailImage: { width: '100%', height: '100%' },
-  placeholderSongThumbnail: { flex: 1, backgroundColor: '#202020', alignItems: 'center', justifyContent: 'center' },
-  songInfo: { flex: 1, marginRight: 12 },
-  songTitle: { color: '#fff', fontSize: 16, fontWeight: '500', marginBottom: 2 },
-  songSubtitle: { color: '#aaa', fontSize: 14 },
-  songMenu: { padding: 8 },
+  container: {
+    flex: 1,
+  },
+  listContent: {
+    paddingBottom: 100,
+  },
+  refreshScroll: {
+    flex: 1,
+  },
+  refreshContent: {
+    flexGrow: 1,
+  },
+  section: {
+    paddingTop: 16,
+  },
+  sectionTitle: {
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    fontWeight: '600',
+  },
+  sectionGrid: {
+    paddingHorizontal: 12,
+    paddingBottom: 4,
+  },
+  sectionRow: {
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  itemWrapper: {
+    flex: 1,
+    marginHorizontal: 6,
+    maxWidth: '48%',
+  },
+  itemCard: {
+    borderRadius: 16,
+    padding: 12,
+    gap: 6,
+  },
+  itemImage: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 12,
+    backgroundColor: 'transparent',
+  },
+  artistImage: {
+    borderRadius: 999,
+  },
+  itemPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  itemTitle: {
+    marginTop: 6,
+    lineHeight: 18,
+    fontWeight: '600',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 10,
+  },
+  createModal: {
+    margin: 20,
+    borderRadius: 16,
+    maxHeight: '80%',
+  },
+  createModalContent: {
+    padding: 20,
+    gap: 12,
+  },
+  modalTitle: {
+    marginBottom: 8,
+  },
+  modalInput: {
+    marginBottom: 4,
+  },
+  modalSectionTitle: {
+    marginTop: 4,
+  },
+  radioRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 4,
+  },
+  switchText: {
+    flex: 1,
+    gap: 4,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+    marginTop: 8,
+  },
 });

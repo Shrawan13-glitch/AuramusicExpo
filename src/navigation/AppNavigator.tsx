@@ -1,459 +1,240 @@
-import React, { useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useTheme, BottomNavigation, Appbar, Modal, Portal, Button, Text } from 'react-native-paper';
 import { View, StyleSheet } from 'react-native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
-import { Ionicons, MaterialIcons, Feather } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAnimation } from '../store/AnimationContext';
+
 import HomeScreen from '../screens/HomeScreen';
-import SearchScreen from '../screens/SearchScreen';
+import EnhancedSearchScreen from '../screens/EnhancedSearchScreen';
 import LibraryScreen from '../screens/LibraryScreen';
-import MessagesScreen from '../screens/MessagesScreen';
-import ArtistScreen from '../screens/ArtistScreen';
-import AlbumScreen from '../screens/AlbumScreen';
+import PlayerScreen from '../screens/PlayerScreen';
 import PlaylistScreen from '../screens/PlaylistScreen';
-import ArtistItemsScreen from '../screens/ArtistItemsScreen';
-import LoginScreen from '../screens/LoginScreen';
-import NewReleasesScreen from '../screens/NewReleasesScreen';
-import BrowseScreen from '../screens/BrowseScreen';
-import RecentlyPlayedScreen from '../screens/RecentlyPlayedScreen';
-import LikedSongsScreen from '../screens/LikedSongsScreen';
-import SettingsScreen from '../screens/SettingsScreen';
-import UpdateScreen from '../screens/UpdateScreen';
-import PlayerSettingsScreen from '../screens/PlayerSettingsScreen';
-import AboutScreen from '../screens/AboutScreen';
-import DownloadedSongsScreen from '../screens/DownloadedSongsScreen';
-import QualitySettingsScreen from '../screens/QualitySettingsScreen';
-import SectionView from '../screens/SectionView';
-import MiniPlayer from '../components/MiniPlayer';
-import StatusBarAssistant from '../components/StatusBarAssistant';
-import MessageDetailScreen from '../screens/MessageDetailScreen';
-import AnimationSettingsScreen from '../screens/AnimationSettingsScreen';
-import CachedSongsScreen from '../screens/CachedSongsScreen';
-import VoiceSettingsScreen from '../screens/VoiceSettingsScreen';
-import CachedLyricsScreen from '../screens/CachedLyricsScreen';
-import AssistantScreen from '../screens/AssistantScreen';
+import AlbumScreen from '../screens/AlbumScreen';
+import ArtistScreen from '../screens/ArtistScreen';
+import ShowAllScreen from '../screens/ShowAllScreen';
+import ProfileScreen from '../screens/ProfileScreen';
+import CookieViewer from '../components/CookieViewer';
+import { useAuth } from '../contexts/AuthContext';
 
-const Tab = createBottomTabNavigator();
-const Stack = createStackNavigator();
+const Stack = createNativeStackNavigator();
 
-const TabNavigator = React.memo(({ onTabBarLayout }: { onTabBarLayout: (height: number) => void }) => {
-  const insets = useSafeAreaInsets();
-  const { settings } = useAnimation();
-  const tabBarHeight = 49 + insets.bottom;
+const TabNavigator = React.memo(({ navigation }: { navigation: any }) => {
+  const theme = useTheme();
+  const { logout, isAuthenticated, cookies } = useAuth();
+  const [index, setIndex] = React.useState(0);
+  const [accountModalVisible, setAccountModalVisible] = React.useState(false);
+  const [cookieViewerVisible, setCookieViewerVisible] = React.useState(false);
   
-  React.useEffect(() => {
-    onTabBarLayout(tabBarHeight);
-  }, [tabBarHeight]);
+  const routes = useMemo(() => [
+    { key: 'home', title: 'Home', focusedIcon: 'home', unfocusedIcon: 'home-outline' },
+    { key: 'search', title: 'Search', focusedIcon: 'magnify' },
+    { key: 'library', title: 'Library', focusedIcon: 'music-box-multiple', unfocusedIcon: 'music-box-multiple-outline' },
+  ], []);
 
-  const getTabBarIcon = (routeName: string, focused: boolean) => {
-    const { tabBarIconStyle } = settings;
-    let iconName = '';
-    let IconComponent = Ionicons;
-    
-    switch (routeName) {
-      case 'Home':
-        if (tabBarIconStyle === 'filled') {
-          iconName = focused ? 'home' : 'home-outline';
-        } else if (tabBarIconStyle === 'outline') {
-          iconName = 'home-outline';
-        } else {
-          iconName = focused ? 'home-sharp' : 'home-outline';
-        }
-        break;
-      case 'Search':
-        if (tabBarIconStyle === 'filled') {
-          IconComponent = MaterialIcons;
-          iconName = 'search';
-        } else if (tabBarIconStyle === 'outline') {
-          IconComponent = Feather;
-          iconName = 'search';
-        } else {
-          iconName = focused ? 'search' : 'search-outline';
-        }
-        break;
-      case 'Messages':
-        if (tabBarIconStyle === 'filled') {
-          iconName = focused ? 'mail' : 'mail-outline';
-        } else if (tabBarIconStyle === 'outline') {
-          IconComponent = Feather;
-          iconName = 'mail';
-        } else {
-          iconName = focused ? 'mail-sharp' : 'mail-outline';
-        }
-        break;
-      case 'Library':
-        if (tabBarIconStyle === 'filled') {
-          IconComponent = MaterialIcons;
-          iconName = 'library-music';
-        } else if (tabBarIconStyle === 'outline') {
-          IconComponent = Feather;
-          iconName = 'music';
-        } else {
-          iconName = focused ? 'library' : 'library-outline';
-        }
-        break;
+  const renderScene = useMemo(() => BottomNavigation.SceneMap({
+    home: HomeScreen,
+    search: () => <EnhancedSearchScreen navigation={navigation} />,
+    library: LibraryScreen,
+  }), [navigation]);
+
+  const getTitle = useCallback(() => {
+    switch (index) {
+      case 0: return 'AuraMusic';
+      case 1: return 'Search';
+      case 2: return 'Your Library';
+      default: return 'AuraMusic';
     }
-    
-    return { IconComponent, iconName };
-  };
-  
-  React.useEffect(() => {
-    onTabBarLayout(tabBarHeight);
-  }, [tabBarHeight]);
+  }, [index]);
 
-  const screenOptions = {
-    tabBarStyle: { 
-      backgroundColor: '#121212', 
-      borderTopColor: '#282828', 
-      position: 'absolute', 
-      bottom: 0, 
-      left: 0, 
-      right: 0, 
-      paddingBottom: insets.bottom, 
-      height: tabBarHeight
-    },
-    tabBarActiveTintColor: '#fff',
-    tabBarInactiveTintColor: '#666',
-    headerStyle: { backgroundColor: '#000' },
-    headerTintColor: '#fff',
-    headerShown: false,
-    animation: 'shift',
-  };
-  
-  return (
-    <Tab.Navigator
-      screenOptions={screenOptions}
-      sceneContainerStyle={{ backgroundColor: '#000' }}
-    >
-      <Tab.Screen 
-        name="Home" 
-        component={HomeScreen}
-        options={{
-          tabBarLabel: 'Home',
-          tabBarIcon: ({ color, size, focused }) => {
-            const { IconComponent, iconName } = getTabBarIcon('Home', focused);
-            return <IconComponent name={iconName} size={size} color={color} />;
-          }
-        }}
-      />
-      <Tab.Screen 
-        name="Search" 
-        component={SearchScreen}
-        options={{
-          tabBarLabel: 'Search',
-          tabBarIcon: ({ color, size, focused }) => {
-            const { IconComponent, iconName } = getTabBarIcon('Search', focused);
-            return <IconComponent name={iconName} size={size} color={color} />;
-          }
-        }}
-      />
-      <Tab.Screen 
-        name="Messages" 
-        component={MessagesScreen}
-        options={{
-          tabBarLabel: 'Messages',
-          tabBarIcon: ({ color, size, focused }) => {
-            const { IconComponent, iconName } = getTabBarIcon('Messages', focused);
-            return <IconComponent name={iconName} size={size} color={color} />;
-          }
-        }}
-      />
-      <Tab.Screen 
-        name="Library" 
-        component={LibraryScreen}
-        options={{
-          tabBarLabel: 'Library',
-          tabBarIcon: ({ color, size, focused }) => {
-            const { IconComponent, iconName } = getTabBarIcon('Library', focused);
-            return <IconComponent name={iconName} size={size} color={color} />;
-          }
-        }}
-      />
-    </Tab.Navigator>
-  );
-});
+  const handleLogout = useCallback(() => {
+    logout();
+    setAccountModalVisible(false);
+  }, [logout]);
 
-const MainScreen = React.memo(() => {
-  const [tabBarHeight, setTabBarHeight] = useState(49);
-  const insets = useSafeAreaInsets();
-  
-  const handleTabBarLayout = React.useCallback((height: number) => {
-    setTabBarHeight(height);
+  const handleAccountPress = useCallback(() => {
+    setAccountModalVisible(true);
   }, []);
-  
-  // Calculate tab bar height directly to avoid callback loop
-  const calculatedTabBarHeight = 49 + insets.bottom;
-  
+
+  const handleModalDismiss = useCallback(() => {
+    setAccountModalVisible(false);
+  }, []);
+
+  const handleShowCookies = useCallback(() => {
+    setAccountModalVisible(false);
+    setCookieViewerVisible(true);
+  }, []);
+
+  const handleCloseCookieViewer = useCallback(() => {
+    setCookieViewerVisible(false);
+  }, []);
+
   return (
-    <View style={styles.container}>
+    <>
       <View style={{ flex: 1 }}>
-        <TabNavigator onTabBarLayout={handleTabBarLayout} />
+        {index !== 1 && (
+          <Appbar.Header>
+            <Appbar.Content title={getTitle()} />
+            {isAuthenticated && (
+              <Appbar.Action icon="account-circle" onPress={handleAccountPress} />
+            )}
+          </Appbar.Header>
+        )}
+        
+        <View style={{ flex: 1, position: 'relative' }}>
+          <BottomNavigation
+            navigationState={{ index, routes }}
+            onIndexChange={setIndex}
+            renderScene={renderScene}
+            shifting={true}
+            sceneAnimationEnabled={true}
+            sceneAnimationType="shifting"
+            theme={theme}
+            barStyle={{
+              backgroundColor: theme.colors.surface,
+              elevation: 8,
+            }}
+          />
+        </View>
       </View>
-      <View style={[styles.miniPlayerAboveTab, { bottom: calculatedTabBarHeight }]}>
-        <MiniPlayer />
-      </View>
-    </View>
+      
+      <Portal>
+        <Modal
+          visible={accountModalVisible}
+          onDismiss={handleModalDismiss}
+          contentContainerStyle={[styles.modalContainer, { backgroundColor: theme.colors.surface }]}
+        >
+          <Text variant="headlineSmall" style={[styles.modalTitle, { color: theme.colors.onSurface }]}>
+            Account
+          </Text>
+          
+          <View style={styles.accountInfo}>
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+              Authentication Status: {isAuthenticated ? 'Logged In' : 'Not Logged In'}
+            </Text>
+            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+              Cookies: {cookies.length} stored
+            </Text>
+          </View>
+          
+          <View style={styles.modalButtons}>
+            {cookies.length > 0 && (
+              <Button
+                mode="outlined"
+                onPress={handleShowCookies}
+                style={styles.modalButton}
+                icon="cookie"
+              >
+                View Cookies
+              </Button>
+            )}
+            <Button
+              mode="contained"
+              onPress={handleLogout}
+              style={styles.modalButton}
+            >
+              Logout
+            </Button>
+          </View>
+        </Modal>
+      </Portal>
+      
+      <Portal>
+        <Modal
+          visible={cookieViewerVisible}
+          onDismiss={handleCloseCookieViewer}
+          contentContainerStyle={styles.cookieModalContainer}
+        >
+          <CookieViewer 
+            cookies={cookies} 
+            onClose={handleCloseCookieViewer}
+          />
+        </Modal>
+      </Portal>
+    </>
   );
 });
 
 export default function AppNavigator() {
-  const { settings } = useAnimation();
-  
-  const getAnimationConfig = () => {
-    const speedDurations = {
-      fast: 200,
-      normal: 300,
-      slow: 500
-    };
-    
-    const duration = speedDurations[settings.speed];
-    
-    return {
-      animationEnabled: true,
-      cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
-      transitionSpec: {
-        open: { animation: 'timing', config: { duration } },
-        close: { animation: 'timing', config: { duration } },
-      },
-    };
-  };
-
   return (
-    <>
-      <Stack.Navigator 
-        screenOptions={{ 
-          headerShown: false, 
-          presentation: 'card',
-          cardStyle: { backgroundColor: '#000' },
-          cardOverlayEnabled: false,
-          ...getAnimationConfig(),
-        }}
-      >
-      <Stack.Screen name="Main" component={MainScreen} />
-      <Stack.Screen name="Artist">
-        {(props) => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <ArtistScreen {...props} />
-            </View>
-            <View style={styles.miniPlayerBottom}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="Main">
+        {(props) => <TabNavigator {...props} />}
       </Stack.Screen>
-      <Stack.Screen name="Album">
-        {(props) => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <AlbumScreen {...props} />
-            </View>
-            <View style={styles.miniPlayerBottom}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
-      </Stack.Screen>
-      <Stack.Screen name="Playlist">
-        {(props) => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <PlaylistScreen {...props} />
-            </View>
-            <View style={styles.miniPlayerBottom}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
-      </Stack.Screen>
-      <Stack.Screen name="ArtistItems">
-        {(props) => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <ArtistItemsScreen {...props} />
-            </View>
-            <View style={styles.miniPlayerBottom}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
-      </Stack.Screen>
-      <Stack.Screen name="NewReleases">
-        {(props) => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <NewReleasesScreen {...props} />
-            </View>
-            <View style={styles.miniPlayerBottom}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
-      </Stack.Screen>
-      <Stack.Screen name="Browse">
-        {(props) => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <BrowseScreen {...props} />
-            </View>
-            <View style={styles.miniPlayerBottom}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
-      </Stack.Screen>
-      <Stack.Screen name="RecentlyPlayed">
-        {(props) => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <RecentlyPlayedScreen {...props} />
-            </View>
-            <View style={styles.miniPlayerBottom}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
-      </Stack.Screen>
-      <Stack.Screen name="LikedSongs">
-        {(props) => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <LikedSongsScreen {...props} />
-            </View>
-            <View style={styles.miniPlayerBottom}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
-      </Stack.Screen>
-      <Stack.Screen name="Settings">
-        {(props) => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <SettingsScreen {...props} />
-            </View>
-            <View style={styles.miniPlayerBottom}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
-      </Stack.Screen>
-
       <Stack.Screen 
-        name="PlayerSettings"
+        name="Player" 
+        component={PlayerScreen}
         options={{
-          cardStyleInterpolator: CardStyleInterpolators.forRevealFromBottomAndroid,
+          presentation: 'modal',
+          gestureEnabled: true,
         }}
-      >
-        {(props) => <PlayerSettingsScreen {...props} />}
-      </Stack.Screen>
-      <Stack.Screen 
-        name="About"
-        options={{
-          cardStyleInterpolator: CardStyleInterpolators.forRevealFromBottomAndroid,
-        }}
-      >
-        {(props) => <AboutScreen {...props} />}
-      </Stack.Screen>
-      <Stack.Screen name="DownloadedSongs">
-        {(props) => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <DownloadedSongsScreen {...props} />
-            </View>
-            <View style={styles.miniPlayerBottom}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
-      </Stack.Screen>
-      <Stack.Screen name="QualitySettings">
-        {(props) => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <QualitySettingsScreen {...props} />
-            </View>
-            <View style={styles.miniPlayerBottom}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
-      </Stack.Screen>
-      <Stack.Screen name="SectionView">
-        {(props) => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <SectionView {...props} />
-            </View>
-            <View style={styles.miniPlayerBottom}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
-      </Stack.Screen>
-      <Stack.Screen name="CachedSongs">
-        {(props) => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <CachedSongsScreen {...props} />
-            </View>
-            <View style={styles.miniPlayerBottom}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
-      </Stack.Screen>
-      <Stack.Screen name="CachedLyrics">
-        {(props) => (
-          <View style={styles.container}>
-            <View style={{ flex: 1 }}>
-              <CachedLyricsScreen {...props} />
-            </View>
-            <View style={styles.miniPlayerBottom}>
-              <MiniPlayer />
-            </View>
-          </View>
-        )}
-      </Stack.Screen>
-      <Stack.Screen 
-        name="AnimationSettings"
-        options={{
-          cardStyleInterpolator: CardStyleInterpolators.forRevealFromBottomAndroid,
-        }}
-      >
-        {(props) => <AnimationSettingsScreen {...props} />}
-      </Stack.Screen>
-
-      <Stack.Screen 
-        name="VoiceSettings"
-        options={{
-          cardStyleInterpolator: CardStyleInterpolators.forRevealFromBottomAndroid,
-        }}
-      >
-        {(props) => <VoiceSettingsScreen {...props} />}
-      </Stack.Screen>
-
-      <Stack.Screen name="MessageDetail" component={MessageDetailScreen} />
-
-      <Stack.Screen 
-        name="Update" 
-        component={UpdateScreen} 
-        options={{ 
-          headerShown: false,
-          gestureEnabled: false,
-          cardStyleInterpolator: CardStyleInterpolators.forModalPresentationIOS,
-        }} 
       />
-      <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+      <Stack.Screen 
+        name="Playlist" 
+        component={PlaylistScreen}
+        options={{
+          presentation: 'modal',
+          gestureEnabled: true,
+        }}
+      />
+      <Stack.Screen 
+        name="Album" 
+        component={AlbumScreen}
+        options={{
+          presentation: 'modal',
+          gestureEnabled: true,
+        }}
+      />
+      <Stack.Screen 
+        name="Artist" 
+        component={ArtistScreen}
+        options={{
+          presentation: 'modal',
+          gestureEnabled: true,
+        }}
+      />
+      <Stack.Screen 
+        name="ShowAll" 
+        component={ShowAllScreen}
+        options={{
+          presentation: 'modal',
+          gestureEnabled: true,
+        }}
+      />
+      <Stack.Screen 
+        name="Profile" 
+        component={ProfileScreen}
+        options={{
+          presentation: 'modal',
+          gestureEnabled: true,
+        }}
+      />
     </Stack.Navigator>
-
-    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
-  miniPlayerAboveTab: { position: 'absolute', left: 0, right: 0, zIndex: 10 },
-  miniPlayerBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 10 },
+  modalContainer: {
+    margin: 20,
+    padding: 24,
+    borderRadius: 16,
+  },
+  modalTitle: {
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  accountInfo: {
+    marginBottom: 24,
+    gap: 4,
+  },
+  modalButtons: {
+    gap: 12,
+  },
+  modalButton: {
+    borderRadius: 8,
+  },
+  cookieModalContainer: {
+    margin: 20,
+    borderRadius: 16,
+    flex: 1,
+    maxHeight: '80%',
+  },
 });

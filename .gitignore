@@ -68,3 +68,7 @@ ehthumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+example-request/
+
+example-app/

@@ -1,155 +1,173 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, Image, StyleSheet, Modal, BackHandler } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import React, { useCallback, useMemo } from 'react';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { Text, IconButton, useTheme, Surface, ProgressBar } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { usePlayer } from '../contexts/PlayerContext';
 import { useNavigation } from '@react-navigation/native';
-import { PanGestureHandler, State } from 'react-native-gesture-handler';
-import { usePlayer } from '../store/PlayerContext';
-import { useAnimation } from '../store/AnimationContext';
-import PlayerScreen from '../screens/PlayerScreen';
-import QueueScreen from '../screens/QueueScreen';
+import Animated from 'react-native-reanimated';
 
-const MiniPlayer = React.memo(() => {
+interface MiniPlayerProps {
+  onExpand?: () => void;
+  bottomOffset?: number;
+}
+
+const MiniPlayer = React.memo(({ onExpand, bottomOffset = 0 }: MiniPlayerProps) => {
+  const { currentTrack, isPlaying, pause, resume, position, duration } = usePlayer();
+  const theme = useTheme();
   const navigation = useNavigation();
-  const { currentSong, isPlaying, pause, resume, position, duration, skipNext, skipPrevious } = usePlayer();
-  const { settings } = useAnimation();
-  const [showPlayer, setShowPlayer] = useState(false);
-  const [showQueue, setShowQueue] = useState(false);
 
-  useEffect(() => {
-    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (showQueue) {
-        setShowQueue(false);
-        setShowPlayer(true);
-        return true;
-      }
-      return false;
-    });
+  const progress = useMemo(() => {
+    return duration > 0 ? position / duration : 0;
+  }, [position, duration]);
 
-    return () => backHandler.remove();
-  }, [showQueue]);
-
-  if (!currentSong) return null;
-
-  const progress = duration > 0 ? position / duration : 0;
-
-  const onGestureEvent = (event: any) => {
-    if (event.nativeEvent.translationY < -50 && event.nativeEvent.state === State.END) {
-      setShowPlayer(true);
+  const handlePlayerPress = useCallback(() => {
+    if (onExpand) {
+      onExpand();
+      return;
     }
-  };
+    navigation.navigate('Player' as never);
+  }, [navigation, onExpand]);
+
+  const handlePlayPause = useCallback(() => {
+    if (isPlaying) {
+      pause();
+    } else {
+      resume();
+    }
+  }, [isPlaying, pause, resume]);
+
+  if (!currentTrack) return null;
 
   return (
-    <>
-      <View style={styles.wrapper}>
-        <View style={styles.progressBar}>
-          <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
-        </View>
-        <PanGestureHandler onHandlerStateChange={onGestureEvent}>
-          <TouchableOpacity style={styles.container} onPress={() => setShowPlayer(true)} activeOpacity={0.95}>
-          <Image 
-            source={currentSong.thumbnailUrl ? { uri: currentSong.thumbnailUrl } : require('../../assets/icon.png')} 
-            style={styles.thumbnail}
-            resizeMode="cover"
-            onError={() => {}}
-          />
-          <View style={styles.info}>
-            <Text style={styles.title} numberOfLines={1}>{currentSong.title}</Text>
-            <Text style={styles.artist} numberOfLines={1}>
-              {currentSong.artists?.map(a => a.name).join(', ') || 'Unknown Artist'}
+    <Surface
+      style={[
+        styles.container,
+        {
+          backgroundColor: theme.colors.surface,
+          borderColor: 'rgba(255,255,255,0.45)',
+          marginBottom: bottomOffset,
+        },
+      ]}
+      elevation={8}
+    >
+      <ProgressBar 
+        progress={progress} 
+        color={theme.colors.primary}
+        style={styles.progressBar}
+      />
+      
+      <TouchableOpacity 
+        style={styles.content}
+        onPress={handlePlayerPress}
+        activeOpacity={0.7}
+      >
+        <View style={styles.trackInfo}>
+          {currentTrack.thumbnail ? (
+            <Animated.Image
+              source={{ uri: currentTrack.thumbnail }}
+              style={[styles.thumbnail, { backgroundColor: theme.colors.surfaceVariant }]}
+              resizeMode="cover"
+              sharedTransitionTag="albumArt"
+            />
+          ) : (
+            <View style={[styles.thumbnail, styles.thumbnailPlaceholder, { backgroundColor: theme.colors.surfaceVariant }]}>
+              <MaterialCommunityIcons
+                name="music-note"
+                size={18}
+                color={theme.colors.onSurfaceVariant}
+              />
+            </View>
+          )}
+          
+          <View style={styles.textContainer}>
+            <Animated.Text 
+              numberOfLines={1}
+              style={[styles.title, { color: theme.colors.onSurface }]}
+              sharedTransitionTag="songTitle"
+            >
+              {currentTrack.title}
+            </Animated.Text>
+            <Text 
+              variant="bodySmall" 
+              numberOfLines={1}
+              style={[styles.artist, { color: theme.colors.onSurfaceVariant }]}
+            >
+              {currentTrack.artist}
             </Text>
           </View>
-          <View style={styles.controls}>
-            <TouchableOpacity onPress={(e) => { e.stopPropagation(); skipPrevious(); }} style={styles.controlButton}>
-              <Ionicons name="play-skip-back" size={24} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={(e) => { e.stopPropagation(); isPlaying ? pause() : resume(); }} style={styles.playButton}>
-              <Ionicons name={isPlaying ? "pause" : "play"} size={26} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={(e) => { e.stopPropagation(); skipNext(); }} style={styles.controlButton}>
-              <Ionicons name="play-skip-forward" size={24} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-        </PanGestureHandler>
-      </View>
+        </View>
 
-      <Modal 
-        visible={showPlayer} 
-        animationType={settings.enabled ? "slide" : "none"} 
-        presentationStyle="fullScreen" 
-        statusBarTranslucent={true} 
-        onRequestClose={() => setShowPlayer(false)}
-      >
-        <PlayerScreen 
-          onClose={() => setShowPlayer(false)} 
-          onOpenQueue={() => { setShowPlayer(false); setShowQueue(true); }}
-          navigation={navigation}
-        />
-      </Modal>
-
-      <Modal 
-        visible={showQueue} 
-        animationType={settings.enabled ? "slide" : "none"} 
-        statusBarTranslucent={true} 
-        onRequestClose={() => { setShowQueue(false); setShowPlayer(true); }}
-      >
-        <QueueScreen onClose={() => { setShowQueue(false); setShowPlayer(true); }} />
-      </Modal>
-    </>
+        <View style={styles.controls}>
+          <IconButton
+            icon={isPlaying ? 'pause' : 'play'}
+            size={28}
+            iconColor={theme.colors.onSurface}
+            onPress={handlePlayPause}
+            style={styles.playButton}
+          />
+        </View>
+      </TouchableOpacity>
+    </Surface>
   );
 });
 
 export default MiniPlayer;
 
 const styles = StyleSheet.create({
-  wrapper: {
-    backgroundColor: '#121212',
+  container: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1000,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+    marginHorizontal: 16,
   },
   progressBar: {
-    height: 3,
-    backgroundColor: '#282828',
+    height: 2,
+    backgroundColor: 'transparent',
   },
-  progressFill: {
-    height: 3,
-    backgroundColor: '#1db954',
-  },
-  container: {
+  content: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
+    alignItems: 'center',
+    paddingHorizontal: 12,
     paddingVertical: 10,
+  },
+  trackInfo: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  thumbnail: { 
-    width: 48, 
-    height: 48, 
-    borderRadius: 4,
-    backgroundColor: '#282828',
+  thumbnail: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    marginRight: 12,
   },
-  info: { 
-    flex: 1, 
-    marginLeft: 12,
-    marginRight: 8,
+  thumbnailPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  title: { 
-    fontSize: 14, 
-    color: '#fff', 
-    fontWeight: '600',
-    letterSpacing: 0.2,
+  textContainer: {
+    flex: 1,
+    justifyContent: 'center',
   },
-  artist: { 
-    fontSize: 12, 
-    color: '#b3b3b3', 
-    marginTop: 3,
+  title: {
+    fontWeight: '500',
+    marginBottom: 2,
+    fontSize: 15,
+    lineHeight: 18,
+  },
+  artist: {
+    fontSize: 13,
   },
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  controlButton: {
-    padding: 8,
-  },
   playButton: {
-    padding: 8,
-    marginHorizontal: 4,
+    margin: 0,
   },
 });
