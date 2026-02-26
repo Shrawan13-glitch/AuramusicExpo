@@ -1,14 +1,12 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { BackHandler, StyleSheet, View, useWindowDimensions } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { BackHandler, StyleSheet, View } from 'react-native';
 import Animated, {
-  FadeIn,
-  FadeOut,
   Extrapolation,
   interpolate,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
+  withTiming,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import MiniPlayer from './MiniPlayer';
@@ -23,128 +21,116 @@ interface MusicControllerProps {
 const MusicController = React.memo(({ bottomOffset = 0, activeRouteName }: MusicControllerProps) => {
   const { currentTrack } = usePlayer();
   const [isExpanded, setIsExpanded] = useState(false);
-  const [miniHeight, setMiniHeight] = useState(0);
-  const { height: screenHeight } = useWindowDimensions();
-  const translateY = useSharedValue(0);
-  const dragStartY = useSharedValue(0);
+  const [isQueueOpen, setIsQueueOpen] = useState(false);
+  const progress = useSharedValue(0); // 0 = mini, 1 = expanded
+  const startProgress = useSharedValue(0);
 
-  const collapsedOffset = Math.max(screenHeight - (miniHeight || 120), 0);
-
-  const handleExpand = useCallback(() => {
+  const expand = useCallback(() => {
+    if (isExpanded) return;
     setIsExpanded(true);
-    translateY.value = withSpring(0, { damping: 26, stiffness: 320, mass: 0.9 });
-  }, [translateY]);
+    progress.value = withTiming(1, { duration: 240 });
+  }, [isExpanded, progress]);
 
-  const handleCollapse = useCallback(() => {
-    setIsExpanded(false);
-    translateY.value = withSpring(collapsedOffset, { damping: 26, stiffness: 320, mass: 0.9 });
-  }, [collapsedOffset, translateY]);
+  const collapse = useCallback(() => {
+    if (!isExpanded) return;
+    progress.value = withTiming(0, { duration: 220 }, (finished) => {
+      if (finished) {
+        runOnJS(setIsExpanded)(false);
+      }
+    });
+  }, [isExpanded, progress]);
 
   useEffect(() => {
-    if (!isExpanded) return;
-    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      handleCollapse();
+    if (!currentTrack) {
+      setIsExpanded(false);
+      setIsQueueOpen(false);
+      progress.value = 0;
+    }
+  }, [currentTrack, progress]);
+
+  useEffect(() => {
+    if (activeRouteName === 'Player' || activeRouteName === 'Queue') {
+      setIsExpanded(false);
+      setIsQueueOpen(false);
+      progress.value = 0;
+    }
+  }, [activeRouteName, progress]);
+
+  useEffect(() => {
+    if (!isExpanded || isQueueOpen) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      collapse();
       return true;
     });
-    return () => subscription.remove();
-  }, [handleCollapse, isExpanded]);
+    return () => sub.remove();
+  }, [collapse, isExpanded, isQueueOpen]);
 
-  const lastRouteNameRef = React.useRef<string | undefined>(undefined);
-
-  useEffect(() => {
-    if (!activeRouteName) return;
-    const previousRoute = lastRouteNameRef.current;
-    lastRouteNameRef.current = activeRouteName;
-
-    if (!isExpanded || !previousRoute) return;
-    if (activeRouteName !== previousRoute && activeRouteName !== 'Main') {
-      handleCollapse();
-    }
-  }, [activeRouteName, handleCollapse, isExpanded]);
-
-  useEffect(() => {
-    if (!isExpanded) {
-      translateY.value = collapsedOffset;
-    }
-  }, [collapsedOffset, isExpanded, translateY]);
-
-  const settleGesture = useCallback((shouldExpand: boolean) => {
-    if (shouldExpand) {
-      handleExpand();
-    } else {
-      handleCollapse();
-    }
-  }, [handleCollapse, handleExpand]);
-
-  const panGestureExpanded = Gesture.Pan()
+  const miniGesture = Gesture.Pan()
+    .enabled(!isExpanded)
     .activeOffsetY([-8, 8])
     .onBegin(() => {
-      dragStartY.value = translateY.value;
+      startProgress.value = progress.value;
     })
     .onUpdate((event) => {
-      const next = Math.min(Math.max(dragStartY.value + event.translationY, 0), collapsedOffset);
-      translateY.value = next;
+      const next = Math.min(Math.max(startProgress.value + (-event.translationY / 220), 0), 1);
+      progress.value = next;
     })
     .onEnd((event) => {
-      const collapseThreshold = Math.min(160, collapsedOffset * 0.25);
-      const shouldCollapse = event.translationY > collapseThreshold || event.velocityY > 800;
-      runOnJS(settleGesture)(!shouldCollapse);
+      const shouldExpand = progress.value > 0.45 || event.velocityY < -700;
+      if (shouldExpand) {
+        runOnJS(expand)();
+      } else {
+        progress.value = withTiming(0, { duration: 160 });
+      }
     });
 
-  const panGestureCollapsed = Gesture.Pan()
+  const expandedGesture = Gesture.Pan()
+    .enabled(isExpanded && !isQueueOpen)
     .activeOffsetY([-8, 8])
     .onBegin(() => {
-      dragStartY.value = translateY.value;
+      startProgress.value = progress.value;
     })
     .onUpdate((event) => {
-      const next = Math.min(Math.max(dragStartY.value + event.translationY, 0), collapsedOffset);
-      translateY.value = next;
+      const next = Math.min(Math.max(startProgress.value - (event.translationY / 320), 0), 1);
+      progress.value = next;
     })
     .onEnd((event) => {
-      const expandThreshold = Math.min(160, collapsedOffset * 0.25);
-      const shouldExpand = event.translationY < -expandThreshold || event.velocityY < -800;
-      runOnJS(settleGesture)(shouldExpand);
+      const shouldCollapse = progress.value < 0.55 || event.velocityY > 700;
+      if (shouldCollapse) {
+        runOnJS(collapse)();
+      } else {
+        progress.value = withTiming(1, { duration: 160 });
+      }
     });
-
-  const playerStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
-    opacity: interpolate(translateY.value, [0, collapsedOffset], [1, 0], Extrapolation.CLAMP),
-  }));
 
   const miniStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(translateY.value, [0, collapsedOffset], [0, 1], Extrapolation.CLAMP),
-    transform: [{ translateY: interpolate(translateY.value, [0, collapsedOffset], [40, 0], Extrapolation.CLAMP) }],
+    opacity: interpolate(progress.value, [0, 1], [1, 0], Extrapolation.CLAMP),
+    transform: [
+      { translateY: interpolate(progress.value, [0, 1], [0, 16], Extrapolation.CLAMP) },
+      { scale: interpolate(progress.value, [0, 1], [1, 0.985], Extrapolation.CLAMP) },
+    ],
   }));
 
-  if (!currentTrack) {
+  const expandedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0, 1], [0, 1], Extrapolation.CLAMP),
+    transform: [{ translateY: interpolate(progress.value, [0, 1], [24, 0], Extrapolation.CLAMP) }],
+  }));
+
+  if (!currentTrack || activeRouteName === 'Player' || activeRouteName === 'Queue') {
     return null;
   }
 
   return (
     <View pointerEvents="box-none" style={styles.overlay}>
-      <GestureDetector gesture={panGestureExpanded.enabled(isExpanded)}>
-        <Animated.View
-          style={styles.expanded}
-          entering={FadeIn}
-          exiting={FadeOut}
-          pointerEvents={isExpanded ? 'auto' : 'none'}
-        >
-          <Animated.View style={[styles.expandedFill, playerStyle]}>
-            <PlayerScreen onCollapse={handleCollapse} />
-          </Animated.View>
+      <GestureDetector gesture={expandedGesture}>
+        <Animated.View style={[styles.expanded, expandedStyle]} pointerEvents={isExpanded ? 'auto' : 'none'}>
+          <PlayerScreen onCollapse={collapse} onQueueVisibilityChange={setIsQueueOpen} />
         </Animated.View>
       </GestureDetector>
-      <GestureDetector gesture={panGestureCollapsed.enabled(!isExpanded)}>
-        <Animated.View
-          style={styles.collapsed}
-          entering={FadeIn}
-          exiting={FadeOut}
-          onLayout={(event) => setMiniHeight(event.nativeEvent.layout.height)}
-          pointerEvents={isExpanded ? 'none' : 'auto'}
-        >
-          <Animated.View style={miniStyle}>
-            <MiniPlayer onExpand={handleExpand} bottomOffset={bottomOffset} />
-          </Animated.View>
+
+      <GestureDetector gesture={miniGesture}>
+        <Animated.View style={[styles.mini, miniStyle]} pointerEvents={isExpanded ? 'none' : 'auto'}>
+          <MiniPlayer onExpand={expand} bottomOffset={bottomOffset} />
         </Animated.View>
       </GestureDetector>
     </View>
@@ -162,20 +148,13 @@ const styles = StyleSheet.create({
     top: 0,
     zIndex: 1000,
   },
+  mini: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   expanded: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  expandedFill: {
-    flex: 1,
-  },
-  collapsed: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
+    ...StyleSheet.absoluteFillObject,
   },
 });
