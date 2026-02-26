@@ -15,6 +15,8 @@ import ProfileScreen from '../screens/ProfileScreen';
 import QueueScreen from '../screens/QueueScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import AppearanceSettingsScreen from '../screens/AppearanceSettingsScreen';
+import MessagesScreen from '../screens/MessagesScreen';
+import MessageDetailScreen from '../screens/MessageDetailScreen';
 import CookieViewer from '../components/CookieViewer';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -99,6 +101,7 @@ const TabNavigator = React.memo(({ navigation }: { navigation: any }) => {
         {index !== 1 && (
           <Appbar.Header>
             <Appbar.Content title={getTitle()} />
+            <Appbar.Action icon="message-text-outline" onPress={() => navigation.navigate('Messages')} />
             {isAuthenticated && (
               <Appbar.Action icon="account-circle" onPress={handleAccountPress} />
             )}
@@ -267,6 +270,24 @@ export default function AppNavigator() {
         component={AppearanceSettingsScreen}
         options={{
           presentation: 'modal',
+          gestureEnabled: true,
+        }}
+      />
+      <Stack.Screen
+        name="Messages"
+        component={MessagesScreen}
+        options={{
+          presentation: 'modal',
+          animation: 'slide_from_right',
+          gestureEnabled: true,
+        }}
+      />
+      <Stack.Screen
+        name="MessageDetail"
+        component={MessageDetailScreen}
+        options={{
+          presentation: 'modal',
+          animation: 'slide_from_right',
           gestureEnabled: true,
         }}
       />
