@@ -9,6 +9,8 @@ export interface SearchResult {
   title: string;
   artist: string;
   artistIds?: string[];
+  watchPlaylistId?: string;
+  watchParams?: string;
   duration?: string;
   thumbnail: string;
   type: 'song' | 'video' | 'album' | 'artist' | 'playlist' | 'episode' | 'profile' | 'podcast';

@@ -63,7 +63,13 @@ export default function AlbumScreen({ route, navigation }: AlbumScreenProps) {
         title: item.title,
         artist: item.artist,
         thumbnail: item.thumbnail || album?.thumbnail || '',
-      }, trackQueue)}
+      }, undefined, {
+        source: {
+          type: 'album',
+          label: album?.title ? `Album: ${album.title}` : 'Album',
+          id: albumId,
+        },
+      })}
       onLongPress={() => openSongOptions({
         videoId: item.id,
         title: item.title,
@@ -118,6 +124,17 @@ export default function AlbumScreen({ route, navigation }: AlbumScreenProps) {
 
   const keyExtractor = useCallback((item: AlbumTrack, index: number) => `${item.id}-${index}`, []);
 
+  const handlePlayAlbum = useCallback(() => {
+    if (!trackQueue.length) return;
+    playTrack(trackQueue[0], undefined, {
+      source: {
+        type: 'album',
+        label: album?.title ? `Album: ${album.title}` : 'Album',
+        id: albumId,
+      },
+    });
+  }, [album?.title, albumId, playTrack, trackQueue]);
+
   const renderHeader = useCallback(() => (
     <View>
       <View style={[styles.header, { backgroundColor: theme.colors.surface }]}>
@@ -158,7 +175,8 @@ export default function AlbumScreen({ route, navigation }: AlbumScreenProps) {
           <Button
             mode="contained"
             icon="play"
-            onPress={() => {}}
+            onPress={handlePlayAlbum}
+            disabled={!trackQueue.length}
             style={styles.playButton}
           >
             Play
@@ -188,7 +206,7 @@ export default function AlbumScreen({ route, navigation }: AlbumScreenProps) {
         <View style={styles.headerSpacer} />
       </View>
     </View>
-  ), [album, navigation, theme.colors.onSurface, theme.colors.onSurfaceVariant, theme.colors.surface, theme.colors.surfaceVariant]);
+  ), [album, handlePlayAlbum, navigation, theme.colors.onSurface, theme.colors.onSurfaceVariant, theme.colors.surface, theme.colors.surfaceVariant, trackQueue.length]);
 
   const renderSuggestion = (suggestion: AlbumSuggestion) => (
     <View key={suggestion.id} style={styles.suggestionItem}>

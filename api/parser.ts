@@ -49,6 +49,8 @@ export class ResponseParser {
       // Extract ID and determine type
       let id = renderer.playlistItemData?.videoId;
       let type: 'song' | 'video' | 'album' | 'artist' | 'playlist' | 'episode' | 'profile' | 'podcast' = 'song';
+      let watchPlaylistId = '';
+      let watchParams = '';
       
       // Check navigation endpoint in title first
       const titleNavEndpoint = titleRuns[0]?.navigationEndpoint;
@@ -56,6 +58,8 @@ export class ResponseParser {
       if (titleNavEndpoint?.watchEndpoint?.videoId) {
         id = titleNavEndpoint.watchEndpoint.videoId;
         type = titleNavEndpoint.watchEndpoint.watchEndpointMusicSupportedConfigs?.watchEndpointMusicConfig?.musicVideoType === 'MUSIC_VIDEO_TYPE_OMV' ? 'video' : 'song';
+        watchPlaylistId = titleNavEndpoint.watchEndpoint.playlistId || '';
+        watchParams = titleNavEndpoint.watchEndpoint.params || '';
       } else if (titleNavEndpoint?.browseEndpoint?.browseId) {
         id = titleNavEndpoint.browseEndpoint.browseId;
         const pageType = titleNavEndpoint.browseEndpoint.browseEndpointContextSupportedConfigs?.browseEndpointContextMusicConfig?.pageType;
@@ -78,6 +82,12 @@ export class ResponseParser {
         else if (pageType === 'MUSIC_PAGE_TYPE_USER_CHANNEL') type = 'profile';
         else if (pageType === 'MUSIC_PAGE_TYPE_PODCAST_EPISODE_DETAIL_PAGE') type = 'episode';
       }
+      if (!watchPlaylistId && renderer.navigationEndpoint?.watchEndpoint?.playlistId) {
+        watchPlaylistId = renderer.navigationEndpoint.watchEndpoint.playlistId;
+      }
+      if (!watchParams && renderer.navigationEndpoint?.watchEndpoint?.params) {
+        watchParams = renderer.navigationEndpoint.watchEndpoint.params;
+      }
 
       if (!id) return null;
 
@@ -94,6 +104,8 @@ export class ResponseParser {
         title,
         artist,
         artistIds,
+        watchPlaylistId,
+        watchParams,
         thumbnail,
         type,
         subscribers

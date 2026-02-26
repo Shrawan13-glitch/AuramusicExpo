@@ -79,25 +79,22 @@ const EnhancedSearchScreen = React.memo(({ navigation }: EnhancedSearchScreenPro
         }
       });
     } else if (track.type === 'song' || track.type === 'video') {
-      const trackQueue = results
-        .filter(r => r.type === 'song' || r.type === 'video')
-        .map(r => ({
-          id: r.id,
-          title: r.title,
-          artist: r.artist,
-          thumbnail: r.thumbnail,
-          artistId: r.artistIds?.[0]
-        }));
-      
       playTrack({
         id: track.id,
         title: track.title,
         artist: track.artist,
         thumbnail: track.thumbnail,
         artistId: track.artistIds?.[0]
-      }, trackQueue);
+      }, undefined, {
+        source: {
+          type: 'search',
+          label: 'Search',
+          ytQueuePlaylistId: track.watchPlaylistId,
+          ytQueueParams: track.watchParams,
+        },
+      });
     }
-  }, [results, playTrack, navigation]);
+  }, [playTrack, navigation]);
 
   const onChangeText = useCallback((query: string) => {
     setSearchQuery(query);

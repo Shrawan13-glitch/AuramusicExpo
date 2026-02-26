@@ -51,13 +51,21 @@ type TrackRowProps = {
     title: string;
     artist: string;
     thumbnail: string;
-  }>) => void;
+  }>, options?: {
+    source?: {
+      type: 'playlist' | 'album' | 'search' | 'queue' | 'unknown';
+      label: string;
+      id?: string;
+    };
+  }) => void;
   openSongOptions: (track: {
     videoId: string;
     title: string;
     artist: string;
     thumbnail: string;
   }) => void;
+  sourceLabel: string;
+  sourceId: string;
 };
 
 const TrackRow = React.memo(function TrackRow({
@@ -67,6 +75,8 @@ const TrackRow = React.memo(function TrackRow({
   trackQueue,
   playTrack,
   openSongOptions,
+  sourceLabel,
+  sourceId,
 }: TrackRowProps) {
   return (
     <TouchableOpacity
@@ -78,7 +88,13 @@ const TrackRow = React.memo(function TrackRow({
         title: item.title,
         artist: item.artist,
         thumbnail: item.thumbnail,
-      }, trackQueue)}
+      }, trackQueue, {
+        source: {
+          type: 'playlist',
+          label: sourceLabel,
+          id: sourceId,
+        },
+      })}
       onLongPress={() => openSongOptions({
         videoId: item.id,
         title: item.title,
@@ -259,6 +275,17 @@ export default function PlaylistScreen({ route, navigation }: PlaylistScreenProp
     })) ?? []
   ), [playlist?.tracks]);
 
+  const handlePlayPlaylist = useCallback(() => {
+    if (!trackQueue.length) return;
+    playTrack(trackQueue[0], trackQueue, {
+      source: {
+        type: 'playlist',
+        label: playlist?.title ? `Playlist: ${playlist.title}` : 'Playlist',
+        id: playlistId,
+      },
+    });
+  }, [playTrack, playlist?.title, playlistId, trackQueue]);
+
   const renderTrack = useCallback(
     ({ item, index }: { item: PlaylistTrack; index: number }) => (
       <TrackRow
@@ -268,9 +295,11 @@ export default function PlaylistScreen({ route, navigation }: PlaylistScreenProp
         trackQueue={trackQueue}
         playTrack={playTrack}
         openSongOptions={openSongOptions}
+        sourceLabel={playlist?.title ? `Playlist: ${playlist.title}` : 'Playlist'}
+        sourceId={playlistId}
       />
     ),
-    [openSongOptions, playTrack, theme, trackQueue]
+    [openSongOptions, playTrack, playlist?.title, playlistId, theme, trackQueue]
   );
 
   const keyExtractor = useCallback(
@@ -324,25 +353,12 @@ export default function PlaylistScreen({ route, navigation }: PlaylistScreenProp
           <Button
             mode="contained"
             icon="play"
-            onPress={() => {}}
+            onPress={handlePlayPlaylist}
+            disabled={!trackQueue.length}
             style={styles.playButton}
           >
             Play
           </Button>
-          
-          <IconButton
-            icon="shuffle"
-            size={24}
-            iconColor={theme.colors.onSurface}
-            onPress={() => {}}
-          />
-          
-          <IconButton
-            icon="plus"
-            size={24}
-            iconColor={theme.colors.onSurface}
-            onPress={() => {}}
-          />
           
           <IconButton
             icon="pencil"
@@ -354,7 +370,7 @@ export default function PlaylistScreen({ route, navigation }: PlaylistScreenProp
         <View style={styles.headerSpacer} />
       </View>
     </View>
-  ), [navigation, openEditModal, playlist, theme.colors.onSurface, theme.colors.onSurfaceVariant, theme.colors.surface, theme.colors.surfaceVariant]);
+  ), [handlePlayPlaylist, navigation, openEditModal, playlist, theme.colors.onSurface, theme.colors.onSurfaceVariant, theme.colors.surface, theme.colors.surfaceVariant, trackQueue.length]);
 
   const renderFooter = useCallback(() => {
     if (!playlist?.continuationToken) return null;
@@ -441,7 +457,6 @@ export default function PlaylistScreen({ route, navigation }: PlaylistScreenProp
             
             <View style={styles.actionButtons}>
               <View style={[styles.skeletonPlayButton, { backgroundColor: theme.colors.surfaceVariant }]} />
-              <View style={[styles.skeletonIconButton, { backgroundColor: theme.colors.surfaceVariant }]} />
               <View style={[styles.skeletonIconButton, { backgroundColor: theme.colors.surfaceVariant }]} />
             </View>
           </View>

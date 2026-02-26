@@ -3,8 +3,9 @@ import { AudioPro, AudioProContentType, AudioProEventType } from 'react-native-a
 import CryptoJS from 'crypto-js';
 import { getStreamUrl } from '../streaming';
 import { CookieManager } from '../utils/cookieManager';
+import { AuthenticatedHttpClient } from '../utils/authenticatedHttpClient';
 
-interface Track {
+export interface Track {
   id: string;
   title: string;
   artist: string;
@@ -12,6 +13,19 @@ interface Track {
   thumbnail: string;
   streamUrl?: string;
   duration?: number;
+}
+
+export interface PlaybackSource {
+  type: 'search' | 'playlist' | 'album' | 'queue' | 'unknown';
+  label: string;
+  id?: string;
+  ytQueuePlaylistId?: string;
+  ytQueueParams?: string;
+}
+
+export interface PlayTrackOptions {
+  source?: PlaybackSource;
+  preserveQueue?: boolean;
 }
 
 interface PlayerContextType {
@@ -23,7 +37,8 @@ interface PlayerContextType {
   streamError: string | null;
   queue: Track[];
   currentIndex: number;
-  playTrack: (track: Track, queue?: Track[]) => void;
+  playbackSource: PlaybackSource;
+  playTrack: (track: Track, queue?: Track[], options?: PlayTrackOptions) => void;
   pause: () => void;
   resume: () => void;
   seekTo: (position: number) => void;
@@ -42,10 +57,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [streamError, setStreamError] = useState<string | null>(null);
   const [queue, setQueue] = useState<Track[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [playbackSource, setPlaybackSource] = useState<PlaybackSource>({
+    type: 'unknown',
+    label: 'Now playing',
+  });
   const streamRequestId = useRef(0);
   const currentTrackRef = useRef<Track | null>(null);
   const visitorDataRef = useRef<string | null>(null);
   const authHeadersRef = useRef<{ cookie?: string; authorization?: string } | null>(null);
+  const queueHydrationLock = useRef(false);
 
   const buildAuthHeaders = useCallback(async () => {
     if (authHeadersRef.current) return authHeadersRef.current;
@@ -140,11 +160,19 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   }, [buildAuthHeaders]);
 
-  const playTrack = useCallback((track: Track, newQueue?: Track[]) => {
-    if (newQueue) {
+  const playTrack = useCallback((track: Track, newQueue?: Track[], options?: PlayTrackOptions) => {
+    if (options?.preserveQueue) {
+      // Keep queue/currentIndex as managed by caller (skip next/previous flows).
+    } else if (newQueue) {
       setQueue(newQueue);
       const index = newQueue.findIndex(t => t.id === track.id);
       setCurrentIndex(index >= 0 ? index : 0);
+    } else {
+      setQueue([track]);
+      setCurrentIndex(0);
+    }
+    if (options?.source) {
+      setPlaybackSource(options.source);
     }
     currentTrackRef.current = track;
     setCurrentTrack(track);
@@ -168,19 +196,161 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setPosition(newPosition);
   }, []);
 
+  const parseWatchNextQueueTracks = useCallback((response: any): Track[] => {
+    const contentTabs =
+      response?.contents?.singleColumnMusicWatchNextResultsRenderer?.tabbedRenderer?.watchNextTabbedResultsRenderer?.tabs ||
+      [];
+
+    const panelFromTabs = contentTabs.flatMap((tab: any) => {
+      const tabContent = tab?.tabRenderer?.content;
+      return (
+        tabContent?.musicQueueRenderer?.content?.playlistPanelRenderer?.contents ||
+        tabContent?.playlistPanelRenderer?.contents ||
+        []
+      );
+    });
+
+    const fallbackPanel =
+      response?.contents?.singleColumnMusicWatchNextResultsRenderer?.playlist?.playlistPanelRenderer?.contents ||
+      response?.contents?.twoColumnWatchNextResults?.playlist?.playlist?.contents ||
+      [];
+
+    const directPanelItems: any[] = panelFromTabs.length ? panelFromTabs : fallbackPanel;
+
+    const collectPlaylistPanelRenderers = (node: any, depth = 0, acc: any[] = []): any[] => {
+      if (!node || depth > 12) return acc;
+      if (Array.isArray(node)) {
+        node.forEach((item) => collectPlaylistPanelRenderers(item, depth + 1, acc));
+        return acc;
+      }
+      if (typeof node !== 'object') return acc;
+
+      if (node.playlistPanelVideoRenderer) {
+        acc.push(node.playlistPanelVideoRenderer);
+      }
+
+      Object.values(node).forEach((value) => collectPlaylistPanelRenderers(value, depth + 1, acc));
+      return acc;
+    };
+
+    const candidateRenderers =
+      directPanelItems
+        .map((entry) => entry?.playlistPanelVideoRenderer)
+        .filter(Boolean)
+        .length > 0
+        ? directPanelItems.map((entry) => entry?.playlistPanelVideoRenderer).filter(Boolean)
+        : collectPlaylistPanelRenderers(response);
+
+    const seen = new Set<string>();
+    return candidateRenderers
+      .map((renderer) => {
+        if (!renderer?.videoId) return null;
+        if (seen.has(renderer.videoId)) return null;
+        seen.add(renderer.videoId);
+        const title =
+          renderer?.title?.simpleText ||
+          renderer?.title?.runs?.map((run: any) => run.text).join('') ||
+          'Unknown Title';
+        const artistRuns = renderer?.longBylineText?.runs || renderer?.shortBylineText?.runs || [];
+        const artist = artistRuns
+          .filter((run: any) => run?.navigationEndpoint?.browseEndpoint?.browseId?.startsWith('UC'))
+          .map((run: any) => run.text)
+          .join(', ') || 'Unknown Artist';
+        const artistId = artistRuns.find((run: any) => run?.navigationEndpoint?.browseEndpoint?.browseId?.startsWith('UC'))
+          ?.navigationEndpoint?.browseEndpoint?.browseId;
+        const thumbnail =
+          renderer?.thumbnail?.thumbnails?.slice(-1)?.[0]?.url ||
+          renderer?.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.slice(-1)?.[0]?.url ||
+          '';
+        return {
+          id: renderer.videoId,
+          title,
+          artist,
+          artistId,
+          thumbnail,
+        } as Track;
+      })
+      .filter(Boolean) as Track[];
+  }, []);
+
+  const hydrateQueueFromYouTube = useCallback(async () => {
+    if (queueHydrationLock.current) return false;
+    const current = currentTrackRef.current;
+    if (!current?.id) return false;
+
+    queueHydrationLock.current = true;
+    try {
+      const nextResponse = await AuthenticatedHttpClient.getWatchNextQueue(current.id, {
+        playlistId:
+          playbackSource.type === 'playlist'
+            ? playbackSource.id
+            : playbackSource.ytQueuePlaylistId || `RDAMVM${current.id}`,
+        params: playbackSource.ytQueueParams,
+      });
+      const ytTracks = parseWatchNextQueueTracks(nextResponse);
+      if (!ytTracks.length) return false;
+
+      let added = 0;
+      setQueue((prev) => {
+        const seen = new Set(prev.map((track) => track.id));
+        const appendable = ytTracks.filter((track) => {
+          if (!track.id || track.id === current.id || seen.has(track.id)) return false;
+          seen.add(track.id);
+          return true;
+        });
+        added = appendable.length;
+        return appendable.length ? [...prev, ...appendable] : prev;
+      });
+      return added > 0;
+    } catch (error) {
+      console.error('Failed to hydrate queue from YouTube', error);
+      return false;
+    } finally {
+      queueHydrationLock.current = false;
+    }
+  }, [parseWatchNextQueueTracks, playbackSource.id, playbackSource.type]);
+
+  useEffect(() => {
+    if (!currentTrack?.id) return;
+    if (playbackSource.type === 'playlist') return;
+    if (queue.length > 1) return;
+    void hydrateQueueFromYouTube();
+  }, [currentTrack?.id, hydrateQueueFromYouTube, playbackSource.type, queue.length]);
+
   const skipNext = useCallback(() => {
     if (currentIndex < queue.length - 1) {
       const nextTrack = queue[currentIndex + 1];
       setCurrentIndex(currentIndex + 1);
-      playTrack(nextTrack);
+      playTrack(nextTrack, queue, { preserveQueue: true });
+      return;
     }
-  }, [currentIndex, queue, playTrack]);
+
+    void (async () => {
+      const hydrated = await hydrateQueueFromYouTube();
+      if (!hydrated) return;
+
+      setQueue((latestQueue) => {
+        if (currentIndex >= latestQueue.length - 1) return latestQueue;
+        const nextTrack = latestQueue[currentIndex + 1];
+        if (nextTrack) {
+          setCurrentIndex(currentIndex + 1);
+          playTrack(nextTrack, latestQueue, {
+            preserveQueue: true,
+            source: playbackSource.type === 'unknown'
+              ? { type: 'queue', label: 'YouTube Queue' }
+              : playbackSource,
+          });
+        }
+        return latestQueue;
+      });
+    })();
+  }, [currentIndex, hydrateQueueFromYouTube, playTrack, playbackSource, queue]);
 
   const skipPrevious = useCallback(() => {
     if (currentIndex > 0) {
       const prevTrack = queue[currentIndex - 1];
       setCurrentIndex(currentIndex - 1);
-      playTrack(prevTrack);
+      playTrack(prevTrack, queue, { preserveQueue: true });
     }
   }, [currentIndex, queue, playTrack]);
 
@@ -242,6 +412,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     streamError,
     queue,
     currentIndex,
+    playbackSource,
     playTrack,
     pause,
     resume,
@@ -257,6 +428,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     streamError,
     queue,
     currentIndex,
+    playbackSource,
     playTrack,
     pause,
     resume,
