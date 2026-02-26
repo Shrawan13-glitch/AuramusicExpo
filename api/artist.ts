@@ -6,6 +6,9 @@ export interface ArtistData {
   thumbnail: string;
   subscribers?: string;
   description?: string;
+  isSubscribed?: boolean;
+  subscriptionChannelIds?: string[];
+  subscriptionParams?: string;
   sections: ArtistSection[];
 }
 
@@ -31,6 +34,51 @@ export interface ArtistItem {
 }
 
 export class ArtistAPI {
+  private static extractSubscriptionMeta(
+    subscribeButton: any,
+    browseId: string,
+  ): { channelIds: string[]; params?: string } {
+    const endpointCandidates: any[] = [
+      subscribeButton?.subscribeEndpoint,
+      subscribeButton?.unsubscribeEndpoint,
+      ...(subscribeButton?.serviceEndpoints || []).flatMap((endpoint: any) => [
+        endpoint?.subscribeEndpoint,
+        endpoint?.unsubscribeEndpoint,
+      ]),
+      ...(subscribeButton?.onSubscribeEndpoints || []).flatMap((endpoint: any) => [
+        endpoint?.subscribeEndpoint,
+        endpoint?.unsubscribeEndpoint,
+      ]),
+      ...(subscribeButton?.onUnsubscribeEndpoints || []).flatMap((endpoint: any) => [
+        endpoint?.subscribeEndpoint,
+        endpoint?.unsubscribeEndpoint,
+      ]),
+    ].filter(Boolean);
+
+    const channelIds: string[] = [];
+    let params: string | undefined;
+
+    endpointCandidates.forEach((endpoint) => {
+      const ids = endpoint?.channelIds;
+      if (Array.isArray(ids)) {
+        ids.forEach((id) => {
+          if (typeof id === 'string' && id.startsWith('UC') && !channelIds.includes(id)) {
+            channelIds.push(id);
+          }
+        });
+      }
+      if (!params && typeof endpoint?.params === 'string') {
+        params = endpoint.params;
+      }
+    });
+
+    if (!channelIds.length && browseId.startsWith('UC')) {
+      channelIds.push(browseId);
+    }
+
+    return { channelIds, params };
+  }
+
   static async getArtistSection(browseId: string, params?: string): Promise<ArtistItem[]> {
     try {
       const response = await HttpClient.browse(browseId, params);
@@ -93,6 +141,11 @@ export class ArtistAPI {
     const thumbnail = header?.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.slice(-1)[0]?.url || '';
     const subscribers = header?.subscriptionButton?.subscribeButtonRenderer?.subscriberCountText?.runs?.[0]?.text || '';
     const description = header?.description?.runs?.[0]?.text || '';
+    const subscribeButton =
+      header?.subscriptionButton?.subscribeButtonRenderer ||
+      header?.buttons?.find((button: any) => button?.subscribeButtonRenderer)?.subscribeButtonRenderer;
+    const isSubscribed = !!subscribeButton?.subscribed;
+    const subscriptionMeta = this.extractSubscriptionMeta(subscribeButton, browseId);
 
     // Parse sections
     const sections: ArtistSection[] = [];
@@ -146,6 +199,9 @@ export class ArtistAPI {
       thumbnail: thumbnail,
       subscribers: subscribers,
       description: description,
+      isSubscribed,
+      subscriptionChannelIds: subscriptionMeta.channelIds,
+      subscriptionParams: subscriptionMeta.params,
       sections: sections
     };
   }

@@ -1,10 +1,16 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   View,
   StyleSheet,
   Image,
   TouchableOpacity,
   Animated,
+  Dimensions,
+  StatusBar,
+  ScrollView,
+  Pressable,
+  ImageBackground,
+  Share,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import {
@@ -14,15 +20,20 @@ import {
   Button,
   Surface,
   ActivityIndicator,
-  Appbar,
+  Chip,
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { YouTubeMusicAPI, ArtistData, ArtistSection, ArtistItem } from '../../api';
 import ArtistCard from '../components/ArtistCard';
 import { useSongOptions } from '../contexts/SongOptionsContext';
+import { AuthenticatedHttpClient } from '../utils/authenticatedHttpClient';
 
-const AnimatedFlashList = Animated.createAnimatedComponent(FlashList) as typeof FlashList;
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const HEADER_MAX_HEIGHT = 420;
+const HEADER_MIN_HEIGHT = 100;
+const HEADER_SCROLL_DISTANCE = HEADER_MAX_HEIGHT - HEADER_MIN_HEIGHT;
 
 interface ArtistScreenProps {
   route: {
@@ -34,6 +45,8 @@ interface ArtistScreenProps {
   navigation: any;
 }
 
+type TabType = 'overview' | 'songs' | 'albums' | 'videos' | 'about';
+
 export default function ArtistScreen({ route, navigation }: ArtistScreenProps) {
   const theme = useTheme();
   const { artistId, artistName } = route.params;
@@ -41,7 +54,9 @@ export default function ArtistScreen({ route, navigation }: ArtistScreenProps) {
   const [artistData, setArtistData] = useState<ArtistData | null>(null);
   const [loading, setLoading] = useState(true);
   const [isFollowing, setIsFollowing] = useState(false);
-  const [scrollY] = useState(new Animated.Value(0));
+  const [followLoading, setFollowLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const scrollY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     loadArtistData();
@@ -50,9 +65,12 @@ export default function ArtistScreen({ route, navigation }: ArtistScreenProps) {
   const loadArtistData = async () => {
     try {
       setLoading(true);
+      setIsFollowing(false);
+      setFollowLoading(false);
       const data = await YouTubeMusicAPI.getArtist(artistId);
       if (data) {
         setArtistData(data);
+        setIsFollowing(!!data.isSubscribed);
       } else {
         // Fallback to mock data if API fails
         const mockData: ArtistData = {
@@ -110,6 +128,7 @@ export default function ArtistScreen({ route, navigation }: ArtistScreenProps) {
           ]
         };
         setArtistData(mockData);
+        setIsFollowing(false);
       }
     } catch (error) {
       console.error('Error loading artist data:', error);
@@ -121,10 +140,43 @@ export default function ArtistScreen({ route, navigation }: ArtistScreenProps) {
         sections: []
       };
       setArtistData(fallbackData);
+      setIsFollowing(false);
     } finally {
       setLoading(false);
     }
   };
+
+  const handleFollowToggle = useCallback(async () => {
+    if (!artistData || followLoading) return;
+
+    const channelIds = artistData.subscriptionChannelIds?.length
+      ? artistData.subscriptionChannelIds
+      : artistData.id?.startsWith('UC')
+        ? [artistData.id]
+        : [];
+    const params = artistData.subscriptionParams;
+    if (!channelIds.length) {
+      console.warn('No channelIds available for follow/unfollow on this artist');
+      return;
+    }
+
+    const previous = isFollowing;
+    setFollowLoading(true);
+    setIsFollowing(!previous);
+
+    try {
+      if (previous) {
+        await AuthenticatedHttpClient.unfollowArtist(channelIds, params);
+      } else {
+        await AuthenticatedHttpClient.followArtist(channelIds, params);
+      }
+    } catch (error) {
+      console.error('Failed to toggle follow state', error);
+      setIsFollowing(previous);
+    } finally {
+      setFollowLoading(false);
+    }
+  }, [artistData, followLoading, isFollowing]);
 
   const handleItemPress = useCallback((item: ArtistItem) => {
     switch (item.type) {
@@ -176,6 +228,24 @@ export default function ArtistScreen({ route, navigation }: ArtistScreenProps) {
     />
   ), [handleItemPress, openSongOptions]);
 
+  const renderGridItem = useCallback(({ item }: { item: ArtistItem }) => (
+    <TouchableOpacity 
+      style={styles.gridItem}
+      onPress={() => handleItemPress(item)}
+      activeOpacity={0.7}
+    >
+      <Image source={{ uri: item.thumbnail }} style={styles.gridImage} />
+      <View style={styles.gridInfo}>
+        <Text variant="titleSmall" numberOfLines={2} style={{ color: theme.colors.onSurface, fontWeight: '600' }}>
+          {item.title}
+        </Text>
+        <Text variant="bodySmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant, marginTop: 4 }}>
+          {item.subtitle}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  ), [handleItemPress, theme]);
+
   const renderArtistItem = useCallback(({ item }: { item: ArtistItem }) => (
     <TouchableOpacity 
       style={{ width: 120, alignItems: 'center', paddingHorizontal: 8 }}
@@ -207,72 +277,130 @@ export default function ArtistScreen({ route, navigation }: ArtistScreenProps) {
     [artistData?.sections]
   );
 
-  const renderSection = useCallback(({ item, index }: { item: ArtistSection; index: number }) => {
-    const isLastSection = index === sections.length - 1;
-    const totalCount = item.items.length;
-    const showMore = totalCount > 3;
+  const tabSections = useMemo(() => {
+    const tabs: Record<TabType, ArtistSection[]> = {
+      overview: sections.slice(0, 3),
+      songs: sections.filter(s => s.type === 'songs'),
+      albums: sections.filter(s => s.type === 'albums'),
+      videos: sections.filter(s => s.type === 'videos'),
+      about: [],
+    };
+    return tabs;
+  }, [sections]);
+
+  const handleShareArtist = useCallback(async () => {
+    const shareArtistName = artistData?.name || artistName || 'this artist';
+    const shareId = artistData?.id || artistId;
+    const shareUrl = shareId ? `https://music.youtube.com/browse/${shareId}` : '';
+    const message = shareUrl
+      ? `Check out ${shareArtistName} on YouTube Music: ${shareUrl}`
+      : `Check out ${shareArtistName} on AuraMusic`;
+
+    try {
+      await Share.share({
+        title: shareArtistName,
+        message,
+        url: shareUrl || undefined,
+      });
+    } catch (error) {
+      console.error('Failed to share artist', error);
+    }
+  }, [artistData?.id, artistData?.name, artistId, artistName]);
+
+  const headerOpacity = scrollY.interpolate({
+    inputRange: [0, 200],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+
+  const renderSection = useCallback((section: ArtistSection, index: number) => {
+    const isGrid = section.type === 'albums' || section.type === 'videos';
+    const displayItems = section.items.slice(0, isGrid ? 6 : 8);
 
     return (
-      <View key={item.title} style={[styles.section, isLastSection && { marginTop: 0 }]}>
-        <Surface style={[styles.sectionCard, { backgroundColor: theme.colors.surface }]} elevation={1}>
-          <View style={[styles.sectionHeader, isLastSection && { marginBottom: 0 }]}>
-            <View style={styles.sectionTitleContainer}>
-              <Text variant="titleMedium" style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
-                {item.title}
-              </Text>
-              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginLeft: 8 }}>
-                ({totalCount})
-              </Text>
-            </View>
-            {showMore && (
-              <Button
-                mode="text"
-                compact
-                onPress={() => navigation.navigate('ShowAll', {
-                  sectionTitle: item.title,
-                  sectionType: item.type,
-                  items: item.items,
-                  artistName: artistData?.name,
-                  browseId: item.browseId,
-                  continuationToken: item.continuationToken
-                })}
-                style={styles.showAllButton}
-                labelStyle={[styles.showAllLabel, { color: theme.colors.primary }]}
-              >
+      <View key={`${section.title}-${index}`} style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text variant="titleLarge" style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
+            {section.title}
+          </Text>
+          {section.items.length > displayItems.length && (
+            <Pressable
+              onPress={() => navigation.navigate('ShowAll', {
+                sectionTitle: section.title,
+                sectionType: section.type,
+                items: section.items,
+                artistName: artistData?.name,
+                browseId: section.browseId,
+                continuationToken: section.continuationToken
+              })}
+            >
+              <Text style={[styles.showAllText, { color: theme.colors.primary }]}>
                 Show all
-              </Button>
-            )}
-          </View>
-          
-          {item.type === 'artists' ? (
-            <View style={styles.sectionBody}>
-              <FlashList
-                data={item.items.slice(0, 6)}
-                renderItem={renderArtistItem}
-                keyExtractor={(artistItem) => artistItem.id}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.artistsList}
-                style={{ marginBottom: 0 }}
-                estimatedItemSize={140}
-              />
-            </View>
-          ) : (
-            <View style={styles.sectionBody}>
-              <View style={styles.sectionContent}>
-            {item.items.slice(0, 5).map((sectionItem) => (
-              <View key={sectionItem.id}>
-                {renderSectionItem({ item: sectionItem })}
+              </Text>
+            </Pressable>
+          )}
+        </View>
+
+        {isGrid ? (
+          <View style={styles.gridContainer}>
+            {displayItems.map((item) => (
+              <View key={item.id} style={{ width: '50%' }}>
+                {renderGridItem({ item })}
               </View>
             ))}
-              </View>
-            </View>
-          )}
-        </Surface>
+          </View>
+        ) : section.type === 'artists' ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.artistsRow}>
+            {displayItems.map((item) => renderArtistItem({ item }))}
+          </ScrollView>
+        ) : (
+          <View>
+            {displayItems.map((item) => (
+              <View key={item.id}>{renderSectionItem({ item })}</View>
+            ))}
+          </View>
+        )}
       </View>
     );
-  }, [artistData?.name, navigation, renderArtistItem, renderSectionItem, sections.length, theme.colors.onSurface, theme.colors.onSurfaceVariant, theme.colors.primary]);
+  }, [artistData?.name, navigation, renderArtistItem, renderGridItem, renderSectionItem, theme]);
 
+  const renderTabContent = () => {
+    const currentSections = tabSections[activeTab];
+    
+    if (activeTab === 'about') {
+      return (
+        <View style={styles.aboutContainer}>
+          <Surface style={[styles.aboutCard, { backgroundColor: theme.colors.surface }]} elevation={1}>
+            <Text variant="headlineSmall" style={{ color: theme.colors.onSurface, marginBottom: 16, fontWeight: '700' }}>
+              About {artistData?.name}
+            </Text>
+            <Text variant="bodyLarge" style={{ color: theme.colors.onSurfaceVariant, lineHeight: 24 }}>
+              {artistData?.description || 'No description available.'}
+            </Text>
+            {artistData?.subscribers && (
+              <View style={styles.statsRow}>
+                <View style={styles.statItem}>
+                  <MaterialCommunityIcons name="account-group" size={24} color={theme.colors.primary} />
+                  <Text variant="titleMedium" style={{ color: theme.colors.onSurface, marginTop: 8, fontWeight: '600' }}>
+                    {artistData.subscribers}
+                  </Text>
+                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                    Subscribers
+                  </Text>
+                </View>
+              </View>
+            )}
+          </Surface>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.tabContent}>
+        {currentSections.map((section, index) => renderSection(section, index))}
+      </View>
+    );
+  };
 
   if (loading) {
     return (
@@ -301,141 +429,158 @@ export default function ArtistScreen({ route, navigation }: ArtistScreenProps) {
     );
   }
 
+  const tabs: { key: TabType; label: string; icon: string }[] = [
+    { key: 'overview', label: 'Overview', icon: 'view-dashboard' },
+    { key: 'songs', label: 'Songs', icon: 'music-note' },
+    { key: 'albums', label: 'Albums', icon: 'album' },
+    { key: 'videos', label: 'Videos', icon: 'video' },
+    { key: 'about', label: 'About', icon: 'information' },
+  ];
+
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      {/* Animated Header */}
-      <Animated.View 
-        style={[
-          styles.animatedHeader,
-          {
-            backgroundColor: theme.colors.surface,
-            opacity: scrollY.interpolate({
-              inputRange: [200, 250],
-              outputRange: [0, 1],
-              extrapolate: 'clamp',
-            }),
-          }
-        ]}
-      >
-        <Appbar.Header style={{ backgroundColor: 'transparent' }}>
-          <Appbar.BackAction onPress={() => navigation.goBack()} />
-          <Appbar.Content title={artistData?.name || ''} />
-          <Appbar.Action icon="dots-vertical" onPress={() => {}} />
-        </Appbar.Header>
+    <ImageBackground
+      source={{ uri: artistData.thumbnail }}
+      blurRadius={12}
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      imageStyle={styles.backgroundImage}
+    >
+      <LinearGradient
+        colors={['rgba(40,32,56,0.2)', 'rgba(8,8,12,0.9)', 'rgba(0,0,0,0.95)']}
+        style={styles.backgroundGradient}
+      />
+      <LinearGradient
+        colors={['rgba(180,150,220,0.15)', 'rgba(0,0,0,0)']}
+        style={styles.backgroundGlow}
+        start={{ x: 0.15, y: 0.08 }}
+        end={{ x: 0.88, y: 0.92 }}
+      />
+      
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+      
+      {/* Animated Top Bar */}
+      <Animated.View style={[styles.topBar, { opacity: headerOpacity }]}>
+        <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+        <View style={styles.topBarContent}>
+          <IconButton icon="arrow-left" iconColor="white" size={24} onPress={() => navigation.goBack()} />
+          <Text variant="titleMedium" style={{ color: 'white', fontWeight: '600', flex: 1 }} numberOfLines={1}>
+            {artistData.name}
+          </Text>
+          <IconButton icon="dots-vertical" iconColor="white" size={24} onPress={() => {}} />
+        </View>
       </Animated.View>
 
-      <AnimatedFlashList
-        data={sections}
-        renderItem={renderSection}
-        keyExtractor={(item) => item.title}
-        showsVerticalScrollIndicator={false}
+      {/* Floating Back Button */}
+      <Animated.View style={[styles.floatingBack, { opacity: scrollY.interpolate({
+        inputRange: [0, 50],
+        outputRange: [1, 0],
+        extrapolate: 'clamp',
+      }) }]}>
+        <Pressable onPress={() => navigation.goBack()} style={styles.floatingBackButton}>
+          <BlurView intensity={60} tint="dark" style={styles.floatingBackBlur}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color="white" />
+          </BlurView>
+        </Pressable>
+      </Animated.View>
+
+      <Animated.ScrollView
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
           { useNativeDriver: true }
         )}
         scrollEventThrottle={16}
-        estimatedItemSize={300}
-        ListHeaderComponent={
-          <View>
-            <View style={styles.hero}>
-              <Image source={{ uri: artistData.thumbnail }} style={styles.heroImage} />
-              <LinearGradient
-                colors={['rgba(0,0,0,0.25)', 'rgba(0,0,0,0.9)']}
-                style={styles.heroGradient}
-              />
-              <LinearGradient
-                colors={['rgba(0,0,0,0.7)', 'transparent']}
-                style={styles.heroTopFade}
-              />
-
-              <View style={styles.heroNav}>
-                <IconButton
-                  icon="arrow-left"
-                  size={24}
-                  iconColor="white"
-                  onPress={() => navigation.goBack()}
-                />
-                <IconButton
-                  icon="dots-vertical"
-                  size={24}
-                  iconColor="white"
-                  onPress={() => {}}
-                />
-              </View>
-
-              <View style={styles.heroContent}>
-                <Text variant="headlineLarge" style={styles.heroTitle}>
-                  {artistData.name}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Hero Content */}
+        <View style={styles.heroContent}>
+          <Image source={{ uri: artistData.thumbnail }} style={styles.heroImage} />
+          
+          <View style={styles.heroTextContainer}>
+            <Text variant="displaySmall" style={styles.artistName}>
+              {artistData.name}
+            </Text>
+            {artistData.subscribers && (
+              <View style={styles.subscriberBadge}>
+                <MaterialCommunityIcons name="check-decagram" size={16} color={theme.colors.primary} />
+                <Text variant="bodyMedium" style={styles.subscriberText}>
+                  {artistData.subscribers}
                 </Text>
-                {artistData.subscribers && (
-                  <Text variant="bodyMedium" style={styles.heroSubtitle}>
-                    {artistData.subscribers}
-                  </Text>
-                )}
-                {artistData.description && (
-                  <Text variant="bodySmall" numberOfLines={2} style={styles.heroDescription}>
-                    {artistData.description}
-                  </Text>
-                )}
               </View>
-            </View>
-
-            <Surface style={[styles.actionsCard, { backgroundColor: theme.colors.surface }]} elevation={2}>
-              <View style={styles.primaryActions}>
-                <Button
-                  mode="contained"
-                  icon="play"
-                  onPress={() => {}}
-                  style={styles.primaryButton}
-                >
-                  Play
-                </Button>
-                <Button
-                  mode="outlined"
-                  icon={isFollowing ? "account-check" : "account-plus"}
-                  onPress={() => setIsFollowing(!isFollowing)}
-                  style={styles.primaryButton}
-                >
-                  {isFollowing ? 'Following' : 'Follow'}
-                </Button>
-              </View>
-              <View style={styles.secondaryActions}>
-                <TouchableOpacity style={styles.iconAction} onPress={() => {}}>
-                  <MaterialCommunityIcons name="shuffle" size={20} color={theme.colors.onSurface} />
-                  <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>Shuffle</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.iconAction} onPress={() => {}}>
-                  <MaterialCommunityIcons name="heart-outline" size={20} color={theme.colors.onSurface} />
-                  <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>Like</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.iconAction} onPress={() => {}}>
-                  <MaterialCommunityIcons name="share-variant" size={20} color={theme.colors.onSurface} />
-                  <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>Share</Text>
-                </TouchableOpacity>
-              </View>
-            </Surface>
-
+            )}
           </View>
-        }
-        ListFooterComponent={
-          artistData.description ? (
-            <Surface style={[styles.aboutSection, { backgroundColor: theme.colors.surface }]}>
-              <Text variant="titleMedium" style={[styles.aboutTitle, { color: theme.colors.onSurface }]}>
-                About
+
+          {/* Action Buttons */}
+          <View style={styles.actionButtons}>
+            <Pressable 
+              style={[styles.actionButton, styles.followButton, { backgroundColor: theme.colors.primary }]}
+              onPress={handleFollowToggle}
+              disabled={followLoading}
+            >
+              <MaterialCommunityIcons
+                name={isFollowing ? 'account-check' : 'account-plus'}
+                size={20}
+                color="white"
+              />
+              <Text variant="titleMedium" style={styles.followButtonText}>
+                {isFollowing ? 'Following' : 'Follow'}
               </Text>
-              <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-                {artistData.description}
+            </Pressable>
+
+            <Pressable 
+              style={[
+                styles.actionButton,
+                styles.shareButton,
+                { backgroundColor: theme.colors.surfaceVariant, borderColor: theme.colors.outline },
+              ]}
+              onPress={handleShareArtist}
+            >
+              <MaterialCommunityIcons name="share-variant" size={20} color={theme.colors.onSurface} />
+              <Text variant="bodyMedium" style={{ color: theme.colors.onSurface }}>
+                Share
               </Text>
-            </Surface>
-          ) : null
-        }
-        contentContainerStyle={styles.listContent}
-        initialNumToRender={8}
-        maxToRenderPerBatch={10}
-        windowSize={7}
-        removeClippedSubviews
-      />
-    </View>
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Tabs */}
+        <View style={styles.tabsContainer}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabsScroll}
+          >
+            {tabs.map((tab) => (
+              <Pressable
+                key={tab.key}
+                onPress={() => setActiveTab(tab.key)}
+                style={[
+                  styles.tab,
+                  activeTab === tab.key && { backgroundColor: theme.colors.primaryContainer }
+                ]}
+              >
+                <MaterialCommunityIcons 
+                  name={tab.icon as any} 
+                  size={18} 
+                  color={activeTab === tab.key ? theme.colors.primary : theme.colors.onSurfaceVariant} 
+                />
+                <Text 
+                  variant="labelLarge" 
+                  style={[
+                    styles.tabLabel,
+                    { color: activeTab === tab.key ? theme.colors.primary : theme.colors.onSurfaceVariant }
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* Tab Content */}
+        {renderTabContent()}
+      </Animated.ScrollView>
+    </ImageBackground>
   );
 }
 
@@ -447,16 +592,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  hero: {
-    height: 320,
-    position: 'relative',
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
+  backgroundImage: {
+    resizeMode: 'cover',
+    opacity: 0.35,
+  },
+  backgroundGradient: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  backgroundGlow: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  heroContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: HEADER_MAX_HEIGHT,
     overflow: 'hidden',
   },
   heroImage: {
-    width: '100%',
-    height: '100%',
+    width: SCREEN_WIDTH,
+    height: HEADER_MAX_HEIGHT,
     resizeMode: 'cover',
   },
   heroGradient: {
@@ -464,146 +620,179 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 200,
+    height: HEADER_MAX_HEIGHT,
   },
-  heroTopFade: {
+  topBar: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: 120,
+    zIndex: 100,
+    overflow: 'hidden',
   },
-  heroNav: {
-    position: 'absolute',
-    top: 40,
-    left: 16,
-    right: 16,
+  topBarContent: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: StatusBar.currentHeight || 40,
+    paddingHorizontal: 8,
+    height: HEADER_MIN_HEIGHT,
+  },
+  floatingBack: {
+    position: 'absolute',
+    top: (StatusBar.currentHeight || 40) + 8,
+    left: 16,
+    zIndex: 99,
+  },
+  floatingBackButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  floatingBackBlur: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scrollContent: {
+    paddingBottom: 120,
   },
   heroContent: {
-    position: 'absolute',
-    bottom: 24,
-    left: 20,
-    right: 20,
+    paddingHorizontal: 20,
+    paddingTop: (StatusBar.currentHeight || 40) + 60,
+    paddingBottom: 24,
+    alignItems: 'center',
   },
-  heroTitle: {
+  heroImage: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    marginBottom: 24,
+  },
+  heroTextContainer: {
+    marginBottom: 24,
+    alignItems: 'center',
+  },
+  artistName: {
     color: 'white',
-    fontWeight: '700',
-    textShadowColor: 'rgba(0,0,0,0.45)',
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+  },
+  subscriberBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    gap: 6,
+  },
+  subscriberText: {
+    color: 'rgba(255,255,255,0.95)',
+    fontWeight: '600',
+    textShadowColor: 'rgba(0,0,0,0.3)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
-    letterSpacing: 0.4,
   },
-  heroSubtitle: {
-    color: 'rgba(255,255,255,0.9)',
-    marginTop: 6,
-    textShadowColor: 'rgba(0,0,0,0.35)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-  heroDescription: {
-    color: 'rgba(255,255,255,0.82)',
-    marginTop: 8,
-    lineHeight: 18,
-  },
-  actionsCard: {
-    marginHorizontal: 16,
-    marginTop: -22,
-    borderRadius: 18,
-    padding: 12,
-  },
-  primaryActions: {
+  actionButtons: {
     flexDirection: 'row',
-    gap: 10,
-  },
-  primaryButton: {
-    flex: 1,
-    borderRadius: 22,
-  },
-  secondaryActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 12,
-    paddingHorizontal: 6,
-  },
-  iconAction: {
-    alignItems: 'center',
-    gap: 6,
-    minWidth: 72,
-  },
-  aboutSection: {
-    marginHorizontal: 16,
-    marginTop: 8,
-    marginBottom: 24,
-    padding: 16,
-    borderRadius: 16,
-    elevation: 1,
-  },
-  aboutTitle: {
+    gap: 12,
     marginBottom: 8,
+    width: '100%',
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 28,
+    gap: 8,
+  },
+  followButton: {
+    flex: 1.15,
+  },
+  followButtonText: {
+    color: 'white',
+    fontWeight: '700',
+  },
+  shareButton: {
+    flex: 0.85,
+    borderWidth: 1.5,
+  },
+  tabsContainer: {
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  tabsScroll: {
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+  tab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    gap: 8,
+  },
+  tabLabel: {
     fontWeight: '600',
   },
-  content: {
-    paddingBottom: 0,
-  },
-  listContent: {
-    paddingBottom: 150,
-    paddingTop: 10,
+  tabContent: {
+    paddingHorizontal: 20,
   },
   section: {
-    marginTop: 8,
-    marginBottom: 0,
-    paddingHorizontal: 16,
+    marginBottom: 32,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 12,
-    marginTop: 12,
-  },
-  sectionCard: {
-    borderRadius: 16,
-    paddingBottom: 8,
-  },
-  sectionTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
+    marginBottom: 16,
   },
   sectionTitle: {
+    fontWeight: '700',
+    letterSpacing: -0.3,
+  },
+  showAllText: {
     fontWeight: '600',
-    letterSpacing: 0.2,
+    fontSize: 14,
   },
-  showAllButton: {
-    borderRadius: 999,
+  gridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -8,
   },
-  showAllLabel: {
-    fontSize: 12,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
+  gridItem: {
+    padding: 8,
   },
-  sectionBody: {
-    paddingHorizontal: 8,
-    paddingBottom: 8,
+  gridImage: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 12,
+    marginBottom: 8,
   },
-  sectionContent: {
-    backgroundColor: 'transparent',
+  gridInfo: {
+    paddingHorizontal: 4,
   },
-  artistsList: {
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-    marginBottom: 0,
-    paddingTop: 0
+  artistsRow: {
+    paddingRight: 20,
+    gap: 16,
   },
-  animatedHeader: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 1000,
-    elevation: 4,
+  aboutContainer: {
+    paddingHorizontal: 20,
+  },
+  aboutCard: {
+    padding: 24,
+    borderRadius: 20,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    marginTop: 24,
+    gap: 24,
+  },
+  statItem: {
+    alignItems: 'center',
   },
 });

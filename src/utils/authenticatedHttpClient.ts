@@ -387,4 +387,144 @@ export class AuthenticatedHttpClient {
       },
     ]);
   }
+
+  static async getWatchNextQueue(
+    videoId: string,
+    options?: { playlistId?: string; params?: string },
+  ): Promise<any> {
+    const cookies = await CookieManager.getCookies();
+    const visitorId = getCookieValue(cookies, 'VISITOR_INFO1_LIVE');
+
+    const response = await this.makeRequest(`/youtubei/v1/next?prettyPrint=false`, {
+      method: 'POST',
+      headers: {
+        Accept: '*/*',
+        'X-Youtube-Client-Name': '67',
+        'X-Youtube-Client-Version': '1.20260128.03.00',
+        'X-Youtube-Bootstrap-Logged-In': 'true',
+        ...(visitorId ? { 'X-Goog-Visitor-Id': visitorId } : {}),
+        'X-Goog-Authuser': '0',
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            ...this.clientContext,
+          },
+          user: {
+            lockedSafetyMode: false,
+          },
+          request: {
+            useSsl: true,
+            internalExperimentFlags: [],
+            consistencyTokenJars: [],
+          },
+        },
+        videoId,
+        ...(options?.playlistId ? { playlistId: options.playlistId } : {}),
+        ...(options?.params ? { params: options.params } : {}),
+        isAudioOnly: true,
+        enablePersistentPlaylistPanel: true,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Watch next queue failed response:', errorText);
+      throw new Error(`Watch next queue failed: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  static async followArtist(channelIds: string[], params?: string): Promise<any> {
+    if (!channelIds.length) {
+      throw new Error('followArtist requires at least one channelId');
+    }
+
+    const cookies = await CookieManager.getCookies();
+    const visitorId = getCookieValue(cookies, 'VISITOR_INFO1_LIVE');
+
+    const response = await this.makeRequest(`/youtubei/v1/subscription/subscribe?prettyPrint=false`, {
+      method: 'POST',
+      headers: {
+        Accept: '*/*',
+        'X-Youtube-Client-Name': '67',
+        'X-Youtube-Client-Version': '1.20260128.03.00',
+        'X-Youtube-Bootstrap-Logged-In': 'true',
+        ...(visitorId ? { 'X-Goog-Visitor-Id': visitorId } : {}),
+        'X-Goog-Authuser': '0',
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            ...this.clientContext,
+          },
+          user: {
+            lockedSafetyMode: false,
+          },
+          request: {
+            useSsl: true,
+            internalExperimentFlags: [],
+            consistencyTokenJars: [],
+          },
+        },
+        channelIds,
+        ...(params ? { params } : {}),
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Follow artist failed response:', errorText);
+      throw new Error(`Follow artist failed: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  static async unfollowArtist(channelIds: string[], params?: string): Promise<any> {
+    if (!channelIds.length) {
+      throw new Error('unfollowArtist requires at least one channelId');
+    }
+
+    const cookies = await CookieManager.getCookies();
+    const visitorId = getCookieValue(cookies, 'VISITOR_INFO1_LIVE');
+
+    const response = await this.makeRequest(`/youtubei/v1/subscription/unsubscribe?prettyPrint=false`, {
+      method: 'POST',
+      headers: {
+        Accept: '*/*',
+        'X-Youtube-Client-Name': '67',
+        'X-Youtube-Client-Version': '1.20260128.03.00',
+        'X-Youtube-Bootstrap-Logged-In': 'true',
+        ...(visitorId ? { 'X-Goog-Visitor-Id': visitorId } : {}),
+        'X-Goog-Authuser': '0',
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            ...this.clientContext,
+          },
+          user: {
+            lockedSafetyMode: false,
+          },
+          request: {
+            useSsl: true,
+            internalExperimentFlags: [],
+            consistencyTokenJars: [],
+          },
+        },
+        channelIds,
+        ...(params ? { params } : {}),
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Unfollow artist failed response:', errorText);
+      throw new Error(`Unfollow artist failed: ${response.status}`);
+    }
+
+    return response.json();
+  }
 }
