@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { useTheme, BottomNavigation, Appbar, Modal, Portal, Button, Text } from 'react-native-paper';
-import { View, StyleSheet } from 'react-native';
+import { useTheme, BottomNavigation, Appbar, Modal, Portal, Button, Text, Dialog } from 'react-native-paper';
+import { View, StyleSheet, BackHandler } from 'react-native';
 
 import HomeScreen from '../screens/HomeScreen';
 import EnhancedSearchScreen from '../screens/EnhancedSearchScreen';
@@ -12,6 +12,9 @@ import AlbumScreen from '../screens/AlbumScreen';
 import ArtistScreen from '../screens/ArtistScreen';
 import ShowAllScreen from '../screens/ShowAllScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import QueueScreen from '../screens/QueueScreen';
+import SettingsScreen from '../screens/SettingsScreen';
+import AppearanceSettingsScreen from '../screens/AppearanceSettingsScreen';
 import CookieViewer from '../components/CookieViewer';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -67,6 +70,29 @@ const TabNavigator = React.memo(({ navigation }: { navigation: any }) => {
     setCookieViewerVisible(false);
   }, []);
 
+  React.useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (typeof navigation?.isFocused === 'function' && !navigation.isFocused()) {
+        return false;
+      }
+      if (cookieViewerVisible) {
+        setCookieViewerVisible(false);
+        return true;
+      }
+      if (accountModalVisible) {
+        setAccountModalVisible(false);
+        return true;
+      }
+      if (index !== 0) {
+        setIndex(0);
+        return true;
+      }
+      return false;
+    });
+
+    return () => subscription.remove();
+  }, [accountModalVisible, cookieViewerVisible, index]);
+
   return (
     <>
       <View style={{ flex: 1 }}>
@@ -97,44 +123,56 @@ const TabNavigator = React.memo(({ navigation }: { navigation: any }) => {
       </View>
       
       <Portal>
-        <Modal
+        <Dialog
           visible={accountModalVisible}
           onDismiss={handleModalDismiss}
-          contentContainerStyle={[styles.modalContainer, { backgroundColor: theme.colors.surface }]}
+          style={[styles.accountDialog, { backgroundColor: theme.colors.surface }]}
         >
-          <Text variant="headlineSmall" style={[styles.modalTitle, { color: theme.colors.onSurface }]}>
-            Account
-          </Text>
-          
-          <View style={styles.accountInfo}>
-            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-              Authentication Status: {isAuthenticated ? 'Logged In' : 'Not Logged In'}
-            </Text>
-            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-              Cookies: {cookies.length} stored
-            </Text>
-          </View>
-          
-          <View style={styles.modalButtons}>
-            {cookies.length > 0 && (
+          <Dialog.Title>Account</Dialog.Title>
+          <Dialog.Content>
+            <View style={styles.accountInfo}>
+              <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                Authentication Status: {isAuthenticated ? 'Logged In' : 'Not Logged In'}
+              </Text>
+              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                Cookies: {cookies.length} stored
+              </Text>
+            </View>
+            <View style={styles.dialogButtons}>
               <Button
                 mode="outlined"
-                onPress={handleShowCookies}
-                style={styles.modalButton}
-                icon="cookie"
+                onPress={() => {
+                  setAccountModalVisible(false);
+                  navigation.navigate('Settings');
+                }}
+                style={styles.dialogButton}
+                icon="cog"
               >
-                View Cookies
+                Settings
               </Button>
-            )}
-            <Button
-              mode="contained"
-              onPress={handleLogout}
-              style={styles.modalButton}
-            >
-              Logout
-            </Button>
-          </View>
-        </Modal>
+              {cookies.length > 0 && (
+                <Button
+                  mode="outlined"
+                  onPress={handleShowCookies}
+                  style={styles.dialogButton}
+                  icon="cookie"
+                >
+                  View Cookies
+                </Button>
+              )}
+              <Button
+                mode="contained"
+                onPress={handleLogout}
+                style={styles.dialogButton}
+              >
+                Logout
+              </Button>
+            </View>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={handleModalDismiss}>Close</Button>
+          </Dialog.Actions>
+        </Dialog>
       </Portal>
       
       <Portal>
@@ -200,8 +238,33 @@ export default function AppNavigator() {
         }}
       />
       <Stack.Screen 
+        name="Queue" 
+        component={QueueScreen}
+        options={{
+          presentation: 'modal',
+          animation: 'slide_from_bottom',
+          gestureEnabled: true,
+        }}
+      />
+      <Stack.Screen 
         name="Profile" 
         component={ProfileScreen}
+        options={{
+          presentation: 'modal',
+          gestureEnabled: true,
+        }}
+      />
+      <Stack.Screen 
+        name="Settings" 
+        component={SettingsScreen}
+        options={{
+          presentation: 'modal',
+          gestureEnabled: true,
+        }}
+      />
+      <Stack.Screen 
+        name="AppearanceSettings" 
+        component={AppearanceSettingsScreen}
         options={{
           presentation: 'modal',
           gestureEnabled: true,
@@ -212,23 +275,18 @@ export default function AppNavigator() {
 }
 
 const styles = StyleSheet.create({
-  modalContainer: {
+  accountDialog: {
     margin: 20,
-    padding: 24,
     borderRadius: 16,
   },
-  modalTitle: {
-    marginBottom: 16,
-    textAlign: 'center',
-  },
   accountInfo: {
-    marginBottom: 24,
+    marginBottom: 16,
     gap: 4,
   },
-  modalButtons: {
+  dialogButtons: {
     gap: 12,
   },
-  modalButton: {
+  dialogButton: {
     borderRadius: 8,
   },
   cookieModalContainer: {

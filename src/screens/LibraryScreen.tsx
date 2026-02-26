@@ -25,9 +25,12 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthenticatedHttpClient } from '../utils/authenticatedHttpClient';
 import { usePlayer } from '../contexts/PlayerContext';
 import { parseLibraryData, LibraryItem, LibrarySection } from '../utils/libraryParser';
+
+const LIBRARY_CACHE_KEY = 'library_cache_v1';
 
 export default function LibraryScreen() {
   const theme = useTheme();
@@ -47,29 +50,82 @@ export default function LibraryScreen() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [fabExtended, setFabExtended] = useState(true);
 
-  const loadLibrary = useCallback(async () => {
-    setError(null);
+  const readCachedLibrary = useCallback(async (): Promise<LibrarySection[]> => {
+    try {
+      const cached = await AsyncStorage.getItem(LIBRARY_CACHE_KEY);
+      if (!cached) return [];
+      const parsed = JSON.parse(cached) as { sections?: LibrarySection[] };
+      return Array.isArray(parsed?.sections) ? parsed.sections : [];
+    } catch (err) {
+      console.warn('Failed to read cached library', err);
+      return [];
+    }
+  }, []);
+
+  const writeCachedLibrary = useCallback(async (nextSections: LibrarySection[]) => {
+    try {
+      await AsyncStorage.setItem(
+        LIBRARY_CACHE_KEY,
+        JSON.stringify({
+          version: 1,
+          updatedAt: Date.now(),
+          sections: nextSections,
+        })
+      );
+    } catch (err) {
+      console.warn('Failed to cache library', err);
+    }
+  }, []);
+
+  const loadLibrary = useCallback(async ({ preserveOnError = false }: { preserveOnError?: boolean } = {}) => {
     try {
       const response = await AuthenticatedHttpClient.getUserLibrary();
       const parsedSections = parseLibraryData(response);
       setSections(parsedSections);
+      setError(null);
+      await writeCachedLibrary(parsedSections);
     } catch (err) {
       console.error('Failed to load library', err);
-      setError('Unable to load your library right now.');
-      setSections([]);
+      if (!preserveOnError) {
+        setError('Unable to load your library right now.');
+      }
     }
-  }, []);
+  }, [writeCachedLibrary]);
 
   useEffect(() => {
-    setLoading(true);
-    loadLibrary().finally(() => setLoading(false));
-  }, [loadLibrary]);
+    let isMounted = true;
+
+    const bootstrapLibrary = async () => {
+      setLoading(true);
+      const cachedSections = await readCachedLibrary();
+
+      if (!isMounted) return;
+
+      if (cachedSections.length) {
+        setSections(cachedSections);
+        setError(null);
+        setLoading(false);
+        await loadLibrary({ preserveOnError: true });
+        return;
+      }
+
+      await loadLibrary();
+      if (isMounted) {
+        setLoading(false);
+      }
+    };
+
+    bootstrapLibrary();
+    return () => {
+      isMounted = false;
+    };
+  }, [loadLibrary, readCachedLibrary]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadLibrary();
+    await loadLibrary({ preserveOnError: sections.length > 0 });
     setRefreshing(false);
-  }, [loadLibrary]);
+  }, [loadLibrary, sections.length]);
 
   const openCreateModal = useCallback(() => {
     setCreateError(null);
