@@ -43,20 +43,16 @@ const MiniPlayer = React.memo(({ onExpand, bottomOffset = 0 }: MiniPlayerProps) 
       style={[
         styles.container,
         {
-          backgroundColor: theme.colors.surface,
-          borderColor: 'rgba(255,255,255,0.45)',
+          backgroundColor: theme.colors.surfaceVariant,
+          borderColor: theme.colors.outline,
           marginBottom: bottomOffset,
         },
       ]}
-      elevation={8}
+      elevation={4}
     >
-      <ProgressBar 
-        progress={progress} 
-        color={theme.colors.primary}
-        style={styles.progressBar}
-      />
-      
-      <TouchableOpacity 
+      <View style={[styles.handle, { backgroundColor: theme.colors.outline }]} />
+
+      <TouchableOpacity
         style={styles.content}
         onPress={handlePlayerPress}
         activeOpacity={0.7}
@@ -65,12 +61,12 @@ const MiniPlayer = React.memo(({ onExpand, bottomOffset = 0 }: MiniPlayerProps) 
           {currentTrack.thumbnail ? (
             <Animated.Image
               source={{ uri: currentTrack.thumbnail }}
-              style={[styles.thumbnail, { backgroundColor: theme.colors.surfaceVariant }]}
+              style={[styles.thumbnail, { backgroundColor: theme.colors.surface }]}
               resizeMode="cover"
               sharedTransitionTag="albumArt"
             />
           ) : (
-            <View style={[styles.thumbnail, styles.thumbnailPlaceholder, { backgroundColor: theme.colors.surfaceVariant }]}>
+            <View style={[styles.thumbnail, styles.thumbnailPlaceholder, { backgroundColor: theme.colors.surface }]}>
               <MaterialCommunityIcons
                 name="music-note"
                 size={18}
@@ -78,17 +74,17 @@ const MiniPlayer = React.memo(({ onExpand, bottomOffset = 0 }: MiniPlayerProps) 
               />
             </View>
           )}
-          
+
           <View style={styles.textContainer}>
-            <Animated.Text 
+            <Animated.Text
               numberOfLines={1}
               style={[styles.title, { color: theme.colors.onSurface }]}
               sharedTransitionTag="songTitle"
             >
               {currentTrack.title}
             </Animated.Text>
-            <Text 
-              variant="bodySmall" 
+            <Text
+              variant="bodySmall"
               numberOfLines={1}
               style={[styles.artist, { color: theme.colors.onSurfaceVariant }]}
             >
@@ -98,15 +94,23 @@ const MiniPlayer = React.memo(({ onExpand, bottomOffset = 0 }: MiniPlayerProps) 
         </View>
 
         <View style={styles.controls}>
-          <IconButton
-            icon={isPlaying ? 'pause' : 'play'}
-            size={28}
-            iconColor={theme.colors.onSurface}
-            onPress={handlePlayPause}
-            style={styles.playButton}
-          />
+          <Surface style={[styles.playSurface, { backgroundColor: theme.colors.primary }]} elevation={2}>
+            <IconButton
+              icon={isPlaying ? 'pause' : 'play'}
+              size={22}
+              iconColor={theme.colors.onPrimary}
+              onPress={handlePlayPause}
+              style={styles.playButton}
+            />
+          </Surface>
         </View>
       </TouchableOpacity>
+
+      <ProgressBar
+        progress={progress}
+        color={theme.colors.primary}
+        style={[styles.progressBar, { backgroundColor: theme.colors.outline }]}
+      />
     </Surface>
   );
 });
@@ -120,20 +124,25 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 1000,
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
     overflow: 'hidden',
-    marginHorizontal: 16,
+    marginHorizontal: 12,
   },
-  progressBar: {
-    height: 2,
-    backgroundColor: 'transparent',
+  handle: {
+    alignSelf: 'center',
+    width: 36,
+    height: 3,
+    borderRadius: 999,
+    marginTop: 6,
+    marginBottom: 4,
+    opacity: 0.6,
   },
   content: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 8,
   },
   trackInfo: {
     flex: 1,
@@ -141,9 +150,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   thumbnail: {
-    width: 48,
-    height: 48,
-    borderRadius: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 10,
     marginRight: 12,
   },
   thumbnailPlaceholder: {
@@ -157,17 +166,23 @@ const styles = StyleSheet.create({
   title: {
     fontWeight: '500',
     marginBottom: 2,
-    fontSize: 15,
+    fontSize: 14,
     lineHeight: 18,
   },
   artist: {
-    fontSize: 13,
+    fontSize: 12,
   },
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
   },
+  playSurface: {
+    borderRadius: 16,
+  },
   playButton: {
     margin: 0,
+  },
+  progressBar: {
+    height: 2,
   },
 });

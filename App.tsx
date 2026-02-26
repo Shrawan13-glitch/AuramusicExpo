@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { PaperProvider } from 'react-native-paper';
 import { InteractionManager } from 'react-native';
@@ -21,6 +21,7 @@ const AppContent = React.memo(() => {
   const [showAuthScreen, setShowAuthScreen] = useState(false);
   const navigationRef = useNavigationContainerRef();
   const [routeName, setRouteName] = useState<string | undefined>(undefined);
+  const insets = useSafeAreaInsets();
 
   const handleAuthComplete = useCallback((cookies: AuthCookie[]) => {
     // Run auth completion after interactions to avoid blocking UI
@@ -54,7 +55,7 @@ const AppContent = React.memo(() => {
           <View style={{ flex: 1 }}>
             <AppNavigator />
             <MusicController
-              bottomOffset={routeName === 'Main' ? 88 : 8}
+              bottomOffset={insets.bottom + (routeName === 'Main' ? 88 : 8)}
               activeRouteName={routeName}
             />
           </View>

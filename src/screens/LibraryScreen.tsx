@@ -2,12 +2,12 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   StyleSheet,
-  FlatList,
   Image,
   TouchableOpacity,
   RefreshControl,
   ScrollView,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import {
   Text,
   useTheme,
@@ -24,12 +24,16 @@ import {
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AuthenticatedHttpClient } from '../utils/authenticatedHttpClient';
+import { usePlayer } from '../contexts/PlayerContext';
 import { parseLibraryData, LibraryItem, LibrarySection } from '../utils/libraryParser';
 
 export default function LibraryScreen() {
   const theme = useTheme();
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
+  const { currentTrack } = usePlayer();
   const [sections, setSections] = useState<LibrarySection[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -132,7 +136,7 @@ export default function LibraryScreen() {
       <Text variant="titleMedium" style={[styles.sectionTitle, { color: theme.colors.onBackground }]}>
         {item.title}
       </Text>
-      <FlatList
+      <FlashList
         data={item.items}
         renderItem={({ item: libraryItem }) => (
           <LibraryItemCard
@@ -145,6 +149,7 @@ export default function LibraryScreen() {
         scrollEnabled={false}
         contentContainerStyle={styles.sectionGrid}
         columnWrapperStyle={styles.sectionRow}
+        estimatedItemSize={220}
       />
     </View>
   ), [handleItemPress, theme.colors.onBackground]);
@@ -155,6 +160,17 @@ export default function LibraryScreen() {
     const offsetY = event.nativeEvent.contentOffset?.y ?? 0;
     setFabExtended(offsetY <= 8);
   }, []);
+
+  const miniPlayerHeight = 0;
+  const bottomBarHeight = 88;
+  const extraBottomPadding = 24;
+  const baseFabBottom = 10;
+  const miniPlayerOffset = insets.bottom + bottomBarHeight;
+  const contentBottomPadding = Math.max(
+    100,
+    insets.bottom + bottomBarHeight + (currentTrack ? miniPlayerHeight : 0) + extraBottomPadding
+  );
+  const fabBottom = currentTrack ? miniPlayerOffset + miniPlayerHeight + 12 : baseFabBottom;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -220,14 +236,15 @@ export default function LibraryScreen() {
           </Text>
         </ScrollView>
       ) : (
-        <FlatList
+        <FlashList
           data={sections}
           renderItem={renderSection}
           keyExtractor={(section, index) => `${section.title}-${index}`}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingBottom: contentBottomPadding }]}
           onScroll={handleScroll}
           scrollEventThrottle={16}
+          estimatedItemSize={280}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -243,7 +260,7 @@ export default function LibraryScreen() {
         label="New"
         extended={fabExtended}
         animateFrom="right"
-        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
+        style={[styles.fab, { backgroundColor: theme.colors.primary, bottom: fabBottom }]}
         color={theme.colors.onPrimary}
         onPress={openCreateModal}
         visible
@@ -432,7 +449,6 @@ const styles = StyleSheet.create({
   itemWrapper: {
     flex: 1,
     marginHorizontal: 6,
-    maxWidth: '48%',
   },
   itemCard: {
     borderRadius: 16,

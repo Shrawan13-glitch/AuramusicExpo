@@ -13,6 +13,7 @@ import Animated, {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import MiniPlayer from './MiniPlayer';
 import PlayerScreen from '../screens/PlayerScreen';
+import { usePlayer } from '../contexts/PlayerContext';
 
 interface MusicControllerProps {
   bottomOffset?: number;
@@ -20,6 +21,7 @@ interface MusicControllerProps {
 }
 
 const MusicController = React.memo(({ bottomOffset = 0, activeRouteName }: MusicControllerProps) => {
+  const { currentTrack } = usePlayer();
   const [isExpanded, setIsExpanded] = useState(false);
   const [miniHeight, setMiniHeight] = useState(0);
   const { height: screenHeight } = useWindowDimensions();
@@ -66,7 +68,15 @@ const MusicController = React.memo(({ bottomOffset = 0, activeRouteName }: Music
     }
   }, [collapsedOffset, isExpanded, translateY]);
 
-  const panGesture = Gesture.Pan()
+  const settleGesture = useCallback((shouldExpand: boolean) => {
+    if (shouldExpand) {
+      handleExpand();
+    } else {
+      handleCollapse();
+    }
+  }, [handleCollapse, handleExpand]);
+
+  const panGestureExpanded = Gesture.Pan()
     .activeOffsetY([-8, 8])
     .onBegin(() => {
       dragStartY.value = translateY.value;
@@ -76,12 +86,24 @@ const MusicController = React.memo(({ bottomOffset = 0, activeRouteName }: Music
       translateY.value = next;
     })
     .onEnd((event) => {
-      const shouldExpand = event.translationY < 0 || event.velocityY < 0;
-      if (shouldExpand) {
-        runOnJS(handleExpand)();
-      } else {
-        runOnJS(handleCollapse)();
-      }
+      const collapseThreshold = Math.min(160, collapsedOffset * 0.25);
+      const shouldCollapse = event.translationY > collapseThreshold || event.velocityY > 800;
+      runOnJS(settleGesture)(!shouldCollapse);
+    });
+
+  const panGestureCollapsed = Gesture.Pan()
+    .activeOffsetY([-8, 8])
+    .onBegin(() => {
+      dragStartY.value = translateY.value;
+    })
+    .onUpdate((event) => {
+      const next = Math.min(Math.max(dragStartY.value + event.translationY, 0), collapsedOffset);
+      translateY.value = next;
+    })
+    .onEnd((event) => {
+      const expandThreshold = Math.min(160, collapsedOffset * 0.25);
+      const shouldExpand = event.translationY < -expandThreshold || event.velocityY < -800;
+      runOnJS(settleGesture)(shouldExpand);
     });
 
   const playerStyle = useAnimatedStyle(() => ({
@@ -94,27 +116,35 @@ const MusicController = React.memo(({ bottomOffset = 0, activeRouteName }: Music
     transform: [{ translateY: interpolate(translateY.value, [0, collapsedOffset], [40, 0], Extrapolation.CLAMP) }],
   }));
 
+  if (!currentTrack) {
+    return null;
+  }
+
   return (
     <View pointerEvents="box-none" style={styles.overlay}>
-      <GestureDetector gesture={panGesture.enabled(isExpanded)}>
+      <GestureDetector gesture={panGestureExpanded.enabled(isExpanded)}>
         <Animated.View
-          style={[styles.expanded, playerStyle]}
+          style={styles.expanded}
           entering={FadeIn}
           exiting={FadeOut}
           pointerEvents={isExpanded ? 'auto' : 'none'}
         >
-          <PlayerScreen onCollapse={handleCollapse} />
+          <Animated.View style={[styles.expandedFill, playerStyle]}>
+            <PlayerScreen onCollapse={handleCollapse} />
+          </Animated.View>
         </Animated.View>
       </GestureDetector>
-      <GestureDetector gesture={panGesture.enabled(!isExpanded)}>
+      <GestureDetector gesture={panGestureCollapsed.enabled(!isExpanded)}>
         <Animated.View
-          style={[styles.collapsed, miniStyle]}
+          style={styles.collapsed}
           entering={FadeIn}
           exiting={FadeOut}
           onLayout={(event) => setMiniHeight(event.nativeEvent.layout.height)}
           pointerEvents={isExpanded ? 'none' : 'auto'}
         >
-          <MiniPlayer onExpand={handleExpand} bottomOffset={bottomOffset} />
+          <Animated.View style={miniStyle}>
+            <MiniPlayer onExpand={handleExpand} bottomOffset={bottomOffset} />
+          </Animated.View>
         </Animated.View>
       </GestureDetector>
     </View>
@@ -138,6 +168,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+  },
+  expandedFill: {
+    flex: 1,
   },
   collapsed: {
     position: 'absolute',

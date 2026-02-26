@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
-  FlatList,
   Dimensions,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import {
   Text,
   useTheme,
@@ -252,7 +252,7 @@ export default function ShowAllScreen({ route, navigation }: ShowAllScreenProps)
       ) : sortedItems.length === 0 ? (
         renderEmptyState()
       ) : (
-        <FlatList
+        <FlashList
           key={key}
           data={sortedItems}
           renderItem={viewMode === 'grid' ? renderGridItem : renderListItem}
@@ -264,6 +264,7 @@ export default function ShowAllScreen({ route, navigation }: ShowAllScreenProps)
             viewMode === 'grid' && styles.gridContainer
           ]}
           columnWrapperStyle={viewMode === 'grid' ? styles.gridRow : undefined}
+          estimatedItemSize={viewMode === 'grid' ? 220 : 80}
         />
       )}
     </View>

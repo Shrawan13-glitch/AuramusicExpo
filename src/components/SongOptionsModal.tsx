@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Image, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import {
   Button,
   Divider,
@@ -14,6 +14,7 @@ import {
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { AuthenticatedHttpClient } from '../utils/authenticatedHttpClient';
 import { parseLibraryData, LibraryItem } from '../utils/libraryParser';
 import { PlaylistAPI } from '../../api/playlist';
@@ -36,6 +37,7 @@ const SongOptionsModal = ({ visible, song, onDismiss }: SongOptionsModalProps) =
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
+  const [rendered, setRendered] = useState(visible);
   const [likeLoading, setLikeLoading] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [likedIds, setLikedIds] = useState<Set<string>>(() => new Set());
@@ -196,44 +198,72 @@ const SongOptionsModal = ({ visible, song, onDismiss }: SongOptionsModalProps) =
   const maxSheetHeight = expanded ? Math.max(windowHeight * 0.92, 420) : Math.max(windowHeight * 0.45, 280);
   const bottomPadding = Math.max(insets.bottom, 16);
   const subtitleText = subtitle || ' ';
+  const translateY = useSharedValue(maxSheetHeight);
+
+  useEffect(() => {
+    if (visible) {
+      setRendered(true);
+      translateY.value = maxSheetHeight;
+      translateY.value = withTiming(0, { duration: 260 });
+      return;
+    }
+    if (rendered) {
+      translateY.value = withTiming(maxSheetHeight, { duration: 200 }, (finished) => {
+        if (finished) {
+          runOnJS(setRendered)(false);
+        }
+      });
+    }
+  }, [maxSheetHeight, rendered, translateY, visible]);
+
+  const sheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }));
 
   return (
     <>
       <Portal>
         <Modal
-          visible={visible}
+          visible={rendered}
           onDismiss={onDismiss}
+          dismissable={false}
           style={styles.modalRoot}
-          contentContainerStyle={[
-            styles.sheet,
-            {
-              backgroundColor: theme.colors.surface,
-              paddingBottom: bottomPadding,
-              maxHeight: maxSheetHeight,
-              height: expanded ? maxSheetHeight : undefined,
-            },
-          ]}
+          contentContainerStyle={styles.modalContainer}
         >
-          <View style={[styles.handle, { backgroundColor: theme.colors.onSurfaceVariant }]} />
-          <View style={styles.headerRow}>
-            <Text variant="titleMedium" style={{ color: theme.colors.onSurface }}>
-              {expanded ? 'Add to playlist' : 'Song options'}
-            </Text>
-            <View style={styles.headerActions}>
-              <IconButton
-                icon={expanded ? 'chevron-down' : 'chevron-up'}
-                size={20}
-                onPress={() => setExpanded((prev) => !prev)}
-                iconColor={theme.colors.onSurfaceVariant}
-              />
-              <IconButton
-                icon="close"
-                size={20}
-                onPress={onDismiss}
-                iconColor={theme.colors.onSurfaceVariant}
-              />
-            </View>
-          </View>
+          <View style={styles.modalFill}>
+            <Pressable style={styles.backdrop} onPress={onDismiss} />
+            <Animated.View
+              style={[
+                styles.sheet,
+                {
+                  backgroundColor: theme.colors.surface,
+                  paddingBottom: bottomPadding,
+                  maxHeight: maxSheetHeight,
+                  height: expanded ? maxSheetHeight : undefined,
+                },
+                sheetStyle,
+              ]}
+            >
+              <View style={[styles.handle, { backgroundColor: theme.colors.onSurfaceVariant }]} />
+              <View style={styles.headerRow}>
+                <Text variant="titleMedium" style={{ color: theme.colors.onSurface }}>
+                  {expanded ? 'Add to playlist' : 'Song options'}
+                </Text>
+                <View style={styles.headerActions}>
+                  <IconButton
+                    icon={expanded ? 'chevron-down' : 'chevron-up'}
+                    size={20}
+                    onPress={() => setExpanded((prev) => !prev)}
+                    iconColor={theme.colors.onSurfaceVariant}
+                  />
+                  <IconButton
+                    icon="close"
+                    size={20}
+                    onPress={onDismiss}
+                    iconColor={theme.colors.onSurfaceVariant}
+                  />
+                </View>
+              </View>
 
           <View style={styles.songRow}>
             {song?.thumbnail ? (
@@ -304,12 +334,14 @@ const SongOptionsModal = ({ visible, song, onDismiss }: SongOptionsModalProps) =
             </View>
           )}
 
-          <HelperText type="error" visible={!!actionError}>
-            {actionError}
-          </HelperText>
-          <HelperText type="info" visible={!!message}>
-            {message}
-          </HelperText>
+              <HelperText type="error" visible={!!actionError}>
+                {actionError}
+              </HelperText>
+              <HelperText type="info" visible={!!message}>
+                {message}
+              </HelperText>
+            </Animated.View>
+          </View>
         </Modal>
       </Portal>
     </>
@@ -318,8 +350,19 @@ const SongOptionsModal = ({ visible, song, onDismiss }: SongOptionsModalProps) =
 
 const styles = StyleSheet.create({
   modalRoot: {
-    justifyContent: 'flex-end',
     margin: 0,
+  },
+  modalContainer: {
+    width: '100%',
+    flex: 1,
+  },
+  modalFill: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   sheet: {
     paddingTop: 8,

@@ -1,5 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Image, Dimensions, Animated, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  Image,
+  Animated,
+  TouchableOpacity,
+  FlatList,
+} from 'react-native';
 import { Text, useTheme, IconButton, Button, Appbar } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,7 +15,7 @@ import { AlbumAPI, AlbumDetails, AlbumTrack, AlbumSuggestion } from '../../api/a
 import { useSongOptions } from '../contexts/SongOptionsContext';
 import { usePlayer } from '../contexts/PlayerContext';
 
-const { width } = Dimensions.get('window');
+const AnimatedFlatList = Animated.createAnimatedComponent(FlatList) as typeof FlatList;
 
 interface AlbumScreenProps {
   route: {
@@ -45,26 +53,26 @@ export default function AlbumScreen({ route, navigation }: AlbumScreenProps) {
     thumbnail: track.thumbnail || album?.thumbnail || '',
   })) ?? [];
 
-  const renderTrack = (track: AlbumTrack, index: number) => (
+  const renderTrack = useCallback(({ item, index }: { item: AlbumTrack; index: number }) => (
     <TouchableOpacity
-      key={`${track.id}-${index}`}
+      key={`${item.id}-${index}`}
       style={[styles.trackItem, { borderBottomColor: theme.colors.outline }]}
       activeOpacity={0.7}
       onPress={() => playTrack({
-        id: track.id,
-        title: track.title,
-        artist: track.artist,
-        thumbnail: track.thumbnail || album?.thumbnail || '',
+        id: item.id,
+        title: item.title,
+        artist: item.artist,
+        thumbnail: item.thumbnail || album?.thumbnail || '',
       }, trackQueue)}
       onLongPress={() => openSongOptions({
-        videoId: track.id,
-        title: track.title,
-        artist: track.artist,
-        thumbnail: track.thumbnail,
+        videoId: item.id,
+        title: item.title,
+        artist: item.artist,
+        thumbnail: item.thumbnail,
       })}
     >
       <Image 
-        source={{ uri: album.thumbnail }} 
+        source={{ uri: album?.thumbnail }} 
         style={[styles.trackThumbnail, { backgroundColor: theme.colors.surfaceVariant }]}
       />
       
@@ -74,23 +82,23 @@ export default function AlbumScreen({ route, navigation }: AlbumScreenProps) {
           numberOfLines={1}
           style={[styles.trackTitle, { color: theme.colors.onSurface }]}
         >
-          {track.title}
+          {item.title}
         </Text>
         <Text 
           variant="bodySmall" 
           numberOfLines={1}
           style={[styles.trackArtist, { color: theme.colors.onSurfaceVariant }]}
         >
-          {track.artist}
+          {item.artist}
         </Text>
       </View>
       
-      {track.duration && (
+      {item.duration && (
         <Text 
           variant="bodySmall" 
           style={[styles.trackDuration, { color: theme.colors.onSurfaceVariant }]}
         >
-          {track.duration}
+          {item.duration}
         </Text>
       )}
       
@@ -99,14 +107,88 @@ export default function AlbumScreen({ route, navigation }: AlbumScreenProps) {
         size={20}
         iconColor={theme.colors.onSurfaceVariant}
         onPress={() => openSongOptions({
-          videoId: track.id,
-          title: track.title,
-          artist: track.artist,
-          thumbnail: track.thumbnail,
+          videoId: item.id,
+          title: item.title,
+          artist: item.artist,
+          thumbnail: item.thumbnail,
         })}
       />
     </TouchableOpacity>
-  );
+  ), [album?.thumbnail, openSongOptions, playTrack, theme.colors.onSurface, theme.colors.onSurfaceVariant, theme.colors.outline, theme.colors.surfaceVariant, trackQueue]);
+
+  const keyExtractor = useCallback((item: AlbumTrack, index: number) => `${item.id}-${index}`, []);
+
+  const renderHeader = useCallback(() => (
+    <View>
+      <View style={[styles.header, { backgroundColor: theme.colors.surface }]}>
+        <View style={styles.headerContent}>
+          <IconButton
+            icon="arrow-left"
+            size={24}
+            iconColor={theme.colors.onSurface}
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+          />
+          
+          <Image 
+            source={{ uri: album?.thumbnail }} 
+            style={[styles.albumThumbnail, { backgroundColor: theme.colors.surfaceVariant }]}
+          />
+          
+          <View style={styles.albumInfo}>
+            <Text variant="headlineSmall" style={[styles.albumTitle, { color: theme.colors.onSurface }]}>
+              {album?.title}
+            </Text>
+            
+            <Text variant="bodyMedium" style={[styles.albumArtist, { color: theme.colors.onSurfaceVariant }]}>
+              {album?.artist}
+            </Text>
+            
+            <Text variant="bodySmall" style={[styles.albumSubtitle, { color: theme.colors.onSurfaceVariant }]}>
+              {album?.subtitle}
+            </Text>
+            
+            <Text variant="bodySmall" style={[styles.albumSecondSubtitle, { color: theme.colors.onSurfaceVariant }]}>
+              {album?.secondSubtitle}
+            </Text>
+          </View>
+        </View>
+        
+        <View style={styles.actionButtons}>
+          <Button
+            mode="contained"
+            icon="play"
+            onPress={() => {}}
+            style={styles.playButton}
+          >
+            Play
+          </Button>
+          
+          <IconButton
+            icon="shuffle"
+            size={24}
+            iconColor={theme.colors.onSurface}
+            onPress={() => {}}
+          />
+          
+          <IconButton
+            icon="plus"
+            size={24}
+            iconColor={theme.colors.onSurface}
+            onPress={() => {}}
+          />
+          
+          <IconButton
+            icon="dots-vertical"
+            size={24}
+            iconColor={theme.colors.onSurface}
+            onPress={() => {}}
+          />
+        </View>
+        <View style={styles.headerSpacer} />
+      </View>
+    </View>
+  ), [album, navigation, theme.colors.onSurface, theme.colors.onSurfaceVariant, theme.colors.surface, theme.colors.surfaceVariant]);
 
   const renderSuggestion = (suggestion: AlbumSuggestion) => (
     <View key={suggestion.id} style={styles.suggestionItem}>
@@ -174,100 +256,39 @@ export default function AlbumScreen({ route, navigation }: AlbumScreenProps) {
         </Appbar.Header>
       </Animated.View>
 
-      <Animated.ScrollView 
+      <AnimatedFlatList
+        data={album.tracks}
+        renderItem={renderTrack}
+        keyExtractor={keyExtractor}
         showsVerticalScrollIndicator={false}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: false }
+          { useNativeDriver: true }
         )}
         scrollEventThrottle={16}
-      >
-        <View style={[styles.header, { backgroundColor: theme.colors.surface }]}>
-          <View style={styles.headerContent}>
-            <IconButton
-              icon="arrow-left"
-              size={24}
-              iconColor={theme.colors.onSurface}
-              onPress={() => navigation.goBack()}
-              style={styles.backButton}
-            />
-            
-            <Image 
-              source={{ uri: album.thumbnail }} 
-              style={[styles.albumThumbnail, { backgroundColor: theme.colors.surfaceVariant }]}
-            />
-            
-            <View style={styles.albumInfo}>
-              <Text variant="headlineSmall" style={[styles.albumTitle, { color: theme.colors.onSurface }]}>
-                {album.title}
+        ListHeaderComponent={renderHeader}
+        ListFooterComponent={
+          album.suggestions && album.suggestions.length > 0 ? (
+            <View style={[styles.suggestionsContainer, { backgroundColor: theme.colors.background }]}>
+              <Text variant="titleMedium" style={[styles.suggestionsTitle, { color: theme.colors.onSurface }]}>
+                Releases for you
               </Text>
-              
-              <Text variant="bodyMedium" style={[styles.albumArtist, { color: theme.colors.onSurfaceVariant }]}>
-                {album.artist}
-              </Text>
-              
-              <Text variant="bodySmall" style={[styles.albumSubtitle, { color: theme.colors.onSurfaceVariant }]}>
-                {album.subtitle}
-              </Text>
-              
-              <Text variant="bodySmall" style={[styles.albumSecondSubtitle, { color: theme.colors.onSurfaceVariant }]}>
-                {album.secondSubtitle}
-              </Text>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.suggestionsScroll}
+              >
+                {album.suggestions.map(renderSuggestion)}
+              </ScrollView>
             </View>
-          </View>
-          
-          <View style={styles.actionButtons}>
-            <Button
-              mode="contained"
-              icon="play"
-              onPress={() => {}}
-              style={styles.playButton}
-            >
-              Play
-            </Button>
-            
-            <IconButton
-              icon="shuffle"
-              size={24}
-              iconColor={theme.colors.onSurface}
-              onPress={() => {}}
-            />
-            
-            <IconButton
-              icon="plus"
-              size={24}
-              iconColor={theme.colors.onSurface}
-              onPress={() => {}}
-            />
-            
-            <IconButton
-              icon="dots-vertical"
-              size={24}
-              iconColor={theme.colors.onSurface}
-              onPress={() => {}}
-            />
-          </View>
-        </View>
-        
-        <View style={[styles.tracksContainer, { backgroundColor: theme.colors.background }]}>
-          {album.tracks.map((track, index) => renderTrack(track, index))}
-        </View>
-
-        {album.suggestions && album.suggestions.length > 0 && (
-          <View style={[styles.suggestionsContainer, { backgroundColor: theme.colors.background }]}>
-            <Text variant="titleMedium" style={[styles.suggestionsTitle, { color: theme.colors.onSurface }]}>
-              Releases for you
-            </Text>
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.suggestionsScroll}
-            >
-              {album.suggestions.map(renderSuggestion)}
-            </ScrollView>
-          </View>
-        )}
-      </Animated.ScrollView>
+          ) : null
+        }
+        contentContainerStyle={[styles.listContent, { backgroundColor: theme.colors.background }]}
+        initialNumToRender={12}
+        maxToRenderPerBatch={12}
+        windowSize={9}
+        removeClippedSubviews
+      />
     </SafeAreaView>
   );
 }
@@ -328,8 +349,11 @@ const styles = StyleSheet.create({
   playButton: {
     borderRadius: 24,
   },
-  tracksContainer: {
-    paddingTop: 16,
+  listContent: {
+    paddingBottom: 16,
+  },
+  headerSpacer: {
+    height: 16,
   },
   trackItem: {
     flexDirection: 'row',

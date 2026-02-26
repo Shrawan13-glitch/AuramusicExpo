@@ -1,5 +1,13 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, Image, Dimensions, Animated, TouchableOpacity } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  Image,
+  Animated,
+  TouchableOpacity,
+} from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import {
   Text,
   useTheme,
@@ -19,7 +27,110 @@ import { AuthenticatedHttpClient } from '../utils/authenticatedHttpClient';
 import { useSongOptions } from '../contexts/SongOptionsContext';
 import { usePlayer } from '../contexts/PlayerContext';
 
-const { width } = Dimensions.get('window');
+const AnimatedFlashList = Animated.createAnimatedComponent(FlashList) as typeof FlashList;
+
+const TRACK_ROW_HEIGHT = 72;
+
+type TrackRowProps = {
+  item: PlaylistTrack;
+  index: number;
+  theme: ReturnType<typeof useTheme>;
+  trackQueue: Array<{
+    id: string;
+    title: string;
+    artist: string;
+    thumbnail: string;
+  }>;
+  playTrack: (track: {
+    id: string;
+    title: string;
+    artist: string;
+    thumbnail: string;
+  }, queue: Array<{
+    id: string;
+    title: string;
+    artist: string;
+    thumbnail: string;
+  }>) => void;
+  openSongOptions: (track: {
+    videoId: string;
+    title: string;
+    artist: string;
+    thumbnail: string;
+  }) => void;
+};
+
+const TrackRow = React.memo(function TrackRow({
+  item,
+  index,
+  theme,
+  trackQueue,
+  playTrack,
+  openSongOptions,
+}: TrackRowProps) {
+  return (
+    <TouchableOpacity
+      key={`${item.id}-${item.playlistSetVideoId || index}`}
+      style={[styles.trackItem, { borderBottomColor: theme.colors.outline }]}
+      activeOpacity={0.7}
+      onPress={() => playTrack({
+        id: item.id,
+        title: item.title,
+        artist: item.artist,
+        thumbnail: item.thumbnail,
+      }, trackQueue)}
+      onLongPress={() => openSongOptions({
+        videoId: item.id,
+        title: item.title,
+        artist: item.artist,
+        thumbnail: item.thumbnail,
+      })}
+    >
+      <Image
+        source={{ uri: item.thumbnail }}
+        style={[styles.trackThumbnail, { backgroundColor: theme.colors.surfaceVariant }]}
+      />
+
+      <View style={styles.trackInfo}>
+        <Text
+          variant="bodyMedium"
+          numberOfLines={1}
+          style={[styles.trackTitle, { color: theme.colors.onSurface }]}
+        >
+          {item.title}
+        </Text>
+        <Text
+          variant="bodySmall"
+          numberOfLines={1}
+          style={[styles.trackArtist, { color: theme.colors.onSurfaceVariant }]}
+        >
+          {item.artist}
+        </Text>
+      </View>
+
+      {item.duration && (
+        <Text
+          variant="bodySmall"
+          style={[styles.trackDuration, { color: theme.colors.onSurfaceVariant }]}
+        >
+          {item.duration}
+        </Text>
+      )}
+
+      <IconButton
+        icon="dots-vertical"
+        size={20}
+        iconColor={theme.colors.onSurfaceVariant}
+        onPress={() => openSongOptions({
+          videoId: item.id,
+          title: item.title,
+          artist: item.artist,
+          thumbnail: item.thumbnail,
+        })}
+      />
+    </TouchableOpacity>
+  );
+});
 
 interface PlaylistScreenProps {
   route: {
@@ -139,75 +250,126 @@ export default function PlaylistScreen({ route, navigation }: PlaylistScreenProp
     derivedPrivacy,
   ]);
 
-  const trackQueue = playlist?.tracks.map((track) => ({
-    id: track.id,
-    title: track.title,
-    artist: track.artist,
-    thumbnail: track.thumbnail,
-  })) ?? [];
+  const trackQueue = useMemo(() => (
+    playlist?.tracks.map((track) => ({
+      id: track.id,
+      title: track.title,
+      artist: track.artist,
+      thumbnail: track.thumbnail,
+    })) ?? []
+  ), [playlist?.tracks]);
 
-  const renderTrack = (track: PlaylistTrack, index: number) => (
-    <TouchableOpacity
-      key={`${track.id}-${track.playlistSetVideoId || index}`}
-      style={[styles.trackItem, { borderBottomColor: theme.colors.outline }]}
-      activeOpacity={0.7}
-      onPress={() => playTrack({
-        id: track.id,
-        title: track.title,
-        artist: track.artist,
-        thumbnail: track.thumbnail,
-      }, trackQueue)}
-      onLongPress={() => openSongOptions({
-        videoId: track.id,
-        title: track.title,
-        artist: track.artist,
-        thumbnail: track.thumbnail,
-      })}
-    >
-      <Image 
-        source={{ uri: track.thumbnail }} 
-        style={[styles.trackThumbnail, { backgroundColor: theme.colors.surfaceVariant }]}
+  const renderTrack = useCallback(
+    ({ item, index }: { item: PlaylistTrack; index: number }) => (
+      <TrackRow
+        item={item}
+        index={index}
+        theme={theme}
+        trackQueue={trackQueue}
+        playTrack={playTrack}
+        openSongOptions={openSongOptions}
       />
-      
-      <View style={styles.trackInfo}>
-        <Text 
-          variant="bodyMedium" 
-          numberOfLines={1}
-          style={[styles.trackTitle, { color: theme.colors.onSurface }]}
-        >
-          {track.title}
-        </Text>
-        <Text 
-          variant="bodySmall" 
-          numberOfLines={1}
-          style={[styles.trackArtist, { color: theme.colors.onSurfaceVariant }]}
-        >
-          {track.artist}
-        </Text>
-      </View>
-      
-      {track.duration && (
-        <Text 
-          variant="bodySmall" 
-          style={[styles.trackDuration, { color: theme.colors.onSurfaceVariant }]}
-        >
-          {track.duration}
-        </Text>
-      )}
-      
-      <IconButton
-        icon="dots-vertical"
-        size={20}
-        iconColor={theme.colors.onSurfaceVariant}
-        onPress={() => openSongOptions({
-          videoId: track.id,
-          title: track.title,
-          artist: track.artist,
-          thumbnail: track.thumbnail,
-        })}
-      />
-    </TouchableOpacity>
+    ),
+    [openSongOptions, playTrack, theme, trackQueue]
   );
+
+  const keyExtractor = useCallback(
+    (item: PlaylistTrack) => item.playlistSetVideoId || item.id,
+    []
+  );
+
+  const renderHeader = useCallback(() => (
+    <View>
+      <View style={[styles.header, { backgroundColor: theme.colors.surface }]}>
+        <View style={styles.headerContent}>
+          <IconButton
+            icon="arrow-left"
+            size={24}
+            iconColor={theme.colors.onSurface}
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+          />
+          
+          <Image 
+            source={{ uri: playlist?.thumbnail }} 
+            style={[styles.playlistThumbnail, { backgroundColor: theme.colors.surfaceVariant }]}
+          />
+          
+          <View style={styles.playlistInfo}>
+            <Text variant="headlineSmall" style={[styles.playlistTitle, { color: theme.colors.onSurface }]}>
+              {playlist?.title}
+            </Text>
+            
+            <Text variant="bodyMedium" style={[styles.playlistSubtitle, { color: theme.colors.onSurfaceVariant }]}>
+              {playlist?.subtitle}
+            </Text>
+            
+            <Text variant="bodySmall" style={[styles.playlistSecondSubtitle, { color: theme.colors.onSurfaceVariant }]}>
+              {playlist?.secondSubtitle}
+            </Text>
+            
+            {playlist?.description && (
+              <Text 
+                variant="bodySmall" 
+                numberOfLines={2}
+                style={[styles.playlistDescription, { color: theme.colors.onSurfaceVariant }]}
+              >
+                {playlist.description}
+              </Text>
+            )}
+          </View>
+        </View>
+        
+        <View style={styles.actionButtons}>
+          <Button
+            mode="contained"
+            icon="play"
+            onPress={() => {}}
+            style={styles.playButton}
+          >
+            Play
+          </Button>
+          
+          <IconButton
+            icon="shuffle"
+            size={24}
+            iconColor={theme.colors.onSurface}
+            onPress={() => {}}
+          />
+          
+          <IconButton
+            icon="plus"
+            size={24}
+            iconColor={theme.colors.onSurface}
+            onPress={() => {}}
+          />
+          
+          <IconButton
+            icon="pencil"
+            size={24}
+            iconColor={theme.colors.onSurface}
+            onPress={openEditModal}
+          />
+        </View>
+        <View style={styles.headerSpacer} />
+      </View>
+    </View>
+  ), [navigation, openEditModal, playlist, theme.colors.onSurface, theme.colors.onSurfaceVariant, theme.colors.surface, theme.colors.surfaceVariant]);
+
+  const renderFooter = useCallback(() => {
+    if (!playlist?.continuationToken) return null;
+    return (
+      <Button
+        mode="outlined"
+        onPress={loadMoreSongs}
+        loading={loadingMore}
+        disabled={loadingMore}
+        style={styles.loadMoreButton}
+      >
+        {loadingMore ? 'Loading...' : 'Load more songs'}
+      </Button>
+    );
+  }, [loadMoreSongs, loadingMore, playlist?.continuationToken]);
 
   const loadMoreSongs = async () => {
     if (!playlist?.continuationToken || loadingMore) return;
@@ -325,108 +487,27 @@ export default function PlaylistScreen({ route, navigation }: PlaylistScreenProp
         </Appbar.Header>
       </Animated.View>
 
-      <Animated.ScrollView 
+      <AnimatedFlashList
+        data={playlist.tracks}
+        renderItem={renderTrack}
+        keyExtractor={keyExtractor}
         showsVerticalScrollIndicator={false}
+        estimatedItemSize={TRACK_ROW_HEIGHT}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: false }
+          { useNativeDriver: true }
         )}
         scrollEventThrottle={16}
-      >
-        {/* Header with gradient effect */}
-        <View
-          style={[styles.header, { backgroundColor: theme.colors.surface }]}
-        >
-          <View style={styles.headerContent}>
-            <IconButton
-              icon="arrow-left"
-              size={24}
-              iconColor={theme.colors.onSurface}
-              onPress={() => navigation.goBack()}
-              style={styles.backButton}
-            />
-            
-            <Image 
-              source={{ uri: playlist.thumbnail }} 
-              style={[styles.playlistThumbnail, { backgroundColor: theme.colors.surfaceVariant }]}
-            />
-            
-            <View style={styles.playlistInfo}>
-              <Text variant="headlineSmall" style={[styles.playlistTitle, { color: theme.colors.onSurface }]}>
-                {playlist.title}
-              </Text>
-              
-              <Text variant="bodyMedium" style={[styles.playlistSubtitle, { color: theme.colors.onSurfaceVariant }]}>
-                {playlist.subtitle}
-              </Text>
-              
-              <Text variant="bodySmall" style={[styles.playlistSecondSubtitle, { color: theme.colors.onSurfaceVariant }]}>
-                {playlist.secondSubtitle}
-              </Text>
-              
-              {playlist.description && (
-                <Text 
-                  variant="bodySmall" 
-                  numberOfLines={2}
-                  style={[styles.playlistDescription, { color: theme.colors.onSurfaceVariant }]}
-                >
-                  {playlist.description}
-                </Text>
-              )}
-            </View>
-          </View>
-          
-          {/* Action buttons */}
-          <View style={styles.actionButtons}>
-            <Button
-              mode="contained"
-              icon="play"
-              onPress={() => {}}
-              style={styles.playButton}
-            >
-              Play
-            </Button>
-            
-            <IconButton
-              icon="shuffle"
-              size={24}
-              iconColor={theme.colors.onSurface}
-              onPress={() => {}}
-            />
-            
-            <IconButton
-              icon="plus"
-              size={24}
-              iconColor={theme.colors.onSurface}
-              onPress={() => {}}
-            />
-            
-            <IconButton
-              icon="pencil"
-              size={24}
-              iconColor={theme.colors.onSurface}
-              onPress={openEditModal}
-            />
-          </View>
-        </View>
-        
-        {/* Tracks list */}
-        <View style={[styles.tracksContainer, { backgroundColor: theme.colors.background }]}>
-          {playlist.tracks.map((track, index) => renderTrack(track, index))}
-          
-          {playlist.continuationToken && (
-            <Button
-              mode="outlined"
-              onPress={loadMoreSongs}
-              loading={loadingMore}
-              disabled={loadingMore}
-              style={styles.loadMoreButton}
-            >
-              {loadingMore ? 'Loading...' : 'Load more songs'}
-            </Button>
-          )}
-        </View>
-      </Animated.ScrollView>
+        getItemType={() => 'track'}
+        overrideItemLayout={(layout) => { layout.size = TRACK_ROW_HEIGHT; }}
+        ListHeaderComponent={renderHeader}
+        ListFooterComponent={renderFooter}
+        contentContainerStyle={[styles.listContent, { backgroundColor: theme.colors.background }]}
+        initialNumToRender={12}
+        maxToRenderPerBatch={12}
+        windowSize={9}
+        removeClippedSubviews
+      />
 
       <Portal>
         <Modal
@@ -683,8 +764,11 @@ const styles = StyleSheet.create({
   playButton: {
     borderRadius: 24,
   },
-  tracksContainer: {
-    paddingTop: 16,
+  listContent: {
+    paddingBottom: 92,
+  },
+  headerSpacer: {
+    height: 16,
   },
   trackItem: {
     flexDirection: 'row',

@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, FlatList } from 'react-native';
+import { View, StyleSheet, ScrollView } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
   Searchbar, 
@@ -206,7 +207,7 @@ const EnhancedSearchScreen = React.memo(({ navigation }: EnhancedSearchScreenPro
       {!loading && !showSuggestions && (
         <View style={styles.results}>
           {results.length > 0 ? (
-            <FlatList
+            <FlashList
               data={results}
               renderItem={renderResult}
               keyExtractor={keyExtractor}
@@ -216,11 +217,7 @@ const EnhancedSearchScreen = React.memo(({ navigation }: EnhancedSearchScreenPro
               maxToRenderPerBatch={10}
               windowSize={10}
               initialNumToRender={10}
-              getItemLayout={(data, index) => ({
-                length: 72,
-                offset: 72 * index,
-                index,
-              })}
+              estimatedItemSize={72}
             />
           ) : (
             <View style={styles.noResults}>
@@ -281,7 +278,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   resultsList: {
-    paddingBottom: 100,
+    paddingBottom: 132,
   },
   noResults: {
     flex: 1,
