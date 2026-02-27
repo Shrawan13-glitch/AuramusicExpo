@@ -26,6 +26,15 @@ import { PlaylistAPI, PlaylistDetails, PlaylistTrack } from '../../api/playlist'
 import { AuthenticatedHttpClient } from '../utils/authenticatedHttpClient';
 import { useSongOptions } from '../contexts/SongOptionsContext';
 import { usePlayer } from '../contexts/PlayerContext';
+import {
+  downloadPlaylist,
+  getPlaylistDownloadStatus,
+  getPlaylistDownloadStatusSync,
+  pausePlaylistDownload,
+  resumePlaylistDownload,
+  subscribeDownloadedSongs,
+  type PlaylistDownloadStatusItem,
+} from '../utils/downloadManager';
 
 const AnimatedFlashList = Animated.createAnimatedComponent(FlashList) as typeof FlashList;
 
@@ -171,12 +180,30 @@ export default function PlaylistScreen({ route, navigation }: PlaylistScreenProp
   const [editVotePermission, setEditVotePermission] = useState<'UNCHANGED' | 'EVERYONE' | 'COLLABORATORS' | 'OFF'>('UNCHANGED');
   const [editError, setEditError] = useState<string | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [playlistDownloadStatus, setPlaylistDownloadStatus] = useState<PlaylistDownloadStatusItem | null>(null);
   const theme = useTheme();
   const { openSongOptions } = useSongOptions();
   const { playTrack } = usePlayer();
 
   useEffect(() => {
     loadPlaylist();
+  }, [playlistId]);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadStatus = async () => {
+      const status = await getPlaylistDownloadStatus(playlistId);
+      if (mounted) setPlaylistDownloadStatus(status);
+    };
+    void loadStatus();
+    const unsubscribe = subscribeDownloadedSongs(() => {
+      const next = getPlaylistDownloadStatusSync(playlistId);
+      if (mounted) setPlaylistDownloadStatus(next);
+    });
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
   }, [playlistId]);
 
   const loadPlaylist = async () => {
@@ -286,6 +313,48 @@ export default function PlaylistScreen({ route, navigation }: PlaylistScreenProp
     });
   }, [playTrack, playlist?.title, playlistId, trackQueue]);
 
+  const handleDownloadPlaylist = useCallback(async () => {
+    if (!playlist || !trackQueue.length) return;
+    const currentState = playlistDownloadStatus?.state;
+    if (currentState === 'downloading' || currentState === 'queued') {
+      await pausePlaylistDownload(playlistId);
+      return;
+    }
+    if (currentState === 'paused') {
+      await resumePlaylistDownload(playlistId);
+      return;
+    }
+    await downloadPlaylist({
+      playlistId,
+      title: playlist.title || 'Playlist',
+      thumbnail: playlist.thumbnail,
+      songs: trackQueue.map((track) => ({
+        id: track.id,
+        title: track.title,
+        artist: track.artist,
+        thumbnail: track.thumbnail,
+      })),
+    });
+  }, [playlist, playlistDownloadStatus?.state, playlistId, trackQueue]);
+
+  const downloadButtonLabel = useMemo(() => {
+    if (!playlistDownloadStatus) return 'Download';
+    const progress = `${playlistDownloadStatus.completedSongs}/${playlistDownloadStatus.totalSongs}`;
+    if (playlistDownloadStatus.state === 'downloading' || playlistDownloadStatus.state === 'queued') {
+      return `Pause ${progress}`;
+    }
+    if (playlistDownloadStatus.state === 'paused') {
+      return `Resume ${progress}`;
+    }
+    if (playlistDownloadStatus.state === 'completed') {
+      return 'Downloaded';
+    }
+    if (playlistDownloadStatus.state === 'failed') {
+      return `Retry ${progress}`;
+    }
+    return 'Download';
+  }, [playlistDownloadStatus]);
+
   const renderTrack = useCallback(
     ({ item, index }: { item: PlaylistTrack; index: number }) => (
       <TrackRow
@@ -359,6 +428,15 @@ export default function PlaylistScreen({ route, navigation }: PlaylistScreenProp
           >
             Play
           </Button>
+          <Button
+            mode="outlined"
+            icon="download"
+            onPress={() => void handleDownloadPlaylist()}
+            disabled={!trackQueue.length}
+            style={styles.downloadButton}
+          >
+            {downloadButtonLabel}
+          </Button>
           
           <IconButton
             icon="pencil"
@@ -367,10 +445,31 @@ export default function PlaylistScreen({ route, navigation }: PlaylistScreenProp
             onPress={openEditModal}
           />
         </View>
+        {playlist?.continuationToken ? (
+          <View style={styles.loadMoreInlineWrap}>
+            <Button
+              mode="text"
+              icon="chevron-down"
+              onPress={loadMoreSongs}
+              loading={loadingMore}
+              disabled={loadingMore}
+              compact
+            >
+              {loadingMore ? 'Loading songs...' : 'Load more songs'}
+            </Button>
+          </View>
+        ) : null}
+        {playlistDownloadStatus ? (
+          <Text style={[styles.downloadStatusText, { color: theme.colors.onSurfaceVariant }]}>
+            {playlistDownloadStatus.state === 'downloading' && playlistDownloadStatus.activeSongTitle
+              ? `Downloading: ${playlistDownloadStatus.activeSongTitle}`
+              : `Download status: ${playlistDownloadStatus.state} (${playlistDownloadStatus.completedSongs}/${playlistDownloadStatus.totalSongs}${playlistDownloadStatus.failedSongs ? `, failed ${playlistDownloadStatus.failedSongs}` : ''})`}
+          </Text>
+        ) : null}
         <View style={styles.headerSpacer} />
       </View>
     </View>
-  ), [handlePlayPlaylist, navigation, openEditModal, playlist, theme.colors.onSurface, theme.colors.onSurfaceVariant, theme.colors.surface, theme.colors.surfaceVariant, trackQueue.length]);
+  ), [downloadButtonLabel, handleDownloadPlaylist, handlePlayPlaylist, loadMoreSongs, loadingMore, navigation, openEditModal, playlist, playlistDownloadStatus, theme.colors.onSurface, theme.colors.onSurfaceVariant, theme.colors.surface, theme.colors.surfaceVariant, trackQueue.length]);
 
   const renderFooter = useCallback(() => {
     if (!playlist?.continuationToken) return null;
@@ -387,7 +486,7 @@ export default function PlaylistScreen({ route, navigation }: PlaylistScreenProp
     );
   }, [loadMoreSongs, loadingMore, playlist?.continuationToken]);
 
-  const loadMoreSongs = async () => {
+  async function loadMoreSongs() {
     if (!playlist?.continuationToken || loadingMore) return;
     
     setLoadingMore(true);
@@ -415,7 +514,7 @@ export default function PlaylistScreen({ route, navigation }: PlaylistScreenProp
     }
     
     setLoadingMore(false);
-  };
+  }
 
   const renderSkeletonTrack = (index: number) => (
     <View key={index} style={styles.trackItem}>
@@ -778,6 +877,19 @@ const styles = StyleSheet.create({
   },
   playButton: {
     borderRadius: 24,
+  },
+  downloadButton: {
+    borderRadius: 24,
+  },
+  downloadStatusText: {
+    marginTop: 8,
+    textAlign: 'center',
+    paddingHorizontal: 16,
+    fontSize: 12,
+  },
+  loadMoreInlineWrap: {
+    marginTop: 4,
+    alignItems: 'center',
   },
   listContent: {
     paddingBottom: 92,

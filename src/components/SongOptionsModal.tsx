@@ -18,6 +18,7 @@ import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 
 import { AuthenticatedHttpClient } from '../utils/authenticatedHttpClient';
 import { parseLibraryData, LibraryItem } from '../utils/libraryParser';
 import { PlaylistAPI } from '../../api/playlist';
+import { downloadSong, getDownloadStatus, getDownloadStatusSync, isSongDownloaded, subscribeDownloadedSongs } from '../utils/downloadManager';
 
 export interface SongOptionItem {
   videoId: string;
@@ -48,6 +49,9 @@ const SongOptionsModal = ({ visible, song, onDismiss }: SongOptionsModalProps) =
   const [playlistLoading, setPlaylistLoading] = useState(false);
   const [playlists, setPlaylists] = useState<LibraryItem[]>([]);
   const [addingPlaylistId, setAddingPlaylistId] = useState<string | null>(null);
+  const [downloadLoading, setDownloadLoading] = useState(false);
+  const [downloaded, setDownloaded] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
 
   const loadLikedIds = useCallback(async () => {
     if (likedStatus === 'loading' || likedStatus === 'ready') return;
@@ -96,12 +100,49 @@ const SongOptionsModal = ({ visible, song, onDismiss }: SongOptionsModalProps) =
       setPlaylists([]);
       setAddingPlaylistId(null);
       setPlaylistLoading(false);
+      setDownloadLoading(false);
       return;
     }
     if (likedStatus === 'idle') {
       loadLikedIds();
     }
   }, [likedIds, likedStatus, loadLikedIds, song?.isLiked, song?.videoId, visible]);
+
+  useEffect(() => {
+    let mounted = true;
+    const checkDownloaded = async () => {
+      if (!visible || !song?.videoId) {
+        if (mounted) setDownloaded(false);
+        if (mounted) setDownloadProgress(0);
+        if (mounted) setDownloadLoading(false);
+        return;
+      }
+      const exists = await isSongDownloaded(song.videoId);
+      const status = await getDownloadStatus(song.videoId);
+      if (mounted) {
+        setDownloaded(exists || status?.state === 'downloaded');
+        setDownloadLoading(status?.state === 'downloading');
+        setDownloadProgress(status?.progress ?? (exists ? 1 : 0));
+      }
+    };
+    void checkDownloaded();
+    return () => {
+      mounted = false;
+    };
+  }, [song?.videoId, visible]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeDownloadedSongs(() => {
+      if (!visible) return;
+      if (!song?.videoId) return;
+      const status = getDownloadStatusSync(song.videoId);
+      if (!status) return;
+      setDownloaded(status.state === 'downloaded');
+      setDownloadLoading(status.state === 'downloading');
+      setDownloadProgress(status.progress ?? (status.state === 'downloaded' ? 1 : 0));
+    });
+    return unsubscribe;
+  }, [song?.videoId, visible]);
 
   useEffect(() => {
     if (!visible) return;
@@ -194,6 +235,26 @@ const SongOptionsModal = ({ visible, song, onDismiss }: SongOptionsModalProps) =
       setAddingPlaylistId(null);
     }
   }, [addingPlaylistId, song?.videoId]);
+
+  const handleDownload = useCallback(async () => {
+    if (!song?.videoId || downloadLoading || downloaded) return;
+    setActionError(null);
+    setMessage(null);
+    try {
+      await downloadSong({
+        id: song.videoId,
+        title: song.title,
+        artist: song.artist || 'Unknown Artist',
+        thumbnail: song.thumbnail,
+      });
+      setDownloaded(true);
+      setDownloadProgress(1);
+      setMessage('Downloaded for offline playback');
+    } catch (error) {
+      console.error('Failed to download song', error);
+      setActionError('Unable to download this song right now.');
+    }
+  }, [downloadLoading, downloaded, song?.artist, song?.thumbnail, song?.title, song?.videoId]);
 
   const maxSheetHeight = expanded ? Math.max(windowHeight * 0.92, 420) : Math.max(windowHeight * 0.45, 280);
   const bottomPadding = Math.max(insets.bottom, 16);
@@ -305,6 +366,19 @@ const SongOptionsModal = ({ visible, song, onDismiss }: SongOptionsModalProps) =
                 onPress={openPlaylistPicker}
                 left={(props) => <List.Icon {...props} icon="playlist-music-outline" />}
                 disabled={likeLoading}
+              />
+              <List.Item
+                title={
+                  downloaded
+                    ? 'Downloaded'
+                    : downloadLoading
+                      ? `Downloading ${Math.round(downloadProgress * 100)}%`
+                      : 'Download song'
+                }
+                onPress={handleDownload}
+                left={(props) => <List.Icon {...props} icon={downloaded ? 'check-circle' : 'download'} />}
+                right={() => downloadLoading ? <ActivityIndicator size="small" /> : null}
+                disabled={downloadLoading || downloaded}
               />
             </List.Section>
           ) : (

@@ -210,7 +210,10 @@ export default function LibraryScreen() {
     </View>
   ), [handleItemPress, theme.colors.onBackground]);
 
-  const listEmpty = useMemo(() => !loading && !error && sections.length === 0, [loading, error, sections.length]);
+  const listEmpty = useMemo(
+    () => !loading && !error && sections.length === 0,
+    [error, loading, sections.length]
+  );
 
   const handleScroll = useCallback((event: any) => {
     const offsetY = event.nativeEvent.contentOffset?.y ?? 0;
@@ -292,15 +295,11 @@ export default function LibraryScreen() {
           </Text>
         </ScrollView>
       ) : (
-        <FlashList
-          data={sections}
-          renderItem={renderSection}
-          keyExtractor={(section, index) => `${section.title}-${index}`}
+        <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[styles.listContent, { paddingBottom: contentBottomPadding }]}
           onScroll={handleScroll}
           scrollEventThrottle={16}
-          estimatedItemSize={280}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -308,7 +307,13 @@ export default function LibraryScreen() {
               tintColor={theme.colors.primary}
             />
           }
-        />
+        >
+          {sections.map((section, index) => (
+            <View key={`${section.title}-${index}`}>
+              {renderSection({ item: section })}
+            </View>
+          ))}
+        </ScrollView>
       )}
 
       <AnimatedFAB

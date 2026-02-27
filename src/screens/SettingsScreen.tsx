@@ -1,6 +1,7 @@
 import React from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Appbar, Divider, List, Text, useTheme } from 'react-native-paper';
+import { Appbar, List, Text, useTheme } from 'react-native-paper';
+import Constants from 'expo-constants';
 
 interface SettingsScreenProps {
   navigation: any;
@@ -8,6 +9,10 @@ interface SettingsScreenProps {
 
 export default function SettingsScreen({ navigation }: SettingsScreenProps) {
   const theme = useTheme();
+  const appVersion =
+    Constants.expoConfig?.version ||
+    (Constants.manifest2 as { extra?: { expoClient?: { version?: string } } } | null)?.extra?.expoClient?.version ||
+    'Unknown';
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -30,10 +35,22 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
         </View>
 
         <Text variant="titleSmall" style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>
+          Storage
+        </Text>
+        <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+          <List.Item
+            title="Cache details"
+            description="View cached songs and size"
+            onPress={() => navigation.navigate('Cache')}
+            right={(props) => <List.Icon {...props} icon="chevron-right" />}
+          />
+        </View>
+
+        <Text variant="titleSmall" style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>
           About
         </Text>
         <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
-          <List.Item title="Version" description="2.1.0" />
+          <List.Item title="Version" description={appVersion} />
         </View>
       </ScrollView>
 

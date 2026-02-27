@@ -12,6 +12,7 @@ import { useSongOptions } from '../contexts/SongOptionsContext';
 import { AuthenticatedHttpClient } from '../utils/authenticatedHttpClient';
 import { parseLibraryData } from '../utils/libraryParser';
 import { PlaylistAPI } from '../../api/playlist';
+import { SEARCH_FILTERS, YouTubeMusicAPI } from '../../api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { subscribePlayerBgStyleChanged } from '../utils/settingsEvents';
 import QueueScreen from './QueueScreen';
@@ -40,6 +41,10 @@ export default function PlayerScreen({ onCollapse, onQueueVisibilityChange }: Pl
     skipNext,
     skipPrevious,
     playbackSource,
+    shuffleEnabled,
+    repeatMode,
+    toggleShuffle,
+    cycleRepeatMode,
   } = usePlayer();
   const theme = useTheme();
   const navigation = useNavigation();
@@ -173,15 +178,39 @@ export default function PlayerScreen({ onCollapse, onQueueVisibilityChange }: Pl
     };
   }, [loadBgStyle, navigation]);
 
-  const displayArtist = useMemo(() => {
-    const artist = currentTrack?.artist?.trim();
-    if (!artist || artist.toLowerCase() === 'unknown artist') return '';
-    return artist;
-  }, [currentTrack?.artist]);
+  const displayArtists = useMemo(() => {
+    const direct = (currentTrack?.artists || [])
+      .filter((item) => item?.name?.trim())
+      .map((item) => ({ id: item.id, name: item.name.trim() }));
+    if (direct.length) return direct;
+    const fallback = currentTrack?.artist?.trim();
+    if (!fallback || fallback.toLowerCase() === 'unknown artist') return [];
+    return [{ id: currentTrack?.artistId, name: fallback }];
+  }, [currentTrack?.artist, currentTrack?.artistId, currentTrack?.artists]);
 
-  const handleArtistPress = useCallback(() => {
-    if (!currentTrack?.artistId || !displayArtist) return;
-    const artistParams = { artistId: currentTrack.artistId, artistName: displayArtist } as never;
+  const handleArtistPress = useCallback(async (artist: { id?: string; name: string }) => {
+    if (!artist?.name) return;
+
+    let resolvedArtistId = artist.id;
+    if (!resolvedArtistId) {
+      try {
+        const artistFilter = SEARCH_FILTERS.find((filter) => filter.value === 'artists');
+        const results = await YouTubeMusicAPI.search(artist.name, artistFilter);
+        const direct = results.find(
+          (item) =>
+            item.type === 'artist' &&
+            item.id?.startsWith('UC') &&
+            item.title?.trim().toLowerCase() === artist.name.trim().toLowerCase()
+        );
+        const fallback = results.find((item) => item.type === 'artist' && item.id?.startsWith('UC'));
+        resolvedArtistId = direct?.id || fallback?.id;
+      } catch {
+        resolvedArtistId = undefined;
+      }
+    }
+
+    if (!resolvedArtistId) return;
+    const artistParams = { artistId: resolvedArtistId, artistName: artist.name } as never;
 
     // If this is the navigator Player route (no onCollapse provided), replace it with Artist.
     if (!onCollapse && typeof (navigation as any).replace === 'function') {
@@ -199,7 +228,7 @@ export default function PlayerScreen({ onCollapse, onQueueVisibilityChange }: Pl
     }
 
     navigation.navigate('Artist' as never, artistParams);
-  }, [currentTrack?.artistId, displayArtist, navigation, onCollapse]);
+  }, [navigation, onCollapse]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -435,26 +464,33 @@ export default function PlayerScreen({ onCollapse, onQueueVisibilityChange }: Pl
         >
           {currentTrack.title}
         </Animated.Text>
-        {!!displayArtist && (
-          currentTrack.artistId ? (
-            <TouchableOpacity onPress={handleArtistPress} activeOpacity={0.7}>
-              <Text 
-                variant="titleMedium" 
-                numberOfLines={1}
-                style={[styles.artist, { color: theme.colors.onSurfaceVariant }]}
-              >
-                {displayArtist}
-              </Text>
-            </TouchableOpacity>
-          ) : (
-            <Text 
-              variant="titleMedium" 
-              numberOfLines={1}
-              style={[styles.artist, { color: theme.colors.onSurfaceVariant }]}
-            >
-              {displayArtist}
-            </Text>
-          )
+        {displayArtists.length > 0 && (
+          <View style={styles.artistRow}>
+            {displayArtists.map((artist, index) => (
+              <View key={`${artist.id || artist.name}-${index}`} style={styles.artistInline}>
+                <TouchableOpacity
+                  onPress={() => void handleArtistPress(artist)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    variant="titleMedium"
+                    numberOfLines={1}
+                    style={[styles.artist, styles.artistLink, { color: theme.colors.onSurfaceVariant }]}
+                  >
+                    {artist.name}
+                  </Text>
+                </TouchableOpacity>
+                {index < displayArtists.length - 1 ? (
+                  <Text
+                    variant="titleMedium"
+                    style={[styles.artist, { color: theme.colors.onSurfaceVariant }]}
+                  >
+                    {', '}
+                  </Text>
+                ) : null}
+              </View>
+            ))}
+          </View>
         )}
       </View>
 
@@ -485,8 +521,8 @@ export default function PlayerScreen({ onCollapse, onQueueVisibilityChange }: Pl
         <IconButton
           icon="shuffle"
           size={28}
-          iconColor={theme.colors.onSurfaceVariant}
-          onPress={() => {}}
+          iconColor={shuffleEnabled ? theme.colors.primary : theme.colors.onSurfaceVariant}
+          onPress={toggleShuffle}
         />
         
         <IconButton
@@ -514,10 +550,10 @@ export default function PlayerScreen({ onCollapse, onQueueVisibilityChange }: Pl
         />
         
         <IconButton
-          icon="repeat"
+          icon={repeatMode === 'one' ? 'repeat-once' : 'repeat'}
           size={28}
-          iconColor={theme.colors.onSurfaceVariant}
-          onPress={() => {}}
+          iconColor={repeatMode === 'off' ? theme.colors.onSurfaceVariant : theme.colors.primary}
+          onPress={cycleRepeatMode}
         />
       </View>
 
@@ -612,6 +648,20 @@ const styles = StyleSheet.create({
   artist: {
     textAlign: 'center',
     fontWeight: '400',
+  },
+  artistRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    alignItems: 'center',
+    columnGap: 0,
+  },
+  artistLink: {
+    textDecorationLine: 'underline',
+  },
+  artistInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   progressContainer: {
     paddingHorizontal: 32,

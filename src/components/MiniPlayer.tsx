@@ -20,6 +20,14 @@ const MiniPlayer = React.memo(({ onExpand, bottomOffset = 0 }: MiniPlayerProps) 
     return duration > 0 ? position / duration : 0;
   }, [position, duration]);
 
+  const artistLabel = useMemo(() => {
+    const artists = (currentTrack?.artists || [])
+      .map((item) => item?.name?.trim())
+      .filter(Boolean);
+    if (artists.length) return artists.join(', ');
+    return currentTrack?.artist || '';
+  }, [currentTrack?.artist, currentTrack?.artists]);
+
   const handlePlayerPress = useCallback(() => {
     if (onExpand) {
       onExpand();
@@ -88,7 +96,7 @@ const MiniPlayer = React.memo(({ onExpand, bottomOffset = 0 }: MiniPlayerProps) 
               numberOfLines={1}
               style={[styles.artist, { color: theme.colors.onSurfaceVariant }]}
             >
-              {currentTrack.artist}
+              {artistLabel}
             </Text>
           </View>
         </View>

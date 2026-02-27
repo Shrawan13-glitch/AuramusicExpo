@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
@@ -8,11 +8,12 @@ import {
   Chip, 
   useTheme, 
   Surface,
-  ActivityIndicator
+  ActivityIndicator,
+  Button
 } from 'react-native-paper';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { usePlayer } from '../contexts/PlayerContext';
-import SearchSuggestions from '../components/SearchSuggestions';
 import SearchResultItem from '../components/SearchResultItem';
 import { YouTubeMusicAPI, SearchResult, SearchFilter, SEARCH_FILTERS } from '../../api';
 
@@ -20,19 +21,45 @@ interface EnhancedSearchScreenProps {
   navigation?: any;
 }
 
+const SEARCH_HISTORY_KEY = 'search_history_v1';
+const MAX_SEARCH_HISTORY = 20;
+
+type SuggestionRow =
+  | { type: 'header'; key: string; title: string; action?: 'clear_history' }
+  | { type: 'item'; key: string; value: string; source: 'history' | 'suggestion' };
+
 const EnhancedSearchScreen = React.memo(({ navigation }: EnhancedSearchScreenProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<SearchFilter>(SEARCH_FILTERS[0]);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
+  const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   
   const theme = useTheme();
   const { playTrack } = usePlayer();
-  const debounceRef = useRef<NodeJS.Timeout>();
+  const suggestionDebounceRef = useRef<NodeJS.Timeout>();
 
-  // Debounced search function
-  const debouncedSearch = useCallback(async (query: string, filter: SearchFilter = SEARCH_FILTERS[0]) => {
+  const persistSearchHistory = useCallback(async (history: string[]) => {
+    setSearchHistory(history);
+    try {
+      await AsyncStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(history));
+    } catch {
+      // no-op
+    }
+  }, []);
+
+  const pushSearchHistory = useCallback(async (query: string) => {
+    const normalized = query.trim();
+    if (!normalized) return;
+    const next = [normalized, ...searchHistory.filter((item) => item.toLowerCase() !== normalized.toLowerCase())]
+      .slice(0, MAX_SEARCH_HISTORY);
+    await persistSearchHistory(next);
+  }, [persistSearchHistory, searchHistory]);
+
+  const runSearch = useCallback(async (query: string, filter: SearchFilter = SEARCH_FILTERS[0]) => {
     if (!query.trim()) {
       setResults([]);
       return;
@@ -44,19 +71,37 @@ const EnhancedSearchScreen = React.memo(({ navigation }: EnhancedSearchScreenPro
     try {
       const searchResults = await YouTubeMusicAPI.search(query, filter.value === 'all' ? undefined : filter);
       setResults(searchResults);
+      await pushSearchHistory(query);
     } catch (error) {
       console.error('Search error:', error);
     } finally {
       setLoading(false);
     }
+  }, [pushSearchHistory]);
+
+  const fetchSuggestions = useCallback(async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setSuggestions([]);
+      return;
+    }
+    setLoadingSuggestions(true);
+    try {
+      const list = await YouTubeMusicAPI.searchSuggestions(trimmed);
+      setSuggestions(list);
+    } catch {
+      setSuggestions([]);
+    } finally {
+      setLoadingSuggestions(false);
+    }
   }, []);
 
   const handleFilterChange = useCallback((filter: SearchFilter) => {
     setSelectedFilter(filter);
-    if (searchQuery.trim()) {
-      debouncedSearch(searchQuery, filter);
+    if (searchQuery.trim() && !showSuggestions) {
+      void runSearch(searchQuery, filter);
     }
-  }, [searchQuery, debouncedSearch]);
+  }, [runSearch, searchQuery, showSuggestions]);
 
   const handlePlayTrack = useCallback((track: SearchResult) => {
     if (track.type === 'playlist') {
@@ -79,12 +124,21 @@ const EnhancedSearchScreen = React.memo(({ navigation }: EnhancedSearchScreenPro
         }
       });
     } else if (track.type === 'song' || track.type === 'video') {
+      const splitArtists = track.artist
+        .split(/\s*(?:,|&|and| x | · |\/|feat\.?|ft\.?)\s*/i)
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const artists = splitArtists.map((name, index) => ({
+        name,
+        id: track.artistIds?.[index] || (index === 0 ? track.artistIds?.[0] : undefined),
+      }));
       playTrack({
         id: track.id,
         title: track.title,
         artist: track.artist,
         thumbnail: track.thumbnail,
-        artistId: track.artistIds?.[0]
+        artistId: track.artistIds?.[0],
+        artists,
       }, undefined, {
         source: {
           type: 'search',
@@ -98,33 +152,51 @@ const EnhancedSearchScreen = React.memo(({ navigation }: EnhancedSearchScreenPro
 
   const onChangeText = useCallback((query: string) => {
     setSearchQuery(query);
-    
-    // Clear previous debounce
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
+
+    if (suggestionDebounceRef.current) {
+      clearTimeout(suggestionDebounceRef.current);
     }
-    
+
     if (query.length === 0) {
       setShowSuggestions(true);
       setResults([]);
-    } else if (query.length > 2) {
-      // Debounce search by 300ms
-      debounceRef.current = setTimeout(() => {
-        debouncedSearch(query, selectedFilter);
-      }, 300);
+      setSuggestions([]);
+    } else {
+      setShowSuggestions(true);
+      suggestionDebounceRef.current = setTimeout(() => {
+        void fetchSuggestions(query);
+      }, 160);
     }
-  }, [selectedFilter, debouncedSearch]);
+  }, [fetchSuggestions]);
 
   const handleSuggestionPress = useCallback((suggestion: string) => {
     setSearchQuery(suggestion);
-    debouncedSearch(suggestion, selectedFilter);
-  }, [selectedFilter, debouncedSearch]);
+    setSuggestions([]);
+    void runSearch(suggestion, selectedFilter);
+  }, [runSearch, selectedFilter]);
+
+  const clearHistory = useCallback(async () => {
+    await persistSearchHistory([]);
+  }, [persistSearchHistory]);
 
   // Cleanup debounce on unmount
   useEffect(() => {
+    let mounted = true;
+    AsyncStorage.getItem(SEARCH_HISTORY_KEY)
+      .then((raw) => {
+        if (!mounted) return;
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setSearchHistory(parsed.filter((entry) => typeof entry === 'string').slice(0, MAX_SEARCH_HISTORY));
+        }
+      })
+      .catch(() => {});
+
     return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
+      mounted = false;
+      if (suggestionDebounceRef.current) {
+        clearTimeout(suggestionDebounceRef.current);
       }
     };
   }, []);
@@ -139,38 +211,30 @@ const EnhancedSearchScreen = React.memo(({ navigation }: EnhancedSearchScreenPro
 
   const keyExtractor = useCallback((item: SearchResult) => item.id, []);
 
-  const filterChips = useMemo(() => (
-    <ScrollView 
-      horizontal 
-      showsHorizontalScrollIndicator={false}
-      style={styles.filtersContainer}
-      contentContainerStyle={styles.filtersContent}
-    >
-      {SEARCH_FILTERS.map((filter) => (
-        <Chip
-          key={filter.value}
-          selected={selectedFilter.value === filter.value}
-          onPress={() => handleFilterChange(filter)}
-          mode="flat"
-          style={[
-            styles.filterChip,
-            {
-              backgroundColor: selectedFilter.value === filter.value 
-                ? theme.colors.primaryContainer 
-                : theme.colors.surfaceVariant
-            }
-          ]}
-          textStyle={{
-            color: selectedFilter.value === filter.value 
-              ? theme.colors.onPrimaryContainer 
-              : theme.colors.onSurfaceVariant
-          }}
-        >
-          {filter.label}
-        </Chip>
-      ))}
-    </ScrollView>
-  ), [selectedFilter, theme.colors, handleFilterChange]);
+  const suggestionRows = useMemo<SuggestionRow[]>(() => {
+    const rows: SuggestionRow[] = [];
+    const query = searchQuery.trim().toLowerCase();
+    const historyMatches = searchHistory
+      .filter((item) => !query || item.toLowerCase().includes(query))
+      .slice(0, 6);
+    const suggestionMatches = suggestions
+      .filter((item) => !historyMatches.some((h) => h.toLowerCase() === item.toLowerCase()))
+      .slice(0, 12);
+
+    if (historyMatches.length) {
+      rows.push({ type: 'header', key: 'history-header', title: 'Recent Searches', action: 'clear_history' });
+      historyMatches.forEach((value) => {
+        rows.push({ type: 'item', key: `history-${value}`, value, source: 'history' });
+      });
+    }
+    if (suggestionMatches.length) {
+      rows.push({ type: 'header', key: 'suggestions-header', title: 'Suggestions' });
+      suggestionMatches.forEach((value) => {
+        rows.push({ type: 'item', key: `suggestion-${value}`, value, source: 'suggestion' });
+      });
+    }
+    return rows;
+  }, [searchHistory, searchQuery, suggestions]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
@@ -183,10 +247,44 @@ const EnhancedSearchScreen = React.memo(({ navigation }: EnhancedSearchScreenPro
           inputStyle={{ color: theme.colors.onSurface }}
           placeholderTextColor={theme.colors.onSurfaceVariant}
           iconColor={theme.colors.onSurfaceVariant}
+          onSubmitEditing={() => void runSearch(searchQuery, selectedFilter)}
         />
       </Surface>
 
-      {!showSuggestions && filterChips}
+      {!showSuggestions && (
+        <View style={styles.filtersContainer}>
+          <FlashList
+            data={SEARCH_FILTERS}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            estimatedItemSize={72}
+            keyExtractor={(item) => item.value}
+            contentContainerStyle={styles.filtersContent}
+            renderItem={({ item: filter }) => (
+              <Chip
+                selected={selectedFilter.value === filter.value}
+                onPress={() => handleFilterChange(filter)}
+                mode="flat"
+                style={[
+                  styles.filterChip,
+                  {
+                    backgroundColor: selectedFilter.value === filter.value
+                      ? theme.colors.primaryContainer
+                      : theme.colors.surfaceVariant,
+                  },
+                ]}
+                textStyle={{
+                  color: selectedFilter.value === filter.value
+                    ? theme.colors.onPrimaryContainer
+                    : theme.colors.onSurfaceVariant,
+                }}
+              >
+                {filter.label}
+              </Chip>
+            )}
+          />
+        </View>
+      )}
 
       {loading && (
         <View style={styles.loading}>
@@ -198,7 +296,65 @@ const EnhancedSearchScreen = React.memo(({ navigation }: EnhancedSearchScreenPro
       )}
 
       {showSuggestions && (
-        <SearchSuggestions onSuggestionPress={handleSuggestionPress} />
+        <View style={styles.results}>
+          {loadingSuggestions ? (
+            <View style={styles.suggestionLoading}>
+              <ActivityIndicator size="small" color={theme.colors.primary} />
+            </View>
+          ) : (
+            <FlashList
+              data={suggestionRows}
+              estimatedItemSize={56}
+              keyExtractor={(item) => item.key}
+              contentContainerStyle={styles.suggestionsList}
+              keyboardShouldPersistTaps="handled"
+              renderItem={({ item }) => {
+                if (item.type === 'header') {
+                  return (
+                    <View style={styles.suggestionHeader}>
+                      <Text style={[styles.suggestionHeaderText, { color: theme.colors.onSurfaceVariant }]}>
+                        {item.title}
+                      </Text>
+                      {item.action === 'clear_history' ? (
+                        <Button compact mode="text" onPress={() => void clearHistory()}>
+                          Clear
+                        </Button>
+                      ) : null}
+                    </View>
+                  );
+                }
+                return (
+                  <TouchableOpacity
+                    style={styles.suggestionRow}
+                    onPress={() => handleSuggestionPress(item.value)}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialCommunityIcons
+                      name={item.source === 'history' ? 'history' : 'magnify'}
+                      size={18}
+                      color={theme.colors.onSurfaceVariant}
+                    />
+                    <Text numberOfLines={1} style={[styles.suggestionText, { color: theme.colors.onSurface }]}>
+                      {item.value}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              }}
+              ListEmptyComponent={
+                <View style={styles.noResults}>
+                  <MaterialCommunityIcons
+                    name="magnify"
+                    size={40}
+                    color={theme.colors.onSurfaceVariant}
+                  />
+                  <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                    Start typing to see suggestions
+                  </Text>
+                </View>
+              }
+            />
+          )}
+        </View>
       )}
 
       {!loading && !showSuggestions && (
@@ -252,15 +408,47 @@ const styles = StyleSheet.create({
     borderRadius: 28,
   },
   filtersContainer: {
-    maxHeight: 48,
+    height: 52,
   },
   filtersContent: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    gap: 8,
   },
   filterChip: {
     marginRight: 8,
+  },
+  suggestionsList: {
+    paddingHorizontal: 16,
+    paddingBottom: 132,
+  },
+  suggestionHeader: {
+    marginTop: 10,
+    marginBottom: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  suggestionHeaderText: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  suggestionRow: {
+    minHeight: 44,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  suggestionText: {
+    flex: 1,
+    fontSize: 15,
+  },
+  suggestionLoading: {
+    paddingTop: 16,
+    alignItems: 'center',
   },
   loading: {
     flex: 1,

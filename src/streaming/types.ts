@@ -67,6 +67,7 @@ export interface StreamUrlOptions {
   region?: string;
   language?: string;
   preferOpus?: boolean;
+  maxBitrate?: number;
   visitorData?: string;
   cookie?: string;
   authorization?: string;

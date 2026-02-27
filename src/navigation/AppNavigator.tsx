@@ -17,6 +17,8 @@ import SettingsScreen from '../screens/SettingsScreen';
 import AppearanceSettingsScreen from '../screens/AppearanceSettingsScreen';
 import MessagesScreen from '../screens/MessagesScreen';
 import MessageDetailScreen from '../screens/MessageDetailScreen';
+import DownloadsScreen from '../screens/DownloadsScreen';
+import CacheScreen from '../screens/CacheScreen';
 import CookieViewer from '../components/CookieViewer';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -101,6 +103,9 @@ const TabNavigator = React.memo(({ navigation }: { navigation: any }) => {
         {index !== 1 && (
           <Appbar.Header>
             <Appbar.Content title={getTitle()} />
+            {index === 2 && (
+              <Appbar.Action icon="download" onPress={() => navigation.navigate('Downloads')} />
+            )}
             <Appbar.Action icon="message-text-outline" onPress={() => navigation.navigate('Messages')} />
             {isAuthenticated && (
               <Appbar.Action icon="account-circle" onPress={handleAccountPress} />
@@ -285,6 +290,24 @@ export default function AppNavigator() {
       <Stack.Screen
         name="MessageDetail"
         component={MessageDetailScreen}
+        options={{
+          presentation: 'modal',
+          animation: 'slide_from_right',
+          gestureEnabled: true,
+        }}
+      />
+      <Stack.Screen
+        name="Downloads"
+        component={DownloadsScreen}
+        options={{
+          presentation: 'modal',
+          animation: 'slide_from_right',
+          gestureEnabled: true,
+        }}
+      />
+      <Stack.Screen
+        name="Cache"
+        component={CacheScreen}
         options={{
           presentation: 'modal',
           animation: 'slide_from_right',

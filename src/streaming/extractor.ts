@@ -21,10 +21,14 @@ const formatScore = (format: PlayerFormat, preferOpus: boolean) => {
   return bitrate + (preferOpus && isOpus ? 10240 : 0);
 };
 
-const pickBestFormat = (formats: PlayerFormat[], preferOpus: boolean) => {
+const pickBestFormat = (formats: PlayerFormat[], preferOpus: boolean, maxBitrate?: number) => {
   const candidates = formats.filter((format) => isAudioFormat(format) && !hasCipher(format) && format.url);
   if (!candidates.length) return null;
-  return candidates.reduce((best, current) =>
+  const filtered = typeof maxBitrate === 'number'
+    ? candidates.filter((format) => (format.bitrate ?? format.averageBitrate ?? 0) <= maxBitrate)
+    : candidates;
+  const rankedPool = filtered.length ? filtered : candidates;
+  return rankedPool.reduce((best, current) =>
     formatScore(current, preferOpus) > formatScore(best, preferOpus) ? current : best
   );
 };
@@ -97,12 +101,6 @@ const fetchPlayerResponse = async (
       return null;
     }
     const data = (await response.json()) as PlayerResponse;
-    if (__DEV__) {
-      console.log('[streaming] player response keys', Object.keys(data));
-      if (data.streamingData) {
-        console.log('[streaming] streamingData keys', Object.keys(data.streamingData));
-      }
-    }
     return data;
   } catch (error) {
     return null;
@@ -231,7 +229,7 @@ export const getStreamUrl = async (
     if (formats.length && formats.every((format) => hasCipher(format))) {
       cipherOnlyDetected = true;
     }
-    const format = pickBestFormat(formats, preferOpus);
+    const format = pickBestFormat(formats, preferOpus, options.maxBitrate);
     const url = format?.url;
     const expiresRaw = playerResponse?.streamingData?.expiresInSeconds;
 

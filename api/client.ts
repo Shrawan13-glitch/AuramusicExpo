@@ -3,6 +3,7 @@ import { AuthenticatedHttpClient } from '../src/utils/authenticatedHttpClient';
 
 export class HttpClient {
   private static readonly SEARCH_URL = '/youtubei/v1/search';
+  private static readonly SEARCH_SUGGESTIONS_URL = '/youtubei/v1/music/get_search_suggestions';
   private static readonly BROWSE_URL = '/youtubei/v1/browse';
 
   private static getBaseContext() {
@@ -53,6 +54,34 @@ export class HttpClient {
 
     if (!response.ok) {
       throw new Error(`Search failed: ${response.status}`);
+    }
+
+    return await response.json();
+  }
+
+  static async searchSuggestions(query: string): Promise<any> {
+    const payload = {
+      context: this.getBaseContext(),
+      input: query,
+    };
+
+    const response = await AuthenticatedHttpClient.makeRequest(
+      `${this.SEARCH_SUGGESTIONS_URL}?prettyPrint=false`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: '*/*',
+          'X-Youtube-Client-Name': '67',
+          'X-Youtube-Client-Version': '1.20260128.03.00',
+          'X-Youtube-Bootstrap-Logged-In': 'true',
+          Referer: 'https://music.youtube.com/search',
+        },
+        body: JSON.stringify(payload),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Search suggestions failed: ${response.status}`);
     }
 
     return await response.json();

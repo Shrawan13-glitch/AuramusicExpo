@@ -65,6 +65,13 @@ export default function QueueScreen({ navigation, embedded = false, onClose }: Q
     () => playbackSource?.label?.trim() || 'Now playing',
     [playbackSource?.label]
   );
+  const getArtistLabel = useCallback((track: any) => {
+    const artists = (track?.artists || [])
+      .map((item: any) => item?.name?.trim())
+      .filter(Boolean);
+    if (artists.length) return artists.join(', ');
+    return track?.artist || 'Unknown Artist';
+  }, []);
 
   const nextTrack = queue[currentIndex + 1];
   const remainingAfterNext = Math.max(queue.length - currentIndex - 2, 0);
@@ -121,7 +128,7 @@ export default function QueueScreen({ navigation, embedded = false, onClose }: Q
                   },
                 ]}
               >
-                {item.artist}
+                {getArtistLabel(item)}
               </Text>
             </View>
             {isCurrent ? (
@@ -133,7 +140,7 @@ export default function QueueScreen({ navigation, embedded = false, onClose }: Q
         </TouchableOpacity>
       );
     },
-    [currentIndex, handleSelectTrack, queue, theme.colors]
+    [currentIndex, getArtistLabel, handleSelectTrack, theme.colors]
   );
 
   return (
@@ -166,7 +173,7 @@ export default function QueueScreen({ navigation, embedded = false, onClose }: Q
                 {currentTrack.title}
               </Text>
               <Text numberOfLines={1} style={[styles.nowPlayingArtist, { color: theme.colors.onPrimaryContainer }]}>
-                {currentTrack.artist}
+                {getArtistLabel(currentTrack)}
               </Text>
             </View>
             <Chip compact mode="flat" style={{ backgroundColor: theme.colors.secondaryContainer }}>

@@ -17,6 +17,26 @@ export class YouTubeMusicAPI {
     }
   }
 
+  static async searchSuggestions(query: string): Promise<string[]> {
+    try {
+      if (!query.trim()) return [];
+      const response = await HttpClient.searchSuggestions(query);
+      const sections =
+        response?.contents?.find((item: any) => item?.searchSuggestionsSectionRenderer)
+          ?.searchSuggestionsSectionRenderer?.contents || [];
+      const suggestions = sections
+        .map((entry: any) => {
+          const runs = entry?.searchSuggestionRenderer?.suggestion?.runs;
+          if (!Array.isArray(runs)) return null;
+          return runs.map((run: any) => run?.text ?? '').join('').trim();
+        })
+        .filter((value: string | null) => !!value) as string[];
+      return suggestions.slice(0, 12);
+    } catch {
+      return [];
+    }
+  }
+
   static async getArtist(browseId: string): Promise<ArtistData | null> {
     return ArtistAPI.getArtistData(browseId);
   }
