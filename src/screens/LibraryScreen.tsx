@@ -25,12 +25,10 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthenticatedHttpClient } from '../utils/authenticatedHttpClient';
 import { usePlayer } from '../contexts/PlayerContext';
 import { parseLibraryData, LibraryItem, LibrarySection } from '../utils/libraryParser';
-
-const LIBRARY_CACHE_KEY = 'library_cache_v1';
+import { readCachedLibrary, writeCachedLibrary } from '../utils/libraryCache';
 
 export default function LibraryScreen() {
   const theme = useTheme();
@@ -50,33 +48,6 @@ export default function LibraryScreen() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [fabExtended, setFabExtended] = useState(true);
 
-  const readCachedLibrary = useCallback(async (): Promise<LibrarySection[]> => {
-    try {
-      const cached = await AsyncStorage.getItem(LIBRARY_CACHE_KEY);
-      if (!cached) return [];
-      const parsed = JSON.parse(cached) as { sections?: LibrarySection[] };
-      return Array.isArray(parsed?.sections) ? parsed.sections : [];
-    } catch (err) {
-      console.warn('Failed to read cached library', err);
-      return [];
-    }
-  }, []);
-
-  const writeCachedLibrary = useCallback(async (nextSections: LibrarySection[]) => {
-    try {
-      await AsyncStorage.setItem(
-        LIBRARY_CACHE_KEY,
-        JSON.stringify({
-          version: 1,
-          updatedAt: Date.now(),
-          sections: nextSections,
-        })
-      );
-    } catch (err) {
-      console.warn('Failed to cache library', err);
-    }
-  }, []);
-
   const loadLibrary = useCallback(async ({ preserveOnError = false }: { preserveOnError?: boolean } = {}) => {
     try {
       const response = await AuthenticatedHttpClient.getUserLibrary();
@@ -90,7 +61,7 @@ export default function LibraryScreen() {
         setError('Unable to load your library right now.');
       }
     }
-  }, [writeCachedLibrary]);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;

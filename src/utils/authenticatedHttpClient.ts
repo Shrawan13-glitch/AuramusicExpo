@@ -168,28 +168,96 @@ export class AuthenticatedHttpClient {
 
   static async getRecommendations(): Promise<any> {
     try {
-      const response = await this.makeRequest(`/youtubei/v1/browse`, {
-        method: 'POST',
-        body: JSON.stringify({
-          context: {
-            client: {
-              clientName: 'WEB_REMIX',
-              clientVersion: '1.0',
-            },
+      const requestBody = {
+        context: {
+          client: {
+            ...this.clientContext,
           },
-          browseId: 'FEmusic_home',
-        }),
-      });
+          user: {
+            lockedSafetyMode: false,
+          },
+          request: {
+            useSsl: true,
+            internalExperimentFlags: [],
+            consistencyTokenJars: [],
+          },
+        },
+      };
 
-      if (!response.ok) {
-        throw new Error(`Recommendations fetch failed: ${response.status}`);
+      const endpoint = `/youtubei/v1/browse?prettyPrint=false`;
+      const headers = {
+        Accept: '*/*',
+        'X-Youtube-Client-Name': '67',
+        'X-Youtube-Client-Version': '1.20260128.03.00',
+        'X-Youtube-Bootstrap-Logged-In': 'true',
+      };
+      const browseIds = ['FEmusic_home', 'FEmusic_explore', 'FEmusic_charts'];
+
+      let lastStatus: number | undefined;
+      for (const browseId of browseIds) {
+        const response = await this.makeRequest(endpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            ...requestBody,
+            browseId,
+          }),
+        });
+        lastStatus = response.status;
+        if (!response.ok) continue;
+        const data = await response.json();
+        const hasSections = Array.isArray(
+          data?.contents?.singleColumnBrowseResultsRenderer?.tabs?.[0]?.tabRenderer?.content?.sectionListRenderer
+            ?.contents
+        );
+        if (hasSections) return data;
       }
 
-      return await response.json();
+      throw new Error(`Recommendations fetch failed: ${lastStatus ?? 'unknown'}`);
     } catch (error) {
       console.error('Authenticated recommendations error:', error);
       throw error;
     }
+  }
+
+  static async getRecommendationsContinuation(continuationToken: string): Promise<any> {
+    const endpoint = `/youtubei/v1/browse?prettyPrint=false&ctoken=${encodeURIComponent(
+      continuationToken
+    )}&continuation=${encodeURIComponent(continuationToken)}`;
+    const headers = {
+      Accept: '*/*',
+      'X-Youtube-Client-Name': '67',
+      'X-Youtube-Client-Version': '1.20260128.03.00',
+      'X-Youtube-Bootstrap-Logged-In': 'true',
+    };
+    const body = JSON.stringify({
+      context: {
+        client: {
+          ...this.clientContext,
+        },
+        user: {
+          lockedSafetyMode: false,
+        },
+        request: {
+          useSsl: true,
+          internalExperimentFlags: [],
+          consistencyTokenJars: [],
+        },
+      },
+      continuation: continuationToken,
+    });
+
+    const response = await this.makeRequest(endpoint, {
+      method: 'POST',
+      headers,
+      body,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Recommendations continuation failed: ${response.status}`);
+    }
+
+    return response.json();
   }
 
   static async createPlaylist(options: {

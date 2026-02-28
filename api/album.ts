@@ -30,6 +30,39 @@ export interface AlbumSuggestion {
 export class AlbumAPI {
   private static readonly BASE_URL = '/youtubei/v1/browse';
 
+  private static extractTrackArtist(renderer: any): string {
+    const flexColumns = renderer?.flexColumns || [];
+    const artistRuns = flexColumns?.[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
+    const fromRuns = artistRuns
+      .filter((run: any) => {
+        const text = run?.text?.trim();
+        if (!text || text === '•') return false;
+        const browseId = run?.navigationEndpoint?.browseEndpoint?.browseId;
+        return !browseId || browseId.startsWith('UC');
+      })
+      .map((run: any) => run.text.trim())
+      .join(', ');
+    if (fromRuns) return fromRuns;
+
+    const fromSimple =
+      flexColumns?.[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.simpleText?.trim() || '';
+    if (fromSimple) return fromSimple;
+
+    const fromA11y =
+      flexColumns?.[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.accessibility?.accessibilityData?.label?.trim() ||
+      '';
+    if (fromA11y) {
+      // Typical label patterns: "Song by Artist", "Artist • 3:21", etc.
+      const cleaned = fromA11y
+        .replace(/^[^a-zA-Z0-9]*by\s+/i, '')
+        .replace(/\s*•\s*\d+:\d+.*$/i, '')
+        .trim();
+      if (cleaned) return cleaned;
+    }
+
+    return '';
+  }
+
   static async getAlbumDetails(albumId: string): Promise<AlbumDetails | null> {
     try {
       const payload = {
@@ -147,8 +180,7 @@ export class AlbumAPI {
 
       if (!videoId) return null;
 
-      const artistColumn = flexColumns[1]?.musicResponsiveListItemFlexColumnRenderer;
-      const artist = artistColumn?.text?.accessibility?.accessibilityData?.label || 'Unknown Artist';
+      const artist = this.extractTrackArtist(renderer) || 'Unknown Artist';
 
       const fixedColumns = renderer.fixedColumns || [];
       const duration = fixedColumns[0]?.musicResponsiveListItemFixedColumnRenderer?.text?.runs?.[0]?.text || '';

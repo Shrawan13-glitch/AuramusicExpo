@@ -49,7 +49,7 @@ export default function AlbumScreen({ route, navigation }: AlbumScreenProps) {
   const trackQueue = album?.tracks.map((track) => ({
     id: track.id,
     title: track.title,
-    artist: track.artist,
+    artist: track.artist && track.artist !== 'Unknown Artist' ? track.artist : album?.artist || 'Unknown Artist',
     thumbnail: track.thumbnail || album?.thumbnail || '',
   })) ?? [];
 
@@ -61,7 +61,7 @@ export default function AlbumScreen({ route, navigation }: AlbumScreenProps) {
       onPress={() => playTrack({
         id: item.id,
         title: item.title,
-        artist: item.artist,
+        artist: item.artist && item.artist !== 'Unknown Artist' ? item.artist : album?.artist || 'Unknown Artist',
         thumbnail: item.thumbnail || album?.thumbnail || '',
       }, undefined, {
         source: {
@@ -73,7 +73,7 @@ export default function AlbumScreen({ route, navigation }: AlbumScreenProps) {
       onLongPress={() => openSongOptions({
         videoId: item.id,
         title: item.title,
-        artist: item.artist,
+        artist: item.artist && item.artist !== 'Unknown Artist' ? item.artist : album?.artist || 'Unknown Artist',
         thumbnail: item.thumbnail,
       })}
     >
@@ -95,7 +95,7 @@ export default function AlbumScreen({ route, navigation }: AlbumScreenProps) {
           numberOfLines={1}
           style={[styles.trackArtist, { color: theme.colors.onSurfaceVariant }]}
         >
-          {item.artist}
+          {item.artist && item.artist !== 'Unknown Artist' ? item.artist : album?.artist || 'Unknown Artist'}
         </Text>
       </View>
       
@@ -115,7 +115,7 @@ export default function AlbumScreen({ route, navigation }: AlbumScreenProps) {
         onPress={() => openSongOptions({
           videoId: item.id,
           title: item.title,
-          artist: item.artist,
+          artist: item.artist && item.artist !== 'Unknown Artist' ? item.artist : album?.artist || 'Unknown Artist',
           thumbnail: item.thumbnail,
         })}
       />

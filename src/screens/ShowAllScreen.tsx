@@ -98,6 +98,10 @@ export default function ShowAllScreen({ route, navigation }: ShowAllScreenProps)
       case 'playlist':
         navigation.navigate('Playlist', { playlistId: item.id });
         break;
+      case 'podcast':
+      case 'episode':
+        navigation.navigate('Podcast', { podcastId: item.id, title: item.title });
+        break;
     }
   };
 

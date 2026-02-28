@@ -13,6 +13,7 @@ import ArtistScreen from '../screens/ArtistScreen';
 import ShowAllScreen from '../screens/ShowAllScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import QueueScreen from '../screens/QueueScreen';
+import PodcastScreen from '../screens/PodcastScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import AppearanceSettingsScreen from '../screens/AppearanceSettingsScreen';
 import MessagesScreen from '../screens/MessagesScreen';
@@ -257,6 +258,14 @@ export default function AppNavigator() {
       <Stack.Screen 
         name="Profile" 
         component={ProfileScreen}
+        options={{
+          presentation: 'modal',
+          gestureEnabled: true,
+        }}
+      />
+      <Stack.Screen
+        name="Podcast"
+        component={PodcastScreen}
         options={{
           presentation: 'modal',
           gestureEnabled: true,

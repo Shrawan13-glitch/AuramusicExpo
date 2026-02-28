@@ -108,6 +108,8 @@ const EnhancedSearchScreen = React.memo(({ navigation }: EnhancedSearchScreenPro
       navigation?.navigate('Playlist', { playlistId: track.id });
     } else if (track.type === 'album') {
       navigation?.navigate('Album', { albumId: track.id });
+    } else if (track.type === 'podcast' || track.type === 'episode') {
+      navigation?.navigate('Podcast', { podcastId: track.id, title: track.title });
     } else if (track.type === 'artist') {
       navigation?.navigate('Artist', { artistId: track.id, artistName: track.title });
     } else if (track.type === 'profile') {
