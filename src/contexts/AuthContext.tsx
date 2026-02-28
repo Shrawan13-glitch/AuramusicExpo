@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useMemo } from
 import { CookieManager, AuthCookie } from '../utils/cookieManager';
 
 interface AuthContextType {
+  isAuthLoading: boolean;
   isAuthenticated: boolean;
   cookies: AuthCookie[];
   userProfile: any;
@@ -13,6 +14,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [cookies, setCookies] = useState<AuthCookie[]>([]);
   const [userProfile, setUserProfile] = useState(null);
@@ -33,22 +35,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const refreshCookies = useCallback(async () => {
-    const savedCookies = await CookieManager.getCookies();
-    if (savedCookies.length > 0) {
-      setCookies(savedCookies);
-      setIsAuthenticated(true);
-      setUserProfile({ name: 'User', avatar: null });
+    try {
+      const savedCookies = await CookieManager.getCookies();
+      if (savedCookies.length > 0) {
+        setCookies(savedCookies);
+        setIsAuthenticated(true);
+        setUserProfile({ name: 'User', avatar: null });
+      }
+    } finally {
+      setIsAuthLoading(false);
     }
   }, []);
 
   const contextValue = useMemo(() => ({
+    isAuthLoading,
     isAuthenticated,
     cookies,
     userProfile,
     login,
     logout,
     refreshCookies,
-  }), [isAuthenticated, cookies, userProfile, login, logout, refreshCookies]);
+  }), [isAuthLoading, isAuthenticated, cookies, userProfile, login, logout, refreshCookies]);
 
   React.useEffect(() => {
     refreshCookies();

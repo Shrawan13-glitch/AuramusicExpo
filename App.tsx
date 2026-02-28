@@ -1,10 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { PaperProvider } from 'react-native-paper';
 import { InteractionManager } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
+import * as Notifications from 'expo-notifications';
 
 import AppNavigator from './src/navigation/AppNavigator';
 import AuthScreen from './src/screens/AuthScreen';
@@ -15,10 +18,24 @@ import { SongOptionsProvider } from './src/contexts/SongOptionsContext';
 import { darkTheme } from './src/theme/theme';
 import { AuthCookie } from './src/utils/cookieManager';
 import MusicController from './src/components/MusicController';
+import StartupSplash from './src/components/StartupSplash';
+import {
+  DEFAULT_SPLASH_MIN_DURATION_MS,
+  normalizeSplashMinDurationMs,
+  SPLASH_MIN_DURATION_KEY,
+} from './src/utils/splashSettings';
+import { checkForAppUpdate } from './src/utils/updater';
 
 const AppContent = React.memo(() => {
-  const { isAuthenticated, login } = useAuth();
+  const { isAuthLoading, isAuthenticated, login } = useAuth();
   const [showAuthScreen, setShowAuthScreen] = useState(false);
+  const [isMinSplashDone, setIsMinSplashDone] = useState(false);
+  const [isSplashClosing, setIsSplashClosing] = useState(false);
+  const [isSplashClosed, setIsSplashClosed] = useState(false);
+  const [isSplashConfigLoaded, setIsSplashConfigLoaded] = useState(false);
+  const [splashMinDurationMs, setSplashMinDurationMs] = useState(DEFAULT_SPLASH_MIN_DURATION_MS);
+  const [didAutoCheckUpdate, setDidAutoCheckUpdate] = useState(false);
+  const [didRequestNotificationPermission, setDidRequestNotificationPermission] = useState(false);
   const navigationRef = useNavigationContainerRef();
   const [routeName, setRouteName] = useState<string | undefined>(undefined);
   const insets = useSafeAreaInsets();
@@ -35,6 +52,101 @@ const AppContent = React.memo(() => {
       setShowAuthScreen(false);
     }
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    let active = true;
+    AsyncStorage.getItem(SPLASH_MIN_DURATION_KEY)
+      .then((stored) => {
+        if (!active) return;
+        setSplashMinDurationMs(normalizeSplashMinDurationMs(stored));
+      })
+      .catch(() => {
+        if (!active) return;
+        setSplashMinDurationMs(DEFAULT_SPLASH_MIN_DURATION_MS);
+      })
+      .finally(() => {
+        if (active) setIsSplashConfigLoaded(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isSplashConfigLoaded) return;
+    const timer = setTimeout(() => setIsMinSplashDone(true), splashMinDurationMs);
+    return () => clearTimeout(timer);
+  }, [isSplashConfigLoaded, splashMinDurationMs]);
+
+  useEffect(() => {
+    if (!isAuthLoading && isSplashConfigLoaded && isMinSplashDone && !isSplashClosing && !isSplashClosed) {
+      setIsSplashClosing(true);
+    }
+  }, [isAuthLoading, isSplashConfigLoaded, isMinSplashDone, isSplashClosing, isSplashClosed]);
+
+  useEffect(() => {
+    if (didRequestNotificationPermission) return;
+    if (Platform.OS !== 'android' && Platform.OS !== 'ios') return;
+
+    let active = true;
+    const requestNotificationPermission = async () => {
+      try {
+        const currentPermission = await Notifications.getPermissionsAsync();
+        if (!active) return;
+
+        if (currentPermission.status !== 'granted') {
+          await Notifications.requestPermissionsAsync();
+        }
+
+        if (Platform.OS === 'android') {
+          await Notifications.setNotificationChannelAsync('default', {
+            name: 'Default',
+            importance: Notifications.AndroidImportance.DEFAULT,
+          });
+        }
+      } catch (error) {
+        console.warn('Failed to request notification permission', error);
+      } finally {
+        if (active) setDidRequestNotificationPermission(true);
+      }
+    };
+
+    requestNotificationPermission();
+    return () => {
+      active = false;
+    };
+  }, [didRequestNotificationPermission]);
+
+  useEffect(() => {
+    if (didAutoCheckUpdate) return;
+    if (!isAuthenticated) return;
+    if (!navigationRef.isReady()) return;
+    if (Platform.OS !== 'android') return;
+
+    const currentVersion =
+      Constants.expoConfig?.version ||
+      (Constants.manifest2 as { extra?: { expoClient?: { version?: string } } } | null)?.extra?.expoClient?.version ||
+      '0.0.0';
+
+    setDidAutoCheckUpdate(true);
+    checkForAppUpdate(currentVersion)
+      .then((update) => {
+        if (!update) return;
+        const currentRoute = navigationRef.getCurrentRoute()?.name;
+        if (currentRoute === 'Update') return;
+        navigationRef.navigate('Update' as never, { prefetchedUpdate: update, autoOpened: true } as never);
+      })
+      .catch(() => {});
+  }, [didAutoCheckUpdate, isAuthenticated, navigationRef, routeName]);
+
+  if (!isSplashClosed) {
+    return (
+      <StartupSplash
+        isClosing={isSplashClosing}
+        onCloseComplete={() => setIsSplashClosed(true)}
+      />
+    );
+  }
 
   if (!isAuthenticated) {
     if (!showAuthScreen) {

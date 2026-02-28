@@ -427,7 +427,7 @@ export default function MessageDetailScreen({
           </Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 28 }}>
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 120 }}>
           <Surface
             style={[
               styles.hero,

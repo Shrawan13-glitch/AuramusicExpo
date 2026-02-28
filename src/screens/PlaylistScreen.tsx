@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -42,69 +42,28 @@ const TRACK_ROW_HEIGHT = 72;
 
 type TrackRowProps = {
   item: PlaylistTrack;
-  index: number;
   theme: ReturnType<typeof useTheme>;
-  trackQueue: Array<{
-    id: string;
-    title: string;
-    artist: string;
-    thumbnail: string;
-  }>;
-  playTrack: (track: {
-    id: string;
-    title: string;
-    artist: string;
-    thumbnail: string;
-  }, queue: Array<{
-    id: string;
-    title: string;
-    artist: string;
-    thumbnail: string;
-  }>, options?: {
-    source?: {
-      type: 'playlist' | 'album' | 'search' | 'queue' | 'unknown';
-      label: string;
-      id?: string;
-    };
-  }) => void;
-  openSongOptions: (track: {
+  onPressTrack: (item: PlaylistTrack) => void;
+  onOpenTrackOptions: (item: {
     videoId: string;
     title: string;
     artist: string;
     thumbnail: string;
   }) => void;
-  sourceLabel: string;
-  sourceId: string;
 };
 
 const TrackRow = React.memo(function TrackRow({
   item,
-  index,
   theme,
-  trackQueue,
-  playTrack,
-  openSongOptions,
-  sourceLabel,
-  sourceId,
+  onPressTrack,
+  onOpenTrackOptions,
 }: TrackRowProps) {
   return (
     <TouchableOpacity
-      key={`${item.id}-${item.playlistSetVideoId || index}`}
       style={[styles.trackItem, { borderBottomColor: theme.colors.outline }]}
       activeOpacity={0.7}
-      onPress={() => playTrack({
-        id: item.id,
-        title: item.title,
-        artist: item.artist,
-        thumbnail: item.thumbnail,
-      }, trackQueue, {
-        source: {
-          type: 'playlist',
-          label: sourceLabel,
-          id: sourceId,
-        },
-      })}
-      onLongPress={() => openSongOptions({
+      onPress={() => onPressTrack(item)}
+      onLongPress={() => onOpenTrackOptions({
         videoId: item.id,
         title: item.title,
         artist: item.artist,
@@ -146,7 +105,7 @@ const TrackRow = React.memo(function TrackRow({
         icon="dots-vertical"
         size={20}
         iconColor={theme.colors.onSurfaceVariant}
-        onPress={() => openSongOptions({
+        onPress={() => onOpenTrackOptions({
           videoId: item.id,
           title: item.title,
           artist: item.artist,
@@ -154,6 +113,142 @@ const TrackRow = React.memo(function TrackRow({
         })}
       />
     </TouchableOpacity>
+  );
+});
+
+type PlaylistHeaderProps = {
+  onBack: () => void;
+  onPlay: () => void;
+  onDownload: () => void;
+  onEdit: () => void;
+  onLoadMore: () => void;
+  loadingMore: boolean;
+  canLoadMore: boolean;
+  canPlay: boolean;
+  downloadButtonLabel: string;
+  title?: string;
+  subtitle?: string;
+  secondSubtitle?: string;
+  description?: string;
+  thumbnail?: string;
+  downloadStatusText?: string;
+  colors: {
+    surface: string;
+    surfaceVariant: string;
+    onSurface: string;
+    onSurfaceVariant: string;
+  };
+};
+
+const PlaylistHeader = React.memo(function PlaylistHeader({
+  onBack,
+  onPlay,
+  onDownload,
+  onEdit,
+  onLoadMore,
+  loadingMore,
+  canLoadMore,
+  canPlay,
+  downloadButtonLabel,
+  title,
+  subtitle,
+  secondSubtitle,
+  description,
+  thumbnail,
+  downloadStatusText,
+  colors,
+}: PlaylistHeaderProps) {
+  return (
+    <View>
+      <View style={[styles.header, { backgroundColor: colors.surface }]}>
+        <View style={styles.headerContent}>
+          <IconButton
+            icon="arrow-left"
+            size={24}
+            iconColor={colors.onSurface}
+            onPress={onBack}
+            style={styles.backButton}
+          />
+
+          <Image
+            source={{ uri: thumbnail }}
+            style={[styles.playlistThumbnail, { backgroundColor: colors.surfaceVariant }]}
+          />
+
+          <View style={styles.playlistInfo}>
+            <Text variant="headlineSmall" style={[styles.playlistTitle, { color: colors.onSurface }]}>
+              {title}
+            </Text>
+
+            <Text variant="bodyMedium" style={[styles.playlistSubtitle, { color: colors.onSurfaceVariant }]}>
+              {subtitle}
+            </Text>
+
+            <Text variant="bodySmall" style={[styles.playlistSecondSubtitle, { color: colors.onSurfaceVariant }]}>
+              {secondSubtitle}
+            </Text>
+
+            {!!description && (
+              <Text
+                variant="bodySmall"
+                numberOfLines={2}
+                style={[styles.playlistDescription, { color: colors.onSurfaceVariant }]}
+              >
+                {description}
+              </Text>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.actionButtons}>
+          <Button
+            mode="contained"
+            icon="play"
+            onPress={onPlay}
+            disabled={!canPlay}
+            style={styles.playButton}
+          >
+            Play
+          </Button>
+          <Button
+            mode="outlined"
+            icon="download"
+            onPress={onDownload}
+            disabled={!canPlay}
+            style={styles.downloadButton}
+          >
+            {downloadButtonLabel}
+          </Button>
+
+          <IconButton
+            icon="pencil"
+            size={24}
+            iconColor={colors.onSurface}
+            onPress={onEdit}
+          />
+        </View>
+        {canLoadMore ? (
+          <View style={styles.loadMoreInlineWrap}>
+            <Button
+              mode="text"
+              icon="chevron-down"
+              onPress={onLoadMore}
+              loading={loadingMore}
+              disabled={loadingMore}
+              compact
+            >
+              {loadingMore ? 'Loading songs...' : 'Load more songs'}
+            </Button>
+          </View>
+        ) : null}
+        {downloadStatusText ? (
+          <Text style={[styles.downloadStatusText, { color: colors.onSurfaceVariant }]}>
+            {downloadStatusText}
+          </Text>
+        ) : null}
+        <View style={styles.headerSpacer} />
+      </View>
+    </View>
   );
 });
 
@@ -184,6 +279,7 @@ export default function PlaylistScreen({ route, navigation }: PlaylistScreenProp
   const theme = useTheme();
   const { openSongOptions } = useSongOptions();
   const { playTrack } = usePlayer();
+  const handleBack = useCallback(() => navigation.goBack(), [navigation]);
 
   useEffect(() => {
     loadPlaylist();
@@ -301,6 +397,10 @@ export default function PlaylistScreen({ route, navigation }: PlaylistScreenProp
       thumbnail: track.thumbnail,
     })) ?? []
   ), [playlist?.tracks]);
+  const trackQueueRef = useRef(trackQueue);
+  useEffect(() => {
+    trackQueueRef.current = trackQueue;
+  }, [trackQueue]);
 
   const handlePlayPlaylist = useCallback(() => {
     if (!trackQueue.length) return;
@@ -312,6 +412,35 @@ export default function PlaylistScreen({ route, navigation }: PlaylistScreenProp
       },
     });
   }, [playTrack, playlist?.title, playlistId, trackQueue]);
+
+  const sourceLabel = useMemo(
+    () => (playlist?.title ? `Playlist: ${playlist.title}` : 'Playlist'),
+    [playlist?.title]
+  );
+
+  const handlePlayTrack = useCallback((track: PlaylistTrack) => {
+    playTrack({
+      id: track.id,
+      title: track.title,
+      artist: track.artist,
+      thumbnail: track.thumbnail,
+    }, trackQueueRef.current, {
+      source: {
+        type: 'playlist',
+        label: sourceLabel,
+        id: playlistId,
+      },
+    });
+  }, [playTrack, playlistId, sourceLabel]);
+
+  const handleOpenTrackOptions = useCallback((track: {
+    videoId: string;
+    title: string;
+    artist: string;
+    thumbnail: string;
+  }) => {
+    openSongOptions(track);
+  }, [openSongOptions]);
 
   const handleDownloadPlaylist = useCallback(async () => {
     if (!playlist || !trackQueue.length) return;
@@ -336,6 +465,15 @@ export default function PlaylistScreen({ route, navigation }: PlaylistScreenProp
       })),
     });
   }, [playlist, playlistDownloadStatus?.state, playlistId, trackQueue]);
+  const handleDownloadPress = useCallback(() => {
+    void handleDownloadPlaylist();
+  }, [handleDownloadPlaylist]);
+  const headerColors = useMemo(() => ({
+    surface: theme.colors.surface,
+    surfaceVariant: theme.colors.surfaceVariant,
+    onSurface: theme.colors.onSurface,
+    onSurfaceVariant: theme.colors.onSurfaceVariant,
+  }), [theme.colors.onSurface, theme.colors.onSurfaceVariant, theme.colors.surface, theme.colors.surfaceVariant]);
 
   const downloadButtonLabel = useMemo(() => {
     if (!playlistDownloadStatus) return 'Download';
@@ -356,19 +494,15 @@ export default function PlaylistScreen({ route, navigation }: PlaylistScreenProp
   }, [playlistDownloadStatus]);
 
   const renderTrack = useCallback(
-    ({ item, index }: { item: PlaylistTrack; index: number }) => (
+    ({ item }: { item: PlaylistTrack }) => (
       <TrackRow
         item={item}
-        index={index}
         theme={theme}
-        trackQueue={trackQueue}
-        playTrack={playTrack}
-        openSongOptions={openSongOptions}
-        sourceLabel={playlist?.title ? `Playlist: ${playlist.title}` : 'Playlist'}
-        sourceId={playlistId}
+        onPressTrack={handlePlayTrack}
+        onOpenTrackOptions={handleOpenTrackOptions}
       />
     ),
-    [openSongOptions, playTrack, playlist?.title, playlistId, theme, trackQueue]
+    [handleOpenTrackOptions, handlePlayTrack, theme]
   );
 
   const keyExtractor = useCallback(
@@ -377,99 +511,31 @@ export default function PlaylistScreen({ route, navigation }: PlaylistScreenProp
   );
 
   const renderHeader = useCallback(() => (
-    <View>
-      <View style={[styles.header, { backgroundColor: theme.colors.surface }]}>
-        <View style={styles.headerContent}>
-          <IconButton
-            icon="arrow-left"
-            size={24}
-            iconColor={theme.colors.onSurface}
-            onPress={() => navigation.goBack()}
-            style={styles.backButton}
-          />
-          
-          <Image 
-            source={{ uri: playlist?.thumbnail }} 
-            style={[styles.playlistThumbnail, { backgroundColor: theme.colors.surfaceVariant }]}
-          />
-          
-          <View style={styles.playlistInfo}>
-            <Text variant="headlineSmall" style={[styles.playlistTitle, { color: theme.colors.onSurface }]}>
-              {playlist?.title}
-            </Text>
-            
-            <Text variant="bodyMedium" style={[styles.playlistSubtitle, { color: theme.colors.onSurfaceVariant }]}>
-              {playlist?.subtitle}
-            </Text>
-            
-            <Text variant="bodySmall" style={[styles.playlistSecondSubtitle, { color: theme.colors.onSurfaceVariant }]}>
-              {playlist?.secondSubtitle}
-            </Text>
-            
-            {playlist?.description && (
-              <Text 
-                variant="bodySmall" 
-                numberOfLines={2}
-                style={[styles.playlistDescription, { color: theme.colors.onSurfaceVariant }]}
-              >
-                {playlist.description}
-              </Text>
-            )}
-          </View>
-        </View>
-        
-        <View style={styles.actionButtons}>
-          <Button
-            mode="contained"
-            icon="play"
-            onPress={handlePlayPlaylist}
-            disabled={!trackQueue.length}
-            style={styles.playButton}
-          >
-            Play
-          </Button>
-          <Button
-            mode="outlined"
-            icon="download"
-            onPress={() => void handleDownloadPlaylist()}
-            disabled={!trackQueue.length}
-            style={styles.downloadButton}
-          >
-            {downloadButtonLabel}
-          </Button>
-          
-          <IconButton
-            icon="pencil"
-            size={24}
-            iconColor={theme.colors.onSurface}
-            onPress={openEditModal}
-          />
-        </View>
-        {playlist?.continuationToken ? (
-          <View style={styles.loadMoreInlineWrap}>
-            <Button
-              mode="text"
-              icon="chevron-down"
-              onPress={loadMoreSongs}
-              loading={loadingMore}
-              disabled={loadingMore}
-              compact
-            >
-              {loadingMore ? 'Loading songs...' : 'Load more songs'}
-            </Button>
-          </View>
-        ) : null}
-        {playlistDownloadStatus ? (
-          <Text style={[styles.downloadStatusText, { color: theme.colors.onSurfaceVariant }]}>
-            {playlistDownloadStatus.state === 'downloading' && playlistDownloadStatus.activeSongTitle
-              ? `Downloading: ${playlistDownloadStatus.activeSongTitle}`
-              : `Download status: ${playlistDownloadStatus.state} (${playlistDownloadStatus.completedSongs}/${playlistDownloadStatus.totalSongs}${playlistDownloadStatus.failedSongs ? `, failed ${playlistDownloadStatus.failedSongs}` : ''})`}
-          </Text>
-        ) : null}
-        <View style={styles.headerSpacer} />
-      </View>
-    </View>
-  ), [downloadButtonLabel, handleDownloadPlaylist, handlePlayPlaylist, loadMoreSongs, loadingMore, navigation, openEditModal, playlist, playlistDownloadStatus, theme.colors.onSurface, theme.colors.onSurfaceVariant, theme.colors.surface, theme.colors.surfaceVariant, trackQueue.length]);
+    <PlaylistHeader
+      onBack={handleBack}
+      onPlay={handlePlayPlaylist}
+      onDownload={handleDownloadPress}
+      onEdit={openEditModal}
+      onLoadMore={loadMoreSongs}
+      loadingMore={loadingMore}
+      canLoadMore={!!playlist?.continuationToken}
+      canPlay={!!trackQueue.length}
+      downloadButtonLabel={downloadButtonLabel}
+      title={playlist?.title}
+      subtitle={playlist?.subtitle}
+      secondSubtitle={playlist?.secondSubtitle}
+      description={playlist?.description}
+      thumbnail={playlist?.thumbnail}
+      downloadStatusText={
+        playlistDownloadStatus
+          ? playlistDownloadStatus.state === 'downloading' && playlistDownloadStatus.activeSongTitle
+            ? `Downloading: ${playlistDownloadStatus.activeSongTitle}`
+            : `Download status: ${playlistDownloadStatus.state} (${playlistDownloadStatus.completedSongs}/${playlistDownloadStatus.totalSongs}${playlistDownloadStatus.failedSongs ? `, failed ${playlistDownloadStatus.failedSongs}` : ''})`
+          : undefined
+      }
+      colors={headerColors}
+    />
+  ), [downloadButtonLabel, handleBack, handleDownloadPress, handlePlayPlaylist, headerColors, loadMoreSongs, loadingMore, openEditModal, playlist?.continuationToken, playlist?.description, playlist?.secondSubtitle, playlist?.subtitle, playlist?.thumbnail, playlist?.title, playlistDownloadStatus, trackQueue.length]);
 
   const renderFooter = useCallback(() => {
     if (!playlist?.continuationToken) return null;
@@ -617,9 +683,9 @@ export default function PlaylistScreen({ route, navigation }: PlaylistScreenProp
         ListHeaderComponent={renderHeader}
         ListFooterComponent={renderFooter}
         contentContainerStyle={[styles.listContent, { backgroundColor: theme.colors.background }]}
-        initialNumToRender={12}
-        maxToRenderPerBatch={12}
-        windowSize={9}
+        initialNumToRender={8}
+        maxToRenderPerBatch={8}
+        windowSize={5}
         removeClippedSubviews
       />
 
@@ -892,7 +958,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   listContent: {
-    paddingBottom: 92,
+    paddingBottom: 120,
   },
   headerSpacer: {
     height: 16,

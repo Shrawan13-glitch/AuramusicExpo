@@ -23,12 +23,24 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
 
       <ScrollView contentContainerStyle={styles.content}>
         <Text variant="titleSmall" style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>
+          Playback
+        </Text>
+        <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+          <List.Item
+            title="Playback settings"
+            description="Audio quality, seek duration"
+            onPress={() => navigation.navigate('PlaybackSettings')}
+            right={(props) => <List.Icon {...props} icon="chevron-right" />}
+          />
+        </View>
+
+        <Text variant="titleSmall" style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>
           Appearance
         </Text>
         <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
           <List.Item
-            title="Appearance settings"
-            description="Player background style"
+            title="Player appearance"
+            description="Background style, splash duration"
             onPress={() => navigation.navigate('AppearanceSettings')}
             right={(props) => <List.Icon {...props} icon="chevron-right" />}
           />
@@ -51,6 +63,12 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
         </Text>
         <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
           <List.Item title="Version" description={appVersion} />
+          <List.Item
+            title="Check for updates"
+            description="Download and install latest APK"
+            onPress={() => navigation.navigate('Update')}
+            right={(props) => <List.Icon {...props} icon="chevron-right" />}
+          />
         </View>
       </ScrollView>
 

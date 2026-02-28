@@ -368,7 +368,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
   },
   listContent: {
-    paddingBottom: 16,
+    paddingBottom: 120,
   },
   headerSpacer: {
     height: 16,

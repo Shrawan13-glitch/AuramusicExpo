@@ -452,7 +452,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const seekTo = useCallback((newPosition: number) => {
-    AudioPro.seekTo(newPosition);
+    AudioPro.seekTo(newPosition * 1000);
     setPosition(newPosition);
   }, []);
 

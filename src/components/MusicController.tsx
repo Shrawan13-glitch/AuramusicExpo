@@ -22,6 +22,7 @@ const MusicController = React.memo(({ bottomOffset = 0, activeRouteName }: Music
   const { currentTrack } = usePlayer();
   const [isExpanded, setIsExpanded] = useState(false);
   const [isQueueOpen, setIsQueueOpen] = useState(false);
+  const [isLyricsOpen, setIsLyricsOpen] = useState(false);
   const progress = useSharedValue(0); // 0 = mini, 1 = expanded
   const startProgress = useSharedValue(0);
 
@@ -44,6 +45,7 @@ const MusicController = React.memo(({ bottomOffset = 0, activeRouteName }: Music
     if (!currentTrack) {
       setIsExpanded(false);
       setIsQueueOpen(false);
+      setIsLyricsOpen(false);
       progress.value = 0;
     }
   }, [currentTrack, progress]);
@@ -52,18 +54,19 @@ const MusicController = React.memo(({ bottomOffset = 0, activeRouteName }: Music
     if (activeRouteName === 'Player' || activeRouteName === 'Queue') {
       setIsExpanded(false);
       setIsQueueOpen(false);
+      setIsLyricsOpen(false);
       progress.value = 0;
     }
   }, [activeRouteName, progress]);
 
   useEffect(() => {
-    if (!isExpanded || isQueueOpen) return;
+    if (!isExpanded || isQueueOpen || isLyricsOpen) return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       collapse();
       return true;
     });
     return () => sub.remove();
-  }, [collapse, isExpanded, isQueueOpen]);
+  }, [collapse, isExpanded, isLyricsOpen, isQueueOpen]);
 
   const miniGesture = Gesture.Pan()
     .enabled(!isExpanded)
@@ -85,7 +88,7 @@ const MusicController = React.memo(({ bottomOffset = 0, activeRouteName }: Music
     });
 
   const expandedGesture = Gesture.Pan()
-    .enabled(isExpanded && !isQueueOpen)
+    .enabled(isExpanded && !isQueueOpen && !isLyricsOpen)
     .activeOffsetY([-8, 8])
     .onBegin(() => {
       startProgress.value = progress.value;
@@ -124,7 +127,11 @@ const MusicController = React.memo(({ bottomOffset = 0, activeRouteName }: Music
     <View pointerEvents="box-none" style={styles.overlay}>
       <GestureDetector gesture={expandedGesture}>
         <Animated.View style={[styles.expanded, expandedStyle]} pointerEvents={isExpanded ? 'auto' : 'none'}>
-          <PlayerScreen onCollapse={collapse} onQueueVisibilityChange={setIsQueueOpen} />
+          <PlayerScreen
+            onCollapse={collapse}
+            onQueueVisibilityChange={setIsQueueOpen}
+            onLyricsVisibilityChange={setIsLyricsOpen}
+          />
         </Animated.View>
       </GestureDetector>
 

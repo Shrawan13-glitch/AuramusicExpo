@@ -145,7 +145,7 @@ export default function MessagesScreen({ navigation }: { navigation: any }) {
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           estimatedItemSize={118}
-          contentContainerStyle={{ padding: 12, paddingBottom: insets.bottom + 36 }}
+          contentContainerStyle={{ padding: 12, paddingBottom: insets.bottom + 120 }}
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}
         />

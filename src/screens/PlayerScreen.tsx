@@ -1,12 +1,13 @@
 import React, { useMemo, useEffect, useState, useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity, useWindowDimensions, ImageBackground, Share, BackHandler } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, useWindowDimensions, ImageBackground, Share, BackHandler, ScrollView } from 'react-native';
 import { Text, IconButton, useTheme, Surface } from 'react-native-paper';
 import Slider from '@react-native-community/slider';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { usePlayer } from '../contexts/PlayerContext';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { Extrapolation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Extrapolation, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming, withSequence } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSongOptions } from '../contexts/SongOptionsContext';
 import { AuthenticatedHttpClient } from '../utils/authenticatedHttpClient';
@@ -16,6 +17,9 @@ import { SEARCH_FILTERS, YouTubeMusicAPI } from '../../api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { subscribePlayerBgStyleChanged } from '../utils/settingsEvents';
 import QueueScreen from './QueueScreen';
+import LyricsScreen from './LyricsScreen';
+import type { LyricsPayload, LyricsStatus } from '../types/lyrics';
+import { fetchBestLyrics } from '../utils/lyricsService';
 
 type PlayerBgStyle = 'image-gradient' | 'solid-gradient' | 'artwork-blur' | 'artwork-muted';
 const PLAYER_BG_KEY = 'player_bg_style';
@@ -27,9 +31,10 @@ const isPlayerBgStyle = (value: string | null): value is PlayerBgStyle =>
 interface PlayerScreenProps {
   onCollapse?: () => void;
   onQueueVisibilityChange?: (visible: boolean) => void;
+  onLyricsVisibilityChange?: (visible: boolean) => void;
 }
 
-export default function PlayerScreen({ onCollapse, onQueueVisibilityChange }: PlayerScreenProps) {
+export default function PlayerScreen({ onCollapse, onQueueVisibilityChange, onLyricsVisibilityChange }: PlayerScreenProps) {
   const { 
     currentTrack, 
     isPlaying, 
@@ -50,7 +55,10 @@ export default function PlayerScreen({ onCollapse, onQueueVisibilityChange }: Pl
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  const artworkSize = Math.max(200, Math.min(width - 48, height * 0.42, 380));
+  const isCompactMode = width < 400 || height < 500;
+  const artworkSize = isCompactMode 
+    ? Math.min(width - 32, height * 0.3, 200)
+    : Math.max(200, Math.min(width - 48, height * 0.42, 380));
   const { openSongOptions } = useSongOptions();
   const [likeLoading, setLikeLoading] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
@@ -58,7 +66,16 @@ export default function PlayerScreen({ onCollapse, onQueueVisibilityChange }: Pl
   const [likedStatus, setLikedStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [bgStyle, setBgStyle] = useState<PlayerBgStyle>('image-gradient');
   const [isQueueOpen, setIsQueueOpen] = useState(false);
+  const [isLyricsOpen, setIsLyricsOpen] = useState(false);
+  const [lyricsStatus, setLyricsStatus] = useState<LyricsStatus>('idle');
+  const [lyricsPayload, setLyricsPayload] = useState<LyricsPayload | null>(null);
+  const [isSeeking, setIsSeeking] = useState(false);
+  const [seekPosition, setSeekPosition] = useState(0);
+  const [seekIndicator, setSeekIndicator] = useState<{ side: 'left' | 'right'; amount: number } | null>(null);
+  const [seekDuration, setSeekDuration] = useState(5);
+  const seekOpacity = useSharedValue(0);
   const queueProgress = useSharedValue(0);
+  const lyricsProgress = useSharedValue(0);
 
   const getArtworkCandidates = useCallback((uri: string) => {
     if (!uri) return { primary: '', fallback: '' };
@@ -137,6 +154,37 @@ export default function PlayerScreen({ onCollapse, onQueueVisibilityChange }: Pl
     }
   }, [currentTrack?.thumbnail, getArtworkCandidates]);
 
+  useEffect(() => {
+    if (!currentTrack?.id) {
+      setLyricsStatus('idle');
+      setLyricsPayload(null);
+      return;
+    }
+
+    let active = true;
+    setLyricsStatus('loading');
+    setLyricsPayload(null);
+
+    fetchBestLyrics(currentTrack)
+      .then((payload) => {
+        if (!active) return;
+        if (payload?.lines?.length) {
+          setLyricsPayload(payload);
+          setLyricsStatus('ready');
+        } else {
+          setLyricsStatus('empty');
+        }
+      })
+      .catch(() => {
+        if (!active) return;
+        setLyricsStatus('error');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [currentTrack?.id, currentTrack?.title, currentTrack?.artist, currentTrack?.duration]);
+
 
   useEffect(() => {
     if (!currentTrack?.id) {
@@ -177,6 +225,17 @@ export default function PlayerScreen({ onCollapse, onQueueVisibilityChange }: Pl
       unsubscribeEvents();
     };
   }, [loadBgStyle, navigation]);
+
+  useEffect(() => {
+    AsyncStorage.getItem('seek_duration')
+      .then((stored) => {
+        const parsed = Number(stored);
+        if ([5, 10, 15, 30].includes(parsed)) {
+          setSeekDuration(parsed);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const displayArtists = useMemo(() => {
     const direct = (currentTrack?.artists || [])
@@ -236,6 +295,39 @@ export default function PlayerScreen({ onCollapse, onQueueVisibilityChange }: Pl
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const handleDoubleTapSeek = useCallback((side: 'left' | 'right') => {
+    const newPosition = side === 'left' 
+      ? Math.max(0, position - seekDuration)
+      : Math.min(duration, position + seekDuration);
+    
+    seekTo(newPosition);
+    
+    setSeekIndicator(prev => ({
+      side,
+      amount: prev?.side === side ? (prev.amount + seekDuration) : seekDuration
+    }));
+    
+    seekOpacity.value = withSequence(
+      withTiming(1, { duration: 100 }),
+      withTiming(1, { duration: 400 }),
+      withTiming(0, { duration: 200 })
+    );
+    
+    setTimeout(() => setSeekIndicator(null), 700);
+  }, [position, duration, seekTo, seekOpacity, seekDuration]);
+
+  const leftDoubleTap = Gesture.Tap()
+    .numberOfTaps(2)
+    .onEnd(() => runOnJS(handleDoubleTapSeek)('left'));
+
+  const rightDoubleTap = Gesture.Tap()
+    .numberOfTaps(2)
+    .onEnd(() => runOnJS(handleDoubleTapSeek)('right'));
+
+  const seekIndicatorStyle = useAnimatedStyle(() => ({
+    opacity: seekOpacity.value,
+  }));
+
   const handleShare = useCallback(async () => {
     if (!currentTrack?.id) return;
     const url = `https://music.youtube.com/watch?v=${currentTrack.id}`;
@@ -283,6 +375,11 @@ export default function PlayerScreen({ onCollapse, onQueueVisibilityChange }: Pl
     onQueueVisibilityChange?.(visible);
   }, [onQueueVisibilityChange]);
 
+  const setLyricsVisible = useCallback((visible: boolean) => {
+    setIsLyricsOpen(visible);
+    onLyricsVisibilityChange?.(visible);
+  }, [onLyricsVisibilityChange]);
+
   const closeQueueScreen = useCallback(() => {
     queueProgress.value = withTiming(0, { duration: 210 }, (finished) => {
       if (finished) {
@@ -291,24 +388,68 @@ export default function PlayerScreen({ onCollapse, onQueueVisibilityChange }: Pl
     });
   }, [queueProgress, setQueueVisible]);
 
-  useEffect(() => {
-    if (!isQueueOpen) return;
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      closeQueueScreen();
-      return true;
-    });
-    return () => sub.remove();
-  }, [closeQueueScreen, isQueueOpen]);
-
   const openQueueScreen = useCallback(() => {
     if (isQueueOpen) return;
     setQueueVisible(true);
     queueProgress.value = withTiming(1, { duration: 240 });
   }, [isQueueOpen, queueProgress, setQueueVisible]);
 
+  const closeLyricsScreen = useCallback(() => {
+    lyricsProgress.value = withTiming(0, { duration: 220 }, (finished) => {
+      if (finished) {
+        runOnJS(setLyricsVisible)(false);
+      }
+    });
+  }, [lyricsProgress, setLyricsVisible]);
+
+  const openLyricsScreen = useCallback(() => {
+    if (isLyricsOpen) return;
+    setLyricsVisible(true);
+    lyricsProgress.value = withTiming(1, { duration: 240 });
+  }, [isLyricsOpen, lyricsProgress, setLyricsVisible]);
+
+  useEffect(() => {
+    if (!isQueueOpen && !isLyricsOpen) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (isLyricsOpen) {
+        closeLyricsScreen();
+        return true;
+      }
+      closeQueueScreen();
+      return true;
+    });
+    return () => sub.remove();
+  }, [closeQueueScreen, closeLyricsScreen, isLyricsOpen, isQueueOpen]);
+
+  useEffect(() => {
+    if (onCollapse) return;
+    const nav = navigation as any;
+    if (typeof nav?.setOptions !== 'function') return;
+    try {
+      nav.setOptions({ gestureEnabled: !isLyricsOpen });
+    } catch {
+      return;
+    }
+    return () => {
+      try {
+        nav.setOptions({ gestureEnabled: true });
+      } catch {
+        // no-op
+      }
+    };
+  }, [isLyricsOpen, navigation, onCollapse]);
+
   const queueOverlayStyle = useAnimatedStyle(() => ({
     opacity: interpolate(queueProgress.value, [0, 1], [0, 1], Extrapolation.CLAMP),
     transform: [{ translateY: interpolate(queueProgress.value, [0, 1], [40, 0], Extrapolation.CLAMP) }],
+  }));
+
+  const lyricsOverlayStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(lyricsProgress.value, [0, 1], [0, 1], Extrapolation.CLAMP),
+    transform: [{ translateY: interpolate(lyricsProgress.value, [0, 1], [40, 0], Extrapolation.CLAMP) }],
+  }));
+  const baseContentStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(lyricsProgress.value, [0, 1], [1, 0], Extrapolation.CLAMP),
   }));
 
   if (!currentTrack) {
@@ -387,198 +528,273 @@ export default function PlayerScreen({ onCollapse, onQueueVisibilityChange }: Pl
           />
         </>
       )}
-      {/* Header */}
-      <Surface
-        style={[
-          styles.header,
-          { backgroundColor: 'transparent', paddingTop: insets.top + 8 },
-        ]}
-        elevation={0}
+      <Animated.View
+        style={[baseContentStyle, { flex: undefined, height: '100%' }]}
+        pointerEvents={isLyricsOpen ? 'none' : 'auto'}
       >
-        <IconButton
-          icon="keyboard-backspace"
-          size={24}
-          iconColor={theme.colors.onSurface}
-          onPress={() => {
-            if (isQueueOpen) {
-              closeQueueScreen();
-            } else if (onCollapse) {
-              onCollapse();
-            } else {
-              navigation.goBack();
-            }
-          }}
-        />
-        <View style={styles.headerCenter}>
-          <Text variant="bodySmall" style={[styles.headerSubtitle, { color: theme.colors.onSurfaceVariant }]}>
-            {`Playing from ${sourceLabel}`}
-          </Text>
-        </View>
-        <IconButton
-          icon="dots-vertical"
-          size={24}
-          iconColor={theme.colors.onSurface}
-          onPress={handleOpenOptions}
-        />
-      </Surface>
-
-      {/* Album Art */}
-      <View style={styles.artworkContainer}>
-        <Surface style={[styles.artworkSurface, { backgroundColor: theme.colors.surfaceVariant }]} elevation={8}>
-          {artworkUri ? (
-            <Animated.Image
-              source={{ uri: artworkUri }}
-              style={[styles.artwork, { width: artworkSize, height: artworkSize }]}
-              resizeMode="cover"
-              onError={() => {
-                if (artworkFallback && artworkUri !== artworkFallback) {
-                  setArtworkUri(artworkFallback);
-                }
-              }}
-              sharedTransitionTag="albumArt"
-            />
-          ) : (
-            <View
-              style={[
-                styles.artwork,
-                styles.artworkPlaceholder,
-                { backgroundColor: theme.colors.surfaceVariant, width: artworkSize, height: artworkSize },
-              ]}
-            >
-              <MaterialCommunityIcons
-                name="music-note"
-                size={36}
-                color={theme.colors.onSurfaceVariant}
-              />
-            </View>
-          )}
-        </Surface>
-      </View>
-
-      {/* Track Info */}
-      <View style={styles.trackInfo}>
-        <Animated.Text 
-          numberOfLines={2}
-          style={[styles.title, { color: theme.colors.onBackground }]}
-          sharedTransitionTag="songTitle"
+        <ScrollView 
+          contentContainerStyle={isCompactMode ? styles.scrollContent : styles.normalContent}
+          showsVerticalScrollIndicator={false}
+          bounces={false}
         >
-          {currentTrack.title}
-        </Animated.Text>
-        {displayArtists.length > 0 && (
-          <View style={styles.artistRow}>
-            {displayArtists.map((artist, index) => (
-              <View key={`${artist.id || artist.name}-${index}`} style={styles.artistInline}>
-                <TouchableOpacity
-                  onPress={() => void handleArtistPress(artist)}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    variant="titleMedium"
-                    numberOfLines={1}
-                    style={[styles.artist, styles.artistLink, { color: theme.colors.onSurfaceVariant }]}
-                  >
-                    {artist.name}
-                  </Text>
-                </TouchableOpacity>
-                {index < displayArtists.length - 1 ? (
-                  <Text
-                    variant="titleMedium"
-                    style={[styles.artist, { color: theme.colors.onSurfaceVariant }]}
-                  >
-                    {', '}
-                  </Text>
-                ) : null}
-              </View>
-            ))}
-          </View>
-        )}
-      </View>
-
-      {/* Progress */}
-      <View style={styles.progressContainer}>
-        <Slider
-          style={styles.slider}
-          minimumValue={0}
-          maximumValue={duration}
-          value={position}
-          onValueChange={seekTo}
-          minimumTrackTintColor={theme.colors.primary}
-          maximumTrackTintColor={theme.colors.outline}
-          thumbStyle={[styles.thumb, { backgroundColor: theme.colors.primary }]}
-        />
-        <View style={styles.timeContainer}>
-          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-            {formatTime(position)}
-          </Text>
-          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-            {formatTime(duration)}
-          </Text>
-        </View>
-      </View>
-
-      {/* Controls */}
-      <View style={styles.controls}>
-        <IconButton
-          icon="shuffle"
-          size={28}
-          iconColor={shuffleEnabled ? theme.colors.primary : theme.colors.onSurfaceVariant}
-          onPress={toggleShuffle}
-        />
-        
-        <IconButton
-          icon="skip-previous"
-          size={36}
-          iconColor={theme.colors.onBackground}
-          onPress={skipPrevious}
-        />
-        
-        <Surface style={[styles.playButton, { backgroundColor: theme.colors.primary }]} elevation={4}>
+        {/* Header */}
+        <Surface
+          style={[
+            styles.header,
+            { backgroundColor: 'transparent', paddingTop: insets.top + 8 },
+          ]}
+          elevation={0}
+        >
           <IconButton
-            icon={isPlaying ? 'pause' : 'play'}
-            size={32}
-            iconColor={theme.colors.onPrimary}
-            onPress={isPlaying ? pause : resume}
-            style={styles.playButtonInner}
+            icon="keyboard-backspace"
+            size={24}
+            iconColor={theme.colors.onSurface}
+            onPress={() => {
+              if (isLyricsOpen) {
+                closeLyricsScreen();
+              } else if (isQueueOpen) {
+                closeQueueScreen();
+              } else if (onCollapse) {
+                onCollapse();
+              } else {
+                navigation.goBack();
+              }
+            }}
+          />
+          <View style={styles.headerCenter}>
+            <Text variant="bodySmall" style={[styles.headerSubtitle, { color: theme.colors.onSurfaceVariant }]}>
+              {`Playing from ${sourceLabel}`}
+            </Text>
+          </View>
+          <IconButton
+            icon="dots-vertical"
+            size={24}
+            iconColor={theme.colors.onSurface}
+            onPress={handleOpenOptions}
           />
         </Surface>
-        
-        <IconButton
-          icon="skip-next"
-          size={36}
-          iconColor={theme.colors.onBackground}
-          onPress={skipNext}
-        />
-        
-        <IconButton
-          icon={repeatMode === 'one' ? 'repeat-once' : 'repeat'}
-          size={28}
-          iconColor={repeatMode === 'off' ? theme.colors.onSurfaceVariant : theme.colors.primary}
-          onPress={cycleRepeatMode}
-        />
-      </View>
 
-      {/* Bottom Actions */}
-      <View style={styles.bottomActions}>
-        <IconButton
-          icon={isLiked ? 'heart' : 'heart-outline'}
-          size={24}
-          iconColor={isLiked ? theme.colors.primary : theme.colors.onSurfaceVariant}
-          onPress={handleLikeToggle}
-          disabled={likeLoading}
+        {/* Album Art */}
+        <View style={styles.artworkContainer}>
+          <Surface style={[styles.artworkSurface, { backgroundColor: theme.colors.surfaceVariant }]} elevation={8}>
+            {artworkUri ? (
+              <Animated.Image
+                source={{ uri: artworkUri }}
+                style={[styles.artwork, { width: artworkSize, height: artworkSize }]}
+                resizeMode="cover"
+                onError={() => {
+                  if (artworkFallback && artworkUri !== artworkFallback) {
+                    setArtworkUri(artworkFallback);
+                  }
+                }}
+                sharedTransitionTag="albumArt"
+              />
+            ) : (
+              <View
+                style={[
+                  styles.artwork,
+                  styles.artworkPlaceholder,
+                  { backgroundColor: theme.colors.surfaceVariant, width: artworkSize, height: artworkSize },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="music-note"
+                  size={36}
+                  color={theme.colors.onSurfaceVariant}
+                />
+              </View>
+            )}
+            <View style={[styles.seekOverlay, { width: artworkSize, height: artworkSize }]}>
+              <GestureDetector gesture={leftDoubleTap}>
+                <View style={styles.seekZone} />
+              </GestureDetector>
+              <GestureDetector gesture={rightDoubleTap}>
+                <View style={styles.seekZone} />
+              </GestureDetector>
+            </View>
+            {seekIndicator && (
+              <Animated.View 
+                style={[
+                  styles.seekIndicator, 
+                  seekIndicatorStyle,
+                  { 
+                    [seekIndicator.side]: 16,
+                    width: artworkSize,
+                    height: artworkSize 
+                  }
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name={seekIndicator.side === 'left' ? 'rewind' : 'fast-forward'}
+                  size={32}
+                  color="#fff"
+                />
+                <Text style={styles.seekText}>{seekIndicator.amount}s</Text>
+              </Animated.View>
+            )}
+          </Surface>
+        </View>
+
+        {/* Track Info */}
+        <View style={styles.trackInfo}>
+          <Animated.Text 
+            numberOfLines={2}
+            style={[styles.title, { color: theme.colors.onBackground }]}
+            sharedTransitionTag="songTitle"
+          >
+            {currentTrack.title}
+          </Animated.Text>
+          {displayArtists.length > 0 && (
+            <View style={styles.artistRow}>
+              {displayArtists.map((artist, index) => (
+                <View key={`${artist.id || artist.name}-${index}`} style={styles.artistInline}>
+                  <TouchableOpacity
+                    onPress={() => void handleArtistPress(artist)}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      variant="titleMedium"
+                      numberOfLines={1}
+                      style={[styles.artist, styles.artistLink, { color: theme.colors.onSurfaceVariant }]}
+                    >
+                      {artist.name}
+                    </Text>
+                  </TouchableOpacity>
+                  {index < displayArtists.length - 1 ? (
+                    <Text
+                      variant="titleMedium"
+                      style={[styles.artist, { color: theme.colors.onSurfaceVariant }]}
+                    >
+                      {', '}
+                    </Text>
+                  ) : null}
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
+        {/* Progress */}
+        <View style={styles.progressContainer}>
+          <Slider
+            style={styles.slider}
+            minimumValue={0}
+            maximumValue={duration}
+            value={isSeeking ? seekPosition : position}
+            onSlidingStart={(value) => {
+              setIsSeeking(true);
+              setSeekPosition(value);
+            }}
+            onValueChange={setSeekPosition}
+            onSlidingComplete={(value) => {
+              setIsSeeking(false);
+              seekTo(value);
+            }}
+            minimumTrackTintColor={theme.colors.primary}
+            maximumTrackTintColor={theme.colors.outline}
+            thumbStyle={[styles.thumb, { backgroundColor: theme.colors.primary }]}
+          />
+          <View style={styles.timeContainer}>
+            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+              {formatTime(isSeeking ? seekPosition : position)}
+            </Text>
+            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+              {formatTime(duration)}
+            </Text>
+          </View>
+        </View>
+
+        {/* Controls */}
+        <View style={styles.controls}>
+          <IconButton
+            icon="shuffle"
+            size={28}
+            iconColor={shuffleEnabled ? theme.colors.primary : theme.colors.onSurfaceVariant}
+            onPress={toggleShuffle}
+          />
+          
+          <IconButton
+            icon="skip-previous"
+            size={36}
+            iconColor={theme.colors.onBackground}
+            onPress={skipPrevious}
+          />
+          
+          <Surface style={[styles.playButton, { backgroundColor: theme.colors.primary }]} elevation={4}>
+            <IconButton
+              icon={isPlaying ? 'pause' : 'play'}
+              size={32}
+              iconColor={theme.colors.onPrimary}
+              onPress={isPlaying ? pause : resume}
+              style={styles.playButtonInner}
+            />
+          </Surface>
+          
+          <IconButton
+            icon="skip-next"
+            size={36}
+            iconColor={theme.colors.onBackground}
+            onPress={skipNext}
+          />
+          
+          <IconButton
+            icon={repeatMode === 'one' ? 'repeat-once' : 'repeat'}
+            size={28}
+            iconColor={repeatMode === 'off' ? theme.colors.onSurfaceVariant : theme.colors.primary}
+            onPress={cycleRepeatMode}
+          />
+        </View>
+
+        {/* Bottom Actions */}
+        <View style={styles.bottomActions}>
+          <IconButton
+            icon={isLiked ? 'heart' : 'heart-outline'}
+            size={24}
+            iconColor={isLiked ? theme.colors.primary : theme.colors.onSurfaceVariant}
+            onPress={handleLikeToggle}
+            disabled={likeLoading}
+          />
+          <IconButton
+            icon="share-variant"
+            size={24}
+            iconColor={theme.colors.onSurfaceVariant}
+            onPress={handleShare}
+          />
+          <IconButton
+            icon="playlist-music"
+            size={24}
+            iconColor={theme.colors.onSurfaceVariant}
+            onPress={openQueueScreen}
+          />
+          <IconButton
+            icon="text-box-multiple-outline"
+            size={24}
+            iconColor={theme.colors.onSurfaceVariant}
+            onPress={openLyricsScreen}
+          />
+        </View>
+        </ScrollView>
+      </Animated.View>
+
+      <Animated.View
+        style={[styles.lyricsOverlay, lyricsOverlayStyle]}
+        pointerEvents={isLyricsOpen ? 'auto' : 'none'}
+      >
+        <LyricsScreen
+          title={currentTrack.title}
+          artist={currentTrack.artist}
+          lyricsStatus={lyricsStatus}
+          lyricsPayload={lyricsPayload}
+          position={position}
+          duration={duration}
+          isPlaying={isPlaying}
+          onSeek={seekTo}
+          onSkipPrevious={skipPrevious}
+          onSkipNext={skipNext}
+          onPauseResume={isPlaying ? pause : resume}
+          onClose={closeLyricsScreen}
         />
-        <IconButton
-          icon="share-variant"
-          size={24}
-          iconColor={theme.colors.onSurfaceVariant}
-          onPress={handleShare}
-        />
-        <IconButton
-          icon="playlist-music"
-          size={24}
-          iconColor={theme.colors.onSurfaceVariant}
-          onPress={openQueueScreen}
-        />
-      </View>
+      </Animated.View>
 
       <Animated.View
         style={[styles.queueOverlay, queueOverlayStyle]}
@@ -620,7 +836,7 @@ const styles = StyleSheet.create({
   },
   artworkContainer: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: 24,
   },
   artworkSurface: {
     borderRadius: 16,
@@ -636,7 +852,7 @@ const styles = StyleSheet.create({
   trackInfo: {
     paddingHorizontal: 32,
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 16,
   },
   title: {
     textAlign: 'center',
@@ -665,7 +881,7 @@ const styles = StyleSheet.create({
   },
   progressContainer: {
     paddingHorizontal: 32,
-    marginBottom: 32,
+    marginBottom: 16,
   },
   slider: {
     width: '100%',
@@ -686,7 +902,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 32,
-    marginBottom: 32,
+    marginBottom: 16,
   },
   playButton: {
     borderRadius: 32,
@@ -699,10 +915,45 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 32,
-    paddingBottom: 32,
+    paddingBottom: 16,
+    marginBottom: 16,
+  },
+  scrollContent: {
+    paddingBottom: 24,
+  },
+  normalContent: {
+    flexGrow: 1,
+  },
+  lyricsOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 18,
   },
   queueOverlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 20,
+  },
+  seekOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    flexDirection: 'row',
+  },
+  seekZone: {
+    flex: 1,
+    height: '100%',
+  },
+  seekIndicator: {
+    position: 'absolute',
+    top: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 16,
+  },
+  seekText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 4,
   },
 });

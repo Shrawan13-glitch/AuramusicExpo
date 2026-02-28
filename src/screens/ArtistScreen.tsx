@@ -29,6 +29,7 @@ import { YouTubeMusicAPI, ArtistData, ArtistSection, ArtistItem } from '../../ap
 import ArtistCard from '../components/ArtistCard';
 import { useSongOptions } from '../contexts/SongOptionsContext';
 import { AuthenticatedHttpClient } from '../utils/authenticatedHttpClient';
+import { usePlayer } from '../contexts/PlayerContext';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HEADER_MAX_HEIGHT = 420;
@@ -51,6 +52,7 @@ export default function ArtistScreen({ route, navigation }: ArtistScreenProps) {
   const theme = useTheme();
   const { artistId, artistName } = route.params;
   const { openSongOptions } = useSongOptions();
+  const { playTrack } = usePlayer();
   const [artistData, setArtistData] = useState<ArtistData | null>(null);
   const [loading, setLoading] = useState(true);
   const [isFollowing, setIsFollowing] = useState(false);
@@ -178,11 +180,35 @@ export default function ArtistScreen({ route, navigation }: ArtistScreenProps) {
     }
   }, [artistData, followLoading, isFollowing]);
 
-  const handleItemPress = useCallback((item: ArtistItem) => {
+  const handleItemPress = useCallback((item: ArtistItem, sectionItems?: ArtistItem[]) => {
     switch (item.type) {
       case 'song':
       case 'video':
-        // Navigate to player
+        {
+          const candidateItems =
+            (sectionItems?.length ? sectionItems : sections).flatMap((entry) =>
+              'items' in entry ? entry.items : [entry]
+            );
+          const playableQueue = candidateItems
+            .filter((entry) => entry.type === 'song' || entry.type === 'video')
+            .map((entry) => ({
+              id: entry.videoId || entry.id,
+              title: entry.title,
+              artist: entry.subtitle || artistData?.name || artistName || 'Unknown Artist',
+              thumbnail: entry.thumbnail || artistData?.thumbnail || '',
+            }));
+          const targetId = item.videoId || item.id;
+          const queueIndex = playableQueue.findIndex((track) => track.id === targetId);
+
+          if (!playableQueue.length || queueIndex === -1) return;
+          playTrack(playableQueue[queueIndex], playableQueue, {
+            source: {
+              type: 'queue',
+              label: artistData?.name ? `Artist: ${artistData.name}` : 'Artist Songs',
+              id: artistId,
+            },
+          });
+        }
         break;
       case 'album':
         navigation.navigate('Album', { albumId: item.id });
@@ -194,16 +220,16 @@ export default function ArtistScreen({ route, navigation }: ArtistScreenProps) {
         navigation.navigate('Playlist', { playlistId: item.id });
         break;
     }
-  }, [navigation]);
+  }, [artistData?.name, artistData?.thumbnail, artistId, artistName, navigation, playTrack, sections]);
 
-  const renderSectionItem = useCallback(({ item }: { item: ArtistItem }) => (
+  const renderSectionItem = useCallback(({ item, sectionItems }: { item: ArtistItem; sectionItems?: ArtistItem[] }) => (
     <ArtistCard
       id={item.id}
       title={item.title}
       subtitle={item.subtitle}
       thumbnail={item.thumbnail}
       type={item.type}
-      onPress={() => handleItemPress(item)}
+      onPress={() => handleItemPress(item, sectionItems)}
       onMenuPress={() => {
         if (item.type === 'song' || item.type === 'video') {
           openSongOptions({
@@ -356,7 +382,7 @@ export default function ArtistScreen({ route, navigation }: ArtistScreenProps) {
         ) : (
           <View>
             {displayItems.map((item) => (
-              <View key={item.id}>{renderSectionItem({ item })}</View>
+              <View key={item.id}>{renderSectionItem({ item, sectionItems: section.items })}</View>
             ))}
           </View>
         )}

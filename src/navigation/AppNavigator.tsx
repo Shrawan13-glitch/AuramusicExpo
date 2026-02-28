@@ -16,10 +16,12 @@ import QueueScreen from '../screens/QueueScreen';
 import PodcastScreen from '../screens/PodcastScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import AppearanceSettingsScreen from '../screens/AppearanceSettingsScreen';
+import PlaybackSettingsScreen from '../screens/PlaybackSettingsScreen';
 import MessagesScreen from '../screens/MessagesScreen';
 import MessageDetailScreen from '../screens/MessageDetailScreen';
 import DownloadsScreen from '../screens/DownloadsScreen';
 import CacheScreen from '../screens/CacheScreen';
+import UpdateScreen from '../screens/UpdateScreen';
 import CookieViewer from '../components/CookieViewer';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -211,7 +213,7 @@ export default function AppNavigator() {
         component={PlayerScreen}
         options={{
           presentation: 'modal',
-          gestureEnabled: true,
+          gestureEnabled: false,
         }}
       />
       <Stack.Screen 
@@ -287,6 +289,14 @@ export default function AppNavigator() {
           gestureEnabled: true,
         }}
       />
+      <Stack.Screen 
+        name="PlaybackSettings" 
+        component={PlaybackSettingsScreen}
+        options={{
+          presentation: 'modal',
+          gestureEnabled: true,
+        }}
+      />
       <Stack.Screen
         name="Messages"
         component={MessagesScreen}
@@ -317,6 +327,15 @@ export default function AppNavigator() {
       <Stack.Screen
         name="Cache"
         component={CacheScreen}
+        options={{
+          presentation: 'modal',
+          animation: 'slide_from_right',
+          gestureEnabled: true,
+        }}
+      />
+      <Stack.Screen
+        name="Update"
+        component={UpdateScreen}
         options={{
           presentation: 'modal',
           animation: 'slide_from_right',

@@ -3,6 +3,13 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { Appbar, Dialog, List, Portal, RadioButton, Text, useTheme, Button } from 'react-native-paper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { notifyPlayerBgStyleChanged } from '../utils/settingsEvents';
+import {
+  DEFAULT_SPLASH_MIN_DURATION_MS,
+  normalizeSplashMinDurationMs,
+  splashDurationLabel,
+  SPLASH_DURATION_OPTIONS_MS,
+  SPLASH_MIN_DURATION_KEY,
+} from '../utils/splashSettings';
 
 type PlayerBgStyle = 'image-gradient' | 'solid-gradient' | 'artwork-blur' | 'artwork-muted';
 
@@ -27,6 +34,8 @@ export default function AppearanceSettingsScreen({ navigation }: AppearanceSetti
   const theme = useTheme();
   const [value, setValue] = useState<PlayerBgStyle>('image-gradient');
   const [dialogVisible, setDialogVisible] = useState(false);
+  const [splashDurationMs, setSplashDurationMs] = useState(DEFAULT_SPLASH_MIN_DURATION_MS);
+  const [splashDialogVisible, setSplashDialogVisible] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(PLAYER_BG_KEY)
@@ -43,6 +52,12 @@ export default function AppearanceSettingsScreen({ navigation }: AppearanceSetti
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    AsyncStorage.getItem(SPLASH_MIN_DURATION_KEY)
+      .then((stored) => setSplashDurationMs(normalizeSplashMinDurationMs(stored)))
+      .catch(() => setSplashDurationMs(DEFAULT_SPLASH_MIN_DURATION_MS));
+  }, []);
+
   const handleChange = async (next: PlayerBgStyle) => {
     setValue(next);
     try {
@@ -51,6 +66,15 @@ export default function AppearanceSettingsScreen({ navigation }: AppearanceSetti
       // no-op
     }
     notifyPlayerBgStyleChanged();
+  };
+
+  const handleSplashDurationChange = async (next: number) => {
+    setSplashDurationMs(next);
+    try {
+      await AsyncStorage.setItem(SPLASH_MIN_DURATION_KEY, String(next));
+    } catch {
+      // no-op
+    }
   };
 
   return (
@@ -72,7 +96,42 @@ export default function AppearanceSettingsScreen({ navigation }: AppearanceSetti
             right={(props) => <List.Icon {...props} icon="chevron-right" />}
           />
         </View>
+
+        <Text variant="titleSmall" style={[styles.sectionTitle, { color: theme.colors.onSurfaceVariant }]}>
+          Startup
+        </Text>
+        <View style={[styles.card, { backgroundColor: theme.colors.surface }]}>
+          <List.Item
+            title="Splash minimum duration"
+            description={splashDurationLabel(splashDurationMs)}
+            onPress={() => setSplashDialogVisible(true)}
+            right={(props) => <List.Icon {...props} icon="chevron-right" />}
+          />
+        </View>
       </ScrollView>
+
+      <Portal>
+        <Dialog visible={splashDialogVisible} onDismiss={() => setSplashDialogVisible(false)}>
+          <Dialog.Title>Splash minimum duration</Dialog.Title>
+          <Dialog.Content>
+            <RadioButton.Group
+              value={String(splashDurationMs)}
+              onValueChange={(next) => handleSplashDurationChange(Number.parseInt(next, 10))}
+            >
+              {SPLASH_DURATION_OPTIONS_MS.map((ms) => (
+                <RadioButton.Item
+                  key={ms}
+                  label={splashDurationLabel(ms)}
+                  value={String(ms)}
+                />
+              ))}
+            </RadioButton.Group>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setSplashDialogVisible(false)}>Done</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
 
       <Portal>
         <Dialog visible={dialogVisible} onDismiss={() => setDialogVisible(false)}>

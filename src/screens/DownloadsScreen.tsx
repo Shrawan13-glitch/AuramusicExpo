@@ -248,7 +248,7 @@ export default function DownloadsScreen({ navigation }: { navigation: any }) {
           data={rows}
           keyExtractor={(item) => item.key}
           estimatedItemSize={84}
-          contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 24 }]}
+          contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 120 }]}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={theme.colors.primary} />}
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
           renderItem={({ item }) => {
