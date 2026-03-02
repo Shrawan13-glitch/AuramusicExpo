@@ -3,6 +3,7 @@ import { Linking, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { Appbar, ActivityIndicator, Button, ProgressBar, Surface, Text, useTheme } from 'react-native-paper';
 import Constants from 'expo-constants';
 import { checkForAppUpdate, downloadAndInstallUpdate, type UpdateConfig, UPDATE_RELEASES_URL } from '../utils/updater';
+import { applyOtaUpdateNow, checkAndFetchOtaUpdate } from '../utils/otaUpdater';
 
 interface UpdateScreenProps {
   route?: {
@@ -21,61 +22,99 @@ const getCurrentVersion = () =>
 
 export default function UpdateScreen({ route, navigation }: UpdateScreenProps) {
   const theme = useTheme();
-  const [isChecking, setIsChecking] = useState(false);
+  const [isCheckingOta, setIsCheckingOta] = useState(false);
+  const [isApplyingOta, setIsApplyingOta] = useState(false);
+  const [otaPending, setOtaPending] = useState(false);
+  const [otaStatus, setOtaStatus] = useState<string | null>(null);
+  const [otaError, setOtaError] = useState<string | null>(null);
+  const [isCheckingApk, setIsCheckingApk] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
+  const [apkError, setApkError] = useState<string | null>(null);
+  const [apkStatus, setApkStatus] = useState<string | null>(null);
   const [update, setUpdate] = useState<UpdateConfig | null>(null);
   const prefetchedUpdate = route?.params?.prefetchedUpdate || null;
 
   const currentVersion = useMemo(() => getCurrentVersion(), []);
 
-  const runCheck = useCallback(async () => {
+  const runOtaCheck = useCallback(async () => {
+    setIsCheckingOta(true);
+    setOtaError(null);
+    setOtaStatus(null);
+    try {
+      const result = await checkAndFetchOtaUpdate();
+      setOtaPending(result.isPending);
+      if (result.message) {
+        setOtaStatus(result.message);
+      } else if (!result.isAvailable) {
+        setOtaStatus('No OTA update is available.');
+      }
+    } catch {
+      setOtaError('Failed to check OTA updates.');
+    } finally {
+      setIsCheckingOta(false);
+    }
+  }, []);
+
+  const runApkCheck = useCallback(async () => {
     if (Platform.OS !== 'android') {
-      setStatus('Updater is available only on Android.');
+      setApkStatus('APK updater is available only on Android.');
       return;
     }
-    setIsChecking(true);
-    setError(null);
-    setStatus(null);
+    setIsCheckingApk(true);
+    setApkError(null);
+    setApkStatus(null);
     try {
       const next = await checkForAppUpdate(currentVersion);
       if (!next) {
         setUpdate(null);
-        setStatus('You are already on the latest version.');
+        setApkStatus('No APK update is available.');
       } else {
         setUpdate(next);
-        setStatus('Update available.');
+        setApkStatus('APK update available.');
       }
     } catch {
-      setError('Failed to check for updates.');
+      setApkError('Failed to check APK updates.');
     } finally {
-      setIsChecking(false);
+      setIsCheckingApk(false);
     }
   }, [currentVersion]);
 
   useEffect(() => {
+    void runOtaCheck();
     if (prefetchedUpdate) {
       setUpdate(prefetchedUpdate);
-      setStatus('New update available.');
+      setApkStatus('New strict APK update available.');
       return;
     }
-    void runCheck();
-  }, [prefetchedUpdate, runCheck]);
+    void runApkCheck();
+  }, [prefetchedUpdate, runApkCheck, runOtaCheck]);
+
+  const handleApplyOta = useCallback(async () => {
+    if (!otaPending || isApplyingOta) return;
+    setOtaError(null);
+    setIsApplyingOta(true);
+    try {
+      await applyOtaUpdateNow();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to restart app for OTA update.';
+      setOtaError(message);
+      setIsApplyingOta(false);
+    }
+  }, [isApplyingOta, otaPending]);
 
   const handleUpdateNow = useCallback(async () => {
     if (!update || isDownloading) return;
-    setError(null);
-    setStatus(null);
+    setApkError(null);
+    setApkStatus(null);
     setProgress(0);
     setIsDownloading(true);
     try {
       await downloadAndInstallUpdate(update, setProgress);
-      setStatus('Installer opened. Complete installation from system prompt.');
+      setApkStatus('Installer opened. Complete installation from system prompt.');
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Failed to install update.';
-      setError(message);
+      setApkError(message);
     } finally {
       setIsDownloading(false);
     }
@@ -85,7 +124,7 @@ export default function UpdateScreen({ route, navigation }: UpdateScreenProps) {
     try {
       await Linking.openURL(UPDATE_RELEASES_URL);
     } catch {
-      setError('Unable to open releases page.');
+      setApkError('Unable to open releases page.');
     }
   }, []);
 
@@ -99,6 +138,44 @@ export default function UpdateScreen({ route, navigation }: UpdateScreenProps) {
       <ScrollView contentContainerStyle={styles.content}>
         <Surface style={[styles.card, { backgroundColor: theme.colors.surface }]} elevation={1}>
           <Text variant="titleLarge" style={{ color: theme.colors.onSurface }}>
+            Over-the-air updates
+          </Text>
+          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+            Installs JavaScript and asset updates without downloading a new APK.
+          </Text>
+          {isCheckingOta && (
+            <View style={styles.row}>
+              <ActivityIndicator />
+              <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                Checking OTA updates...
+              </Text>
+            </View>
+          )}
+          {!!otaStatus && (
+            <Text variant="bodyMedium" style={[styles.status, { color: theme.colors.primary }]}>
+              {otaStatus}
+            </Text>
+          )}
+          {!!otaError && (
+            <Text variant="bodyMedium" style={[styles.status, { color: theme.colors.error }]}>
+              {otaError}
+            </Text>
+          )}
+          <View style={styles.actions}>
+            <Button mode="outlined" onPress={() => void runOtaCheck()} disabled={isCheckingOta || isApplyingOta}>
+              Check OTA
+            </Button>
+            <Button mode="contained" onPress={() => void handleApplyOta()} disabled={!otaPending || isApplyingOta}>
+              Restart to Apply
+            </Button>
+          </View>
+        </Surface>
+
+        <Surface style={[styles.card, { backgroundColor: theme.colors.surface }]} elevation={1}>
+          <Text variant="titleLarge" style={{ color: theme.colors.onSurface }}>
+            APK updates
+          </Text>
+          <Text variant="titleLarge" style={{ color: theme.colors.onSurface }}>
             Current version: {currentVersion}
           </Text>
           {!!update && (
@@ -107,11 +184,11 @@ export default function UpdateScreen({ route, navigation }: UpdateScreenProps) {
             </Text>
           )}
 
-          {isChecking && (
+          {isCheckingApk && (
             <View style={styles.row}>
               <ActivityIndicator />
               <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-                Checking for updates...
+                Checking APK updates...
               </Text>
             </View>
           )}
@@ -142,21 +219,24 @@ export default function UpdateScreen({ route, navigation }: UpdateScreenProps) {
             </View>
           )}
 
-          {!!status && (
+          {!!apkStatus && (
             <Text variant="bodyMedium" style={[styles.status, { color: theme.colors.primary }]}>
-              {status}
+              {apkStatus}
             </Text>
           )}
 
-          {!!error && (
+          {!!apkError && (
             <Text variant="bodyMedium" style={[styles.status, { color: theme.colors.error }]}>
-              {error}
+              {apkError}
             </Text>
           )}
 
           <View style={styles.actions}>
             <Button mode="outlined" onPress={openReleases} disabled={isDownloading}>
               Open Releases
+            </Button>
+            <Button mode="outlined" onPress={() => void runApkCheck()} disabled={isDownloading || isCheckingApk}>
+              Check APK
             </Button>
             <Button mode="contained" onPress={() => void handleUpdateNow()} disabled={!update || isDownloading}>
               Update Now

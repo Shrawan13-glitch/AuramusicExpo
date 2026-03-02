@@ -1,8 +1,11 @@
 {
   "expo": {
-    "name": "AuraMusic",
+    "name": "Mediyo",
     "slug": "auramusic",
     "version": "3.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -40,6 +43,11 @@
     },
     "web": {
       "favicon": "./assets/icon.png"
+    },
+    "updates": {
+      "url": "https://mediyo-ota.teamshryne.workers.dev/manifest",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
     },
     "plugins": [
       [

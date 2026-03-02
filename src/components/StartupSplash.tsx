@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Image, StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
 
-const BRAND_TEXT = 'AuraMusic';
+const BRAND_TEXT = 'Mediyo';
 
 interface StartupSplashProps {
   isClosing?: boolean;

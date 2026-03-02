@@ -48,10 +48,10 @@ const TabNavigator = React.memo(({ navigation }: { navigation: any }) => {
 
   const getTitle = useCallback(() => {
     switch (index) {
-      case 0: return 'AuraMusic';
+      case 0: return 'Mediyo';
       case 1: return 'Search';
       case 2: return 'Your Library';
-      default: return 'AuraMusic';
+      default: return 'Mediyo';
     }
   }, [index]);
 

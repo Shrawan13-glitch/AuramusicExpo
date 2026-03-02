@@ -1,10 +1,10 @@
-# 🎧 AuraMusic
+# 🎧 Mediyo
 
 A modern YouTube Music client built with React Native and Expo (Development Build),
 focused on reliable background playback, playback notifications, and a smooth
 listening experience.
 
-AuraMusic is designed as a performant, native-first music application rather than
+Mediyo is designed as a performant, native-first music application rather than
 a limited Expo Go demo.
 
 ---
@@ -23,7 +23,7 @@ a limited Expo Go demo.
 
 ## 🔊 Audio & Playback
 
-AuraMusic uses a custom Expo development build with native audio capabilities.
+Mediyo uses a custom Expo development build with native audio capabilities.
 
 - Native-backed audio playback
 - Media session integration
@@ -74,7 +74,7 @@ A custom development client is required for native audio and notifications.
 
 ## ⚠️ Disclaimer
 
-AuraMusic is an open-source, experimental YouTube Music client.
+Mediyo is an open-source, experimental YouTube Music client.
 All content is fetched from publicly available endpoints.
 No media is hosted or redistributed by the application.
 
@@ -82,7 +82,7 @@ No media is hosted or redistributed by the application.
 
 ## 👤 Author
 
-Team AuraMusic
+Team Mediyo
 
 ---
 
@@ -92,3 +92,19 @@ Team AuraMusic
 - Designed for performance and reliability
 - Not intended as a Play Store release (currently)
 
+---
+
+## OTA Updates (Self-Hosted)
+
+Mediyo now supports OTA updates for JavaScript/assets via `expo-updates`, with APK updates kept as fallback for native changes.
+
+- OTA source is configured via `expo.updates.url` in `app.json`
+- Recommended deployment model:
+  - Host bundles/assets on GitHub Pages
+  - Serve manifests from a tiny API endpoint (Worker/Function)
+- Publish commands:
+
+    npm run ota:preview
+    npm run ota:production
+
+Important: OTA cannot replace native APK updates when native modules or runtime compatibility changes.

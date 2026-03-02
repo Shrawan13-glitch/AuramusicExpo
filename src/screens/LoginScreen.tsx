@@ -13,14 +13,14 @@ const LoginScreen = React.memo(({ onLoginPress }: LoginScreenProps) => {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Appbar.Header statusBarHeight={0}>
-        <Appbar.Content title="AuraMusic" />
+        <Appbar.Content title="Mediyo" />
       </Appbar.Header>
 
       <View style={styles.content}>
         <Surface style={styles.card} elevation={2}>
           <Avatar.Icon size={56} icon="music" style={styles.avatar} />
           <Text variant="headlineSmall" style={{ color: theme.colors.onSurface }}>
-            Welcome to AuraMusic
+            Welcome to Mediyo v3.1
           </Text>
           <Text
             variant="bodyMedium"

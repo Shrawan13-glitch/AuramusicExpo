@@ -65,7 +65,7 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
           <List.Item title="Version" description={appVersion} />
           <List.Item
             title="Check for updates"
-            description="Download and install latest APK"
+            description="Manage OTA and APK updates"
             onPress={() => navigation.navigate('Update')}
             right={(props) => <List.Icon {...props} icon="chevron-right" />}
           />

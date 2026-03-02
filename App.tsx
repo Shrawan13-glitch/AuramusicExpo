@@ -3,7 +3,7 @@ import { Platform, View } from 'react-native';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { PaperProvider } from 'react-native-paper';
+import { Button, Dialog, PaperProvider, Portal, Text } from 'react-native-paper';
 import { InteractionManager } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
@@ -25,6 +25,7 @@ import {
   SPLASH_MIN_DURATION_KEY,
 } from './src/utils/splashSettings';
 import { checkForAppUpdate } from './src/utils/updater';
+import { applyOtaUpdateNow, checkAndFetchOtaUpdate } from './src/utils/otaUpdater';
 
 const AppContent = React.memo(() => {
   const { isAuthLoading, isAuthenticated, login } = useAuth();
@@ -34,7 +35,11 @@ const AppContent = React.memo(() => {
   const [isSplashClosed, setIsSplashClosed] = useState(false);
   const [isSplashConfigLoaded, setIsSplashConfigLoaded] = useState(false);
   const [splashMinDurationMs, setSplashMinDurationMs] = useState(DEFAULT_SPLASH_MIN_DURATION_MS);
-  const [didAutoCheckUpdate, setDidAutoCheckUpdate] = useState(false);
+  const [didAutoCheckOta, setDidAutoCheckOta] = useState(false);
+  const [didAutoCheckStrictApk, setDidAutoCheckStrictApk] = useState(false);
+  const [isOtaPromptVisible, setIsOtaPromptVisible] = useState(false);
+  const [otaStatusMessage, setOtaStatusMessage] = useState<string | null>(null);
+  const [isApplyingOta, setIsApplyingOta] = useState(false);
   const [didRequestNotificationPermission, setDidRequestNotificationPermission] = useState(false);
   const navigationRef = useNavigationContainerRef();
   const [routeName, setRouteName] = useState<string | undefined>(undefined);
@@ -118,7 +123,24 @@ const AppContent = React.memo(() => {
   }, [didRequestNotificationPermission]);
 
   useEffect(() => {
-    if (didAutoCheckUpdate) return;
+    if (didAutoCheckOta) return;
+    if (!isAuthenticated) return;
+    if (!navigationRef.isReady()) return;
+
+    setDidAutoCheckOta(true);
+    checkAndFetchOtaUpdate()
+      .then((result) => {
+        if (result.message) {
+          setOtaStatusMessage(result.message);
+        }
+        if (!result.isPending) return;
+        setIsOtaPromptVisible(true);
+      })
+      .catch(() => {});
+  }, [didAutoCheckOta, isAuthenticated, navigationRef, routeName]);
+
+  useEffect(() => {
+    if (didAutoCheckStrictApk) return;
     if (!isAuthenticated) return;
     if (!navigationRef.isReady()) return;
     if (Platform.OS !== 'android') return;
@@ -128,16 +150,30 @@ const AppContent = React.memo(() => {
       (Constants.manifest2 as { extra?: { expoClient?: { version?: string } } } | null)?.extra?.expoClient?.version ||
       '0.0.0';
 
-    setDidAutoCheckUpdate(true);
+    setDidAutoCheckStrictApk(true);
     checkForAppUpdate(currentVersion)
       .then((update) => {
         if (!update) return;
+        if (!update.isStrict) return;
         const currentRoute = navigationRef.getCurrentRoute()?.name;
         if (currentRoute === 'Update') return;
         navigationRef.navigate('Update' as never, { prefetchedUpdate: update, autoOpened: true } as never);
       })
       .catch(() => {});
-  }, [didAutoCheckUpdate, isAuthenticated, navigationRef, routeName]);
+  }, [didAutoCheckStrictApk, isAuthenticated, navigationRef, routeName]);
+
+  const handleApplyOta = useCallback(async () => {
+    if (isApplyingOta) return;
+    setIsApplyingOta(true);
+    try {
+      await applyOtaUpdateNow();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to apply OTA update.';
+      setOtaStatusMessage(message);
+      setIsOtaPromptVisible(false);
+      setIsApplyingOta(false);
+    }
+  }, [isApplyingOta]);
 
   if (!isSplashClosed) {
     return (
@@ -172,6 +208,29 @@ const AppContent = React.memo(() => {
             />
           </View>
         </NavigationContainer>
+        <Portal>
+          <Dialog visible={isOtaPromptVisible} onDismiss={() => setIsOtaPromptVisible(false)}>
+            <Dialog.Title>Update ready</Dialog.Title>
+            <Dialog.Content>
+              <Text variant="bodyMedium">
+                A new app update has been downloaded. Restart now to apply it.
+              </Text>
+              {!!otaStatusMessage && (
+                <Text variant="bodySmall" style={{ marginTop: 8 }}>
+                  {otaStatusMessage}
+                </Text>
+              )}
+            </Dialog.Content>
+            <Dialog.Actions>
+              <Button onPress={() => setIsOtaPromptVisible(false)} disabled={isApplyingOta}>
+                Later
+              </Button>
+              <Button onPress={() => void handleApplyOta()} loading={isApplyingOta} disabled={isApplyingOta}>
+                Restart now
+              </Button>
+            </Dialog.Actions>
+          </Dialog>
+        </Portal>
       </SongOptionsProvider>
     </PlayerProvider>
   );

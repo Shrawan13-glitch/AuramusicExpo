@@ -320,7 +320,7 @@ export default function ArtistScreen({ route, navigation }: ArtistScreenProps) {
     const shareUrl = shareId ? `https://music.youtube.com/browse/${shareId}` : '';
     const message = shareUrl
       ? `Check out ${shareArtistName} on YouTube Music: ${shareUrl}`
-      : `Check out ${shareArtistName} on AuraMusic`;
+      : `Check out ${shareArtistName} on Mediyo`;
 
     try {
       await Share.share({

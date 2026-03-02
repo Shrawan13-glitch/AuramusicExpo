@@ -111,7 +111,7 @@ const requestAndroidStoragePermission = async () => {
       PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
       {
         title: 'Storage Permission',
-        message: 'AuraMusic needs storage access to download update APK to your Downloads folder.',
+        message: 'Mediyo needs storage access to download update APK to your Downloads folder.',
         buttonPositive: 'Allow',
         buttonNegative: 'Deny',
       }
@@ -136,7 +136,7 @@ export const downloadAndInstallUpdate = async (
   }
 
   await FileSystem.makeDirectoryAsync(ANDROID_PUBLIC_DOWNLOAD_DIR, { intermediates: true }).catch(() => {});
-  const targetPath = `${ANDROID_PUBLIC_DOWNLOAD_DIR}/AuraMusic-${config.latestVersion}.apk`;
+  const targetPath = `${ANDROID_PUBLIC_DOWNLOAD_DIR}/Mediyo-${config.latestVersion}.apk`;
 
   const downloader = FileSystem.createDownloadResumable(
     config.downloadUrl,
